@@ -13,10 +13,10 @@ from ase.geometry.analysis import Analysis
 from ase.neighborlist import NeighborList, natural_cutoffs
 import MDAnalysis as mda
 
-from auxiliary import as_list, find_smallest_missing,\
+from pyinterface.utils.auxiliary import as_list, find_smallest_missing,\
     remove_inverted_tuples, atoms_to_indexes
     
-from topology import Atom
+from pyinterface.core.topology import Atom
 
 import copy
 import numpy as np

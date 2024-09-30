@@ -7,8 +7,8 @@ Created on Mon Aug  5 17:13:50 2024
 """
 
 # internal modules
-from specie import Specie
-from topology import Bond, Angle, Atom, Dihedral, Improper
+from pyinterface.core.specie import Specie
+from pyinterface.core.topology import Bond, Angle, Atom, Dihedral, Improper
 
 import ase.build
 

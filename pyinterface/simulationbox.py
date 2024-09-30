@@ -6,8 +6,9 @@ Created on Tue Oct 24 15:14:41 2023
 @author: roncoroni
 """
 
-from auxiliary import label_to_element, as_list, find_smallest_missing
-from lammpswriter import DATAWriter
+from pyinterface.utils.auxiliary import label_to_element, as_list, find_smallest_missing
+from pyinterface.io.lammpswriter import DATAWriter
+from pyinterface.io.packmol import header, box_place, fix_place
 
 import MDAnalysis as mda
 
@@ -113,9 +114,9 @@ class SimulationBox():
         if not instructions:
             return None
         
-        # import text from packmol file
-        from continuum_electrolyte.write.packmol_instructions import header,\
-            box_place, fix_place
+        # # import text from packmol file
+        # from continuum_electrolyte.write.packmol_instructions import header,\
+        #     box_place, fix_place
         
         # check volume
         assert len(volume) == 3, "Check volume!"
@@ -123,7 +124,7 @@ class SimulationBox():
         # generate box boundaries with 1 AA padding
         box = np.concatenate(([1,1,1], np.asarray(volume)-1)).tolist()
         
-        tmp_files = []
+        tmp_files = ["packmol.log", "input_packmol.in", "system.pdb"]
         with open(input_file, "w") as fout:
             
             fout.write(header.format(output_file, np.random.randint(100000)))
@@ -162,10 +163,12 @@ class SimulationBox():
         except:
             print("WARNING: packmol might not have worked, check system.")
         
-        # remove temp mol files
-        # subprocess.call(['rm','-r'] + tmp_files)
+        universe = mda.Universe(output_file)
         
-        return mda.Universe(output_file)
+        # remove temp mol files and packmol files
+        subprocess.call(['rm'] + tmp_files)
+        
+        return universe
 
     # generate a slab from a unit cell
     @staticmethod
