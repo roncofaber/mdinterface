@@ -95,12 +95,12 @@ class SimulationBox():
         #resort atom types by alph order
         atom_types = []
         for specie in self._species:
-            atom_types.extend([stype.label for stype in specie._stype])
+            atom_types.extend([stype.extended_label for stype in specie._stype])
         atom_types.sort()
         
         for specie in self._species:
             for stype in specie._stype:
-                idx = np.argwhere(stype.label == np.array(atom_types))[0][0]
+                idx = np.argwhere(stype.extended_label == np.array(atom_types))[0][0]
                 stype.set_id(idx+1)
         
         return
@@ -294,7 +294,6 @@ class SimulationBox():
         # make sure to recover topology information
         alist = []
         for res in universe.residues:
-            
             for specie in self.species:
                 if res.resname == specie.residues.resnames[0]:
                     nmol = specie.copy()
@@ -449,15 +448,15 @@ class SimulationBox():
         
         idx = 1
         for cc, atom in enumerate(self.get_sorted_attribute("atoms")):
-            
-            if atom.label not in np.unique(system.atoms.types):
+
+            if atom.extended_label not in np.unique(system.atoms.types):
                 continue
             
             eps = atom.eps if atom.eps is not None else 0
             sig = atom.sig if atom.sig is not None else 0
             
             fout.write("{:>5}    {:>12.8f}    {:>12.8f}  # {}\n".format(
-                idx, eps, sig, atom.label))
+                idx, eps, sig, atom.extended_label))
             idx += 1
             
         if self.get_sorted_attribute("bonds"):
@@ -475,7 +474,7 @@ class SimulationBox():
             btype = "{}-{}".format(*bond.symbols)
         
             fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<5} | {}\n".format(
-                bond.id, kr, r0, btype, bond.formula))
+                bond.id, kr, r0, btype, bond.resname))
         
         if self.get_sorted_attribute("angles"):
             fout.write("\n")
@@ -492,7 +491,7 @@ class SimulationBox():
             atype = "{}-{}-{}".format(*angle.symbols)
         
             fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<8} | {}\n".format(
-                angle.id, kr, theta0, atype, angle.formula))
+                angle.id, kr, theta0, atype, angle.resname))
         
         if self.get_sorted_attribute("dihedrals"):
             fout.write("\n")
@@ -503,10 +502,11 @@ class SimulationBox():
             if dihedral.id not in np.array(system.dihedrals.types(), dtype=int):
                 continue
             
-            atype = "{}-{}-{}-{}".format(*dihedral.symbols)
-            value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*dihedral.values)
+            dihedral.write(fout)
+            # atype = "{}-{}-{}-{}".format(*dihedral.symbols)
+            # value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*dihedral.values)
         
-            fout.write("{:>5}    {}  #  {:<8} | {}\n".format(dihedral.id, value, atype, dihedral.formula))
+            # fout.write("{:>5}    {}  #  {:<8} | {}\n".format(dihedral.id, value, atype, dihedral.resname))
         
         if self.get_sorted_attribute("impropers"):
             fout.write("\n")
@@ -520,7 +520,7 @@ class SimulationBox():
             atype = "{}".format(*improper.symbols)
             value = "{:>7.4f}    {:>2d}    {:>2d}".format(*improper.values)
         
-            fout.write("{:>5}    {}  #  {:<2} | {}\n".format(improper.id, value, atype, improper.formula))
+            fout.write("{:>5}    {}  #  {:<2} | {}\n".format(improper.id, value, atype, improper.resname))
         
         fout.write("\n")
         

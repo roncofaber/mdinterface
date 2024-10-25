@@ -6,12 +6,15 @@ Created on Fri Apr 19 14:05:39 2024
 @author: roncofaber
 """
 
+#%%
+
 class Topology(object):
     
-    def __init__(self):
+    def __init__(self, resname=None, formula=None):
         
         self._id = None
-        self._formula = None
+        self._formula = formula
+        self._resname = resname
         
         return
     
@@ -23,19 +26,28 @@ class Topology(object):
     def formula(self):
         return self._formula
     
+    @property
+    def resname(self):
+        return self._resname
+    
     def set_id(self, value):
         self._id = value
         return
     
     def set_formula(self, value):
         self._formula = value
+        
+    def set_resname(self, value):
+        self._resname = value
+
+#%%
 
 class Atom(Topology):
     def __init__(self, symbol, label=None, eps=None, sig=None):
         
         super(Atom, self).__init__()
         
-        self.symbol = symbol
+        self.symbol  = symbol
         
         self.eps = eps
         self.sig = sig
@@ -54,6 +66,15 @@ class Atom(Topology):
     @property
     def label(self):
         return self._label
+    
+    @property
+    def extended_label(self):
+        return self._label + "_" + self.resname
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.label}, eps={self.eps}, sig={self.sig})"
+
+#%%
 
 class Bond(Topology):
     def __init__(self, a1, a2, kr=None, r0=None):
@@ -69,6 +90,11 @@ class Bond(Topology):
     @property
     def symbols(self):
         return self._a1, self._a2
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}({'-'.join(self.symbols)},kr={self.kr}, r0={self.r0})"
+
+#%%
 
 class Angle(Topology):
     def __init__(self, a1, a2, a3, kr=None, theta0=None):
@@ -87,6 +113,10 @@ class Angle(Topology):
     def symbols(self):
         return self._a1, self._a2, self._a3
     
+    def __repr__(self):
+        return f"{self.__class__.__name__}({'-'.join(self.symbols)}, kr={self.kr}, theta0={self.theta0})"
+
+#%%
 
 class Dihedral(Topology):
     def __init__(self, a1, a2, a3, a4,
@@ -110,6 +140,23 @@ class Dihedral(Topology):
     @property
     def values(self):
         return self._values
+    
+    def __repr__(self):
+        symbols = '-'.join(self.symbols)
+        values  = '|'.join([str(ii) for ii in self._values])
+        return f"{self.__class__.__name__}({symbols}, A={values})"
+    
+    def write(self, fout):
+        atype = "{}-{}-{}-{}".format(*self.symbols)
+        
+        if self._values[-1] is not None:
+            value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*self.values)
+        else:
+            value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*self.values[:-1])
+    
+        fout.write("{:>5}    {}  #  {:<8} | {}\n".format(self.id, value, atype, self.resname))
+
+#%%
 
 class Improper(Topology): #cvff improper style
     def __init__(self, a1, K=None, d=None, n=None):

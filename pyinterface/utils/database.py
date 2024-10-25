@@ -40,3 +40,39 @@ class Water(Specie):
             lj = {"O": [0.102, 3.188], "H": [0.0, 0.0]}
 
         super().__init__("H2O", charges=charges, bonds=b1, angles=a1, lj=lj)
+        return
+
+
+#oxygen https://pubs.acs.org/doi/10.1021/acs.jctc.0c01132 /!\: divide sig by 2**(1/6)
+class Oxygen(Specie):
+    def __init__(self):
+        
+        b1 = Bond("O", "O", kr=1640.4, r0=1.2074)
+        lj = {"O" : [0.1047, 2.9373]}
+
+        super().__init__("O2", charges = 0.0, lj=lj, bonds=b1)
+        return
+
+#hydrogen https://pubs.acs.org/doi/10.1021/acs.jctc.0c01132 /!\: divide sig by 2**(1/6)
+class Hydrogen(Specie):
+    def __init__(self, Hset="std"):
+        
+        b1 = Bond("H", "H", kr=700, r0=0.7414)
+        
+        if Hset.lower() == "std":   # standard 12-6 set
+            lj = {"H" : [0.0153, 2.5996]}
+        elif Hset.lower() == "alt": # alternative 12-6 set
+            lj = {"H" : [0.0145, 2.8001]}
+
+        super().__init__("H2", charges = 0.0, lj=lj, bonds=b1)
+        return
+
+#nitrogen https://pubs.acs.org/doi/10.1021/acs.jctc.0c01132 /!\: divide sig by 2**(1/6)
+class Nitrogen(Specie):
+    def __init__(self):
+        
+        b1 = Bond("N", "N", kr=3190, r0=1.0977)
+        lj = {"N" : [0.0797, 3.2197]}
+
+        super().__init__("N2", charges = 0.0, lj=lj, bonds=b1)
+        return

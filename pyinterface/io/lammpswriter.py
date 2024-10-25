@@ -85,10 +85,10 @@ class DATAWriter(base.WriterBase):
         
         unique_types, types = np.unique(atoms.types, return_inverse=True)
         types += 1
-        t_l = len(str(unique_types.max()))
+        t_l = len(str(len(unique_types)))
 
         moltags = atoms.resindices
-        m_l = len(str(moltags.max()))
+        m_l = len(str(moltags.max()))+1
     
         if self.convert_units:
             coordinates = self.convert_pos_to_native(atoms.positions, inplace=False)
@@ -100,8 +100,8 @@ class DATAWriter(base.WriterBase):
             for index, moltag, atype, charge, coords in zip(indices, moltags,
                     types, charges, coordinates):
                 x, y, z = coords
-                self.f.write(f"{index:{i_l}d} {moltag:{m_l}d}  {atype:{t_l}d} {charge: .7f}"
-                             f" {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
+                self.f.write(f"{index:{i_l}d} {moltag:{m_l}d}  {atype:{t_l}d}  {charge: .7f}"
+                             f"  {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
         else:
             for index, moltag, atype, coords in zip(indices, moltags, types,
                     coordinates):
