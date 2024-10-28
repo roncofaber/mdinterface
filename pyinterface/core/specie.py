@@ -80,11 +80,11 @@ class Specie(object):
         return atoms
     
     # function to setup atom types
-    def _setup_atom_types(self, lj, atom_types):
+    def _setup_atom_types(self, lj, stype):
         
-        if atom_types is None:
+        if stype is None:
             # use function to retrieve IDs
-            type_ids, types_map = aux.find_atom_types(self.atoms, max_depth=1)
+            atom_type_ids, types_map = aux.find_atom_types(self.atoms, max_depth=1)
             
             stype = []
             for atom_type in types_map:
@@ -109,15 +109,28 @@ class Specie(object):
                 stype.append(atom)
                 
         else:
-            stype = atom_types
-            type_ids = list(range(len(self.atoms)))
-            types_map = {}
-            for cc, atom_type in enumerate(atom_types):
-                types_map[cc] = atom_type.label
+            
+            # Create an array to store the type ID of each atom
+            atom_type_ids = np.zeros(len(self.atoms), dtype=int)
+            type_id = 0
+            atom_types = {}
+            
+            for cc, atom_type in enumerate(stype):
+                
+                # Assign an ID to the atom type if it is not already in the dictionary
+                if atom_type.label not in atom_types:
+                    atom_types[atom_type.label] = type_id
+                    type_id += 1
+                
+                # Store the type ID in the array
+                atom_type_ids[cc] = atom_types[atom_type.label]
+                
+                
+            types_map = {v: k for k, v in atom_types.items()}
         
-        self._atom_types = types_map
         # add tag to atoms
-        self.atoms.set_tags(type_ids)
+        self._atom_types = types_map
+        self.atoms.set_tags(atom_type_ids)
         
         return as_list(stype)
     

@@ -113,11 +113,7 @@ class SimulationBox():
 
         if not instructions:
             return None
-        
-        # # import text from packmol file
-        # from continuum_electrolyte.write.packmol_instructions import header,\
-        #     box_place, fix_place
-        
+
         # check volume
         assert len(volume) == 3, "Check volume!"
         
@@ -135,6 +131,10 @@ class SimulationBox():
                 mol = instruction[0]
                 rep = instruction[1]
                 typ = instruction[2]
+                
+                if isinstance(rep, int):
+                    if not rep:
+                        continue
                 
                 if typ == "box": # normal add
                     fout.write(box_place.format(cc, rep, " ".join(map(str, box))))
@@ -160,6 +160,7 @@ class SimulationBox():
         try:
             subprocess.run(['packmol < {} > packmol.log'.format(input_file)],
                            shell=True, check=True, text=True)
+
         except:
             print("WARNING: packmol might not have worked, check system.")
         
@@ -205,45 +206,47 @@ class SimulationBox():
         volume = np.array(volume)
         ion_coords = []
         instructions = []
-        
+    
         to_center = False
-        # put them on the left please
-        if str(ion_pos) == "left":
-            volume[2] = volume[2]/2
-        elif str(ion_pos) == "center":
-            assert len(nions) == 1, "can only use center with 1 ion"
+        
+        if ion_pos == "left":
+            volume[2] /= 2
+        elif ion_pos == "center":
+            if not isinstance(nions, int) and len(nions) != 1:
+                raise ValueError("Center positioning can only be used with a single ion")
             to_center = True
-            
+        elif ion_pos == "box":
+            for cc, ion in enumerate(ions):
+                nrep = nions if isinstance(nions, int) else nions[cc]
+                instructions.append((ion.to_universe(), nrep, "box"))
+            return instructions
     
         for cc, ion in enumerate(ions):
-            
             ion_radius = ion.estimate_sphere_radius()
-            
             nrep = nions[cc] if isinstance(nions, list) else nions
     
             for _ in range(nrep):
                 max_attempts = 100  # Limit placement attempts to avoid infinite loop
                 for _ in range(max_attempts):
-                    
                     if to_center:
-                        new_coord = volume/2
+                        new_coord = volume / 2
                     else:
-                        new_coord = ion_radius + 1 + np.random.rand(3) * (volume - 2*(ion_radius + 1))
+                        new_coord = ion_radius + 1 + np.random.rand(3) * (volume - 2 * (ion_radius + 1))
     
-                    if ion_coords:  # Only calculate distances if there are existing ions
+                    if ion_coords:
                         distances = np.linalg.norm(ion_coords - new_coord, axis=1)
-                        if np.all(distances > 3):  # Using np.all for efficiency
-                            break  # Exit inner loop if placement is valid
+                        if np.all(distances > 3):
+                            break
                     else:
-                        break  # No need to check distances if ion_coords is empty 
-    
-                else:  # Executed if max_attempts is reached without success
+                        break
+                else:
                     print(f"Warning: Failed to place ion {ion} after {max_attempts} attempts")
     
                 ion_coords.append(new_coord)
-                instructions.append((ion.to_universe(), new_coord, "fixed"))  # Use a tuple for clarity
+                instructions.append((ion.to_universe(), new_coord, "fixed"))
     
         return instructions
+
     
     def make_solvent_box(self, solvent, ions, volume, density, nions, concentration,
                          conmodel, ion_pos):
@@ -291,16 +294,16 @@ class SimulationBox():
         if universe is None:
             return None
         
-        # make sure to recover topology information
+        # Create a dictionary for quick lookup of species by residue name
+        species_dict = {specie.residues.resnames[0]: specie for specie in self.species}
+        
         alist = []
         for res in universe.residues:
-            for specie in self.species:
-                if res.resname == specie.residues.resnames[0]:
-                    nmol = specie.copy()
-            
-            nmol.atoms.positions = res.atoms.positions
-            
-            alist.append(nmol.atoms)
+            resname = res.resname
+            if resname in species_dict:
+                nmol = species_dict[resname].copy()
+                nmol.atoms.positions = res.atoms.positions
+                alist.append(nmol.atoms)
         
         solution = mda.Merge(*alist)
         solution.dimensions = volume + [90,90,90]

@@ -6,6 +6,8 @@ Created on Thu Oct 24 18:33:06 2024
 @author: roncofaber
 """
 
+import numpy as np
+
 import ase
 import ase.visualize
 import ase.io.lammpsdata
@@ -32,7 +34,7 @@ def read_lammps_data_file(filename):
     
     # Define a dictionary to map section names to their corresponding data lists
     section_map = {
-        'pair coeffs': 'coeff_coeff',
+        'pair coeffs': 'pair_coeff',
         'bond coeffs': 'bond_coeff',
         'angle coeffs': 'angle_coeff',
         'dihedral coeffs': 'dihedral_coeff',
@@ -53,14 +55,14 @@ def read_lammps_data_file(filename):
                 continue
             
             section_key = line.lower()
-            
+
             if section_key in section_map:
                 to_read = section_map[section_key]
                 continue
             
             line = line.split()
             
-            if to_read == "atoms":
+            if to_read == "pair_coeff":
                 idx = int(line[0]) - 1
                 eps = float(line[1])
                 sig = float(line[2])
@@ -103,4 +105,5 @@ def read_lammps_data_file(filename):
                 dihedral = Dihedral(atoms[idxs[0]].label, atoms[idxs[1]].label, atoms[idxs[2]].label, atoms[idxs[3]].label, *values)
                 dihedrals.append(dihedral)
                 
+    system.new_array("stype", np.array(atoms))
     return system, atoms, bonds, angles, dihedrals

@@ -82,4 +82,4 @@ def build_polymer(system, substitute, nrep, target_distance=1.600):
     symbols[symbols == "X"] = substitute
     sout.set_chemical_symbols(symbols)
 
-    return ase.build.sort(sout)
+    return sout#ase.build.sort(sout)

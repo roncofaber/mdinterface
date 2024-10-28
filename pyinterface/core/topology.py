@@ -73,6 +73,9 @@ class Atom(Topology):
     
     def __repr__(self):
         return f"{self.__class__.__name__}({self.label}, eps={self.eps}, sig={self.sig})"
+    
+    def __eq__(self, other):
+        return self.eps == other.eps and self.sig == other.sig and self.symbol == other.symbol
 
 #%%
 
