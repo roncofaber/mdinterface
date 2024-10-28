@@ -19,6 +19,7 @@ from pyinterface.utils.auxiliary import as_list, find_smallest_missing,\
 from pyinterface.core.topology import Atom
 import pyinterface.utils.auxiliary as aux
 from pyinterface.io.read import read_lammps_data_file
+import pyinterface.utils.map as pmap
 
 import copy
 import numpy as np
@@ -26,35 +27,36 @@ import numpy as np
 
 class Specie(object):
     
-    def __init__(self, atoms=None, charges=None, bonds=None, angles=None,
-                 dihedrals=None, impropers=None, lj={}, atom_types=None, cutoff=1.0,
+    def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
+                 angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None):
         
+        # if file provided, read it
         if lammps_data is not None:
             atoms, atom_types, bonds, angles, dihedrals = read_lammps_data_file(lammps_data)
-            
-        # read atoms
+
+        # read/update atoms atoms
         atoms = self._read_atoms(atoms, charges)
         
-        # set name
+        # assign name
         if name is None:
             name = atoms.get_chemical_formula()
         if len(name) > 4:
             print("ATTENTION: resname for Specie could be misleading")
         self.resname = name
         
-        # set up atoms
+        # set up atoms and generate graph of specie
         self.set_atoms(atoms, cutoff)
         
+        # read atom_types from LJ
+        if atom_types is None:
+            atom_types = self._atom_types_from_lj(lj)
+            
         # set up internal topology attributes
-        self._btype = as_list(bonds)
-        self._atype = as_list(angles)
-        self._dtype = as_list(dihedrals)
-        self._itype = as_list(impropers)
-        self._stype = self._setup_atom_types(lj, atom_types)
+        self._setup_topology(atom_types, bonds, angles, dihedrals, impropers)
         
         # initialize topology info
-        self._initialize_topology()
+        self._update_topology()
 
         return
     
@@ -79,60 +81,63 @@ class Specie(object):
 
         return atoms
     
+    def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers):
+        
+        # map list of inputs
+        atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
+        bonds_list, bond_map, bond_ids = pmap.map_bonds(as_list(bonds))
+        angles_list, angle_map, angle_ids = pmap.map_angles(as_list(angles))
+        dihedrals_list, dihedral_map, dihedral_ids = pmap.map_dihedrals(as_list(dihedrals))
+        impropers_list, improper_map, improper_ids = pmap.map_impropers(as_list(impropers))
+        
+        self._btype = bonds_list
+        self._atype = angles_list
+        self._dtype = dihedrals_list
+        self._itype = impropers_list
+        self._stype = atoms_list
+        
+        self._smap = atom_map
+        self._bmap = bond_map
+        self._amap = angle_map
+        self._dmap = dihedral_map
+        self._imap = improper_map
+        
+        self._sids = atom_ids
+        self._bids = bond_ids
+        self._aids = angle_ids
+        self._dids = dihedral_ids
+        self._iids = improper_ids
+        
+        # self._atom_types = types_map
+        # self.atoms.set_tags(atom_type_ids)
+        return
+    
     # function to setup atom types
-    def _setup_atom_types(self, lj, stype):
+    def _atom_types_from_lj(self, lj):
         
-        if stype is None:
-            # use function to retrieve IDs
-            atom_type_ids, types_map = aux.find_atom_types(self.atoms, max_depth=1)
-            
-            stype = []
-            for atom_type in types_map:
-                
-                atom_symbol = types_map[atom_type][0]
-                atom_neighs = "".join(types_map[atom_type][1])
-                
-                label = "{}_{}".format(atom_symbol, atom_neighs)
-                types_map[atom_type] = label
-                
-                if label in lj:
-                    eps, sig = lj[label]
-                elif atom_type in lj:
-                    eps, sig = lj[atom_type]
-                elif atom_symbol in lj:
-                    eps, sig = lj[atom_symbol]
-                else:
-                    eps, sig = None,None
-                
-                atom = Atom(atom_symbol, label=label,
-                            eps=eps, sig=sig)
-                stype.append(atom)
-                
-        else:
-            
-            # Create an array to store the type ID of each atom
-            atom_type_ids = np.zeros(len(self.atoms), dtype=int)
-            type_id = 0
-            atom_types = {}
-            
-            for cc, atom_type in enumerate(stype):
-                
-                # Assign an ID to the atom type if it is not already in the dictionary
-                if atom_type.label not in atom_types:
-                    atom_types[atom_type.label] = type_id
-                    type_id += 1
-                
-                # Store the type ID in the array
-                atom_type_ids[cc] = atom_types[atom_type.label]
-                
-                
-            types_map = {v: k for k, v in atom_types.items()}
+        # use function to retrieve IDs
+        atom_type_ids, types_map = aux.find_atom_types(self.atoms, max_depth=1)
         
-        # add tag to atoms
-        self._atom_types = types_map
-        self.atoms.set_tags(atom_type_ids)
-        
-        return as_list(stype)
+        atom_types = []
+        for atom_id in atom_type_ids:
+            
+            atom_symbol = types_map[atom_id][0]
+            atom_neighs = "".join(types_map[atom_id][1])
+            
+            label = "{}_{}".format(atom_symbol, atom_neighs)
+            # types_map[atom_type] = label
+            
+            if label in lj:
+                eps, sig = lj[label]
+            elif atom_symbol in lj:
+                eps, sig = lj[atom_symbol]
+            else:
+                eps, sig = None,None
+            
+            atom = Atom(atom_symbol, label=label, eps=eps, sig=sig)
+            atom_types.append(atom)
+                
+        return atom_types
     
     def set_atoms(self, atoms, cutoff=1.0):
         
@@ -142,7 +147,7 @@ class Specie(object):
         
         return
     
-    def _initialize_topology(self):
+    def _update_topology(self):
         formula = self.atoms.get_chemical_formula()
         
         for attributes in ["_btype", "_atype", "_dtype", "_itype", "_stype"]:
@@ -189,7 +194,7 @@ class Specie(object):
         attribute_list.append(attribute)
         
         # Reinitialize topology to ensure consistency
-        self._initialize_topology()
+        self._update_topology()
         
         return
 
@@ -215,7 +220,8 @@ class Specie(object):
         # populate with bonds and angles
         for att in ["bonds", "angles", "dihedrals", "impropers"]:
             attribute, types = self.__getattribute__(att)
-            uni._add_topology_objects(att, attribute, types=types)
+            att_types = self.type2id(att, types)
+            uni._add_topology_objects(att, attribute, types=att_types)
         
         # add charges
         if charges:
@@ -270,126 +276,107 @@ class Specie(object):
     def bonds(self):
         # Find all unique paths of length 1 (which corresponds to bonds)
         bonds = aux.find_unique_paths_of_length(self.graph, 1)
-        tags = self.atoms.get_tags()
-        
+        bond_tags = self._bmap
         bond_list = []
         bond_type = []
         
         for i, j in bonds:
-            a1 = self._atom_types[tags[i]]
-            a2 = self._atom_types[tags[j]]
+            a1 = self._sids[i]
+            a2 = self._sids[j]
             
             s1 = a1.split("_")[0]
             s2 = a2.split("_")[0]
             
-            atom_pair_bond = None
-            symb_pair_bond = None
-            
-            for bond in self._btype:
-                bond_symbols = bond.symbols
-                atom_pair = (a1, a2)
-                symbol_pair = (s1, s2)
-                
-                if aux.same_rev_check(atom_pair, bond_symbols):
-                    atom_pair_bond = bond
-                    break  # Break the loop as atom pair takes priority
-                
-                if aux.same_rev_check(symbol_pair, bond_symbols):
-                    symb_pair_bond = bond
-            
-            if atom_pair_bond:
+            if (a1, a2) in bond_tags:
                 bond_list.append([i, j])
-                bond_type.append(atom_pair_bond.id)
-            elif symb_pair_bond:
+                bond_type.append(bond_tags[(a1, a2)])
+            elif (a2, a1) in bond_tags:
+                bond_list.append([j, i])
+                bond_type.append(bond_tags[(a2, a1)])
+            elif (s1, s2) in bond_tags:
                 bond_list.append([i, j])
-                bond_type.append(symb_pair_bond.id)
+                bond_type.append(bond_tags[(s1, s2)])
+            elif (s2, s1) in bond_tags:
+                bond_list.append([j, i])
+                bond_type.append(bond_tags[(s2, s1)])
         
-        return [np.array(bond_list).tolist(), bond_type]
+        bond_list = np.array(bond_list, dtype=int)
+        bond_type = np.array(bond_type, dtype=int)
+        
+        return [bond_list.tolist(), bond_type.tolist()]
     
     @property
     def angles(self):
         # Find all unique paths of length 2 (which corresponds to angles)
         angles = aux.find_unique_paths_of_length(self.graph, 2)
-        tags = self.atoms.get_tags()
-        
+        angle_tags = self._amap
         angle_list = []
         angle_type = []
         
         for i, j, k in angles:
-            a1 = self._atom_types[tags[i]]
-            a2 = self._atom_types[tags[j]]
-            a3 = self._atom_types[tags[k]]
+            a1 = self._sids[i]
+            a2 = self._sids[j]
+            a3 = self._sids[k]
             
             s1 = a1.split("_")[0]
             s2 = a2.split("_")[0]
             s3 = a3.split("_")[0]
             
-            atom_triplet_bond = None
-            symb_triplet_bond = None
-            
-            for angle in self._atype:
-                angle_symbols = angle.symbols
-                atom_triplet = (a1, a2, a3)
-                symbol_triplet = (s1, s2, s3)
-                
-                if aux.same_rev_check(atom_triplet, angle_symbols):
-                    atom_triplet_bond = angle
-                    break  # Break the loop as atom triplet takes priority
-                
-                if aux.same_rev_check(symbol_triplet, angle_symbols):
-                    symb_triplet_bond = angle
-            
-            if atom_triplet_bond:
+            if (a1, a2, a3) in angle_tags:
                 angle_list.append([i, j, k])
-                angle_type.append(atom_triplet_bond.id)
-            elif symb_triplet_bond:
+                angle_type.append(angle_tags[(a1, a2, a3)])
+            elif (a3, a2, a1) in angle_tags:
+                angle_list.append([k, j, i])
+                angle_type.append(angle_tags[(a3, a2, a1)])
+            elif (s1, s2, s3) in angle_tags:
                 angle_list.append([i, j, k])
-                angle_type.append(symb_triplet_bond.id)
+                angle_type.append(angle_tags[(s1, s2, s3)])
+            elif (s3, s2, s1) in angle_tags:
+                angle_list.append([k, j, i])
+                angle_type.append(angle_tags[(s3, s2, s1)])
+
+            
+        angle_list = np.array(angle_list, dtype=int)
+        angle_type = np.array(angle_type, dtype=int)
         
-        return [np.array(angle_list).tolist(), angle_type]
+        return [angle_list.tolist(), angle_type.tolist()]
     
     @property
     def dihedrals(self):
-
+        # Find all unique paths of length 3 (which corresponds to dihedrals)
         dihedrals = aux.find_unique_paths_of_length(self.graph, 3)
-        tags = self.atoms.get_tags()
-        
+        dihedral_tags = self._dmap
         dihedral_list = []
         dihedral_type = []
+        
         for i, j, k, l in dihedrals:
-            a1 = self._atom_types[tags[i]]
-            a2 = self._atom_types[tags[j]]
-            a3 = self._atom_types[tags[k]]
-            a4 = self._atom_types[tags[l]]
+            a1 = self._sids[i]
+            a2 = self._sids[j]
+            a3 = self._sids[k]
+            a4 = self._sids[l]
             
             s1 = a1.split("_")[0]
             s2 = a2.split("_")[0]
             s3 = a3.split("_")[0]
             s4 = a4.split("_")[0]
             
-            atom_quadruplet_bond = None
-            symb_quadruplet_bond = None
-            
-            for dihedral in self._dtype:
-                dihedral_symbols = dihedral.symbols
-                atom_quadruplet = (a1, a2, a3, a4)
-                symbol_quadruplet = (s1, s2, s3, s4)
-                
-                if aux.same_rev_check(atom_quadruplet, dihedral_symbols):
-                    atom_quadruplet_bond = dihedral
-                    break  # Break the loop as atom quadruplet takes priority
-                
-                if aux.same_rev_check(symbol_quadruplet, dihedral_symbols):
-                    symb_quadruplet_bond = dihedral
-            
-            if atom_quadruplet_bond:
+            if (a1, a2, a3, a4) in dihedral_tags:
                 dihedral_list.append([i, j, k, l])
-                dihedral_type.append(atom_quadruplet_bond.id)
-            elif symb_quadruplet_bond:
+                dihedral_type.append(dihedral_tags[(a1, a2, a3, a4)])
+            elif (a4, a3, a2, a1) in dihedral_tags:
+                dihedral_list.append([l, k, j, i])
+                dihedral_type.append(dihedral_tags[(a4, a3, a2, a1)])
+            elif (s1, s2, s3, s4) in dihedral_tags:
                 dihedral_list.append([i, j, k, l])
-                dihedral_type.append(symb_quadruplet_bond.id)
+                dihedral_type.append(dihedral_tags[(s1, s2, s3, s4)])
+            elif (s4, s3, s2, s1) in dihedral_tags:
+                dihedral_list.append([l, k, j, i])
+                dihedral_type.append(dihedral_tags[(s4, s3, s2, s1)])
         
-        return [np.array(dihedral_list).tolist(), dihedral_type]
+        dihedral_list = np.array(dihedral_list, dtype=int)
+        dihedral_type = np.array(dihedral_type, dtype=int)
+        
+        return [dihedral_list.tolist(), dihedral_type.tolist()]
     
     @property
     def impropers(self):
@@ -416,12 +403,13 @@ class Specie(object):
     
     def get_atom_types(self, return_index=False):
         
-        atom_types = []
-        for tag in self.atoms.get_tags():
-            atom_types.append(self._stype[tag].extended_label)
+        type_indexes = np.array([self._smap[ii] for ii in self._sids])
+        atom_types   = np.array([self._stype[ii].extended_label for ii in type_indexes])
+        # atom_types = np.array([ii + "_" + self.resname for ii in self._sids])
+        # atom_types = np.array([atom.extended_label for atom in self._stype])
             
         if return_index:
-            return atom_types, self.atoms.get_tags()
+            return atom_types, type_indexes
         
         return atom_types
     
@@ -454,6 +442,24 @@ class Specie(object):
         ase.visualize.view(self.atoms)
         return
 
+    def type2id(self, attribute, types):
+        
+        # Get the corresponding attribute list
+        if attribute == "bonds":
+            attribute_list = self._btype
+        elif attribute == "angles":
+            attribute_list = self._atype
+        elif attribute == "dihedrals":
+            attribute_list = self._dtype
+        elif attribute == "impropers":
+            attribute_list = self._itype
+        elif attribute == "atoms":
+            attribute_list = self._stype
+        else:
+            raise ValueError("Invalid topology attribute type.")
+        
+        return [attribute_list[idx].id for idx in types]
+    
     def suggest_missing_interactions(self, type="all"):
         # Get current bonds, angles, and dihedrals
         current_bonds = set(tuple(bond) for bond in self.bonds[0])

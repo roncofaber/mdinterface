@@ -469,6 +469,8 @@ class SimulationBox():
         for bond in self.get_sorted_attribute("bonds"):
             
             if bond.id not in np.array(system.bonds.types(), dtype=int):
+                print(bond.id)
+                print(np.array(system.bonds.types(), dtype=int))
                 continue
             
             kr = bond.kr if bond.kr is not None else 0

@@ -67,7 +67,7 @@ def read_lammps_data_file(filename):
                 eps = float(line[1])
                 sig = float(line[2])
                 symbol = symbols[idx]
-                atom = Atom(symbol, f"{symbol}{str(idx).zfill(3)}", eps, sig)
+                atom = Atom(symbol, f"{symbol}_{str(idx).zfill(3)}", eps, sig)
                 atoms.append(atom)
             
             elif to_read == "bond_coeff":

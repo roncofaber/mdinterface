@@ -97,6 +97,9 @@ class Bond(Topology):
     def __repr__(self):
         return f"{self.__class__.__name__}({'-'.join(self.symbols)},kr={self.kr}, r0={self.r0})"
 
+    def __eq__(self, other):
+        return self.kr == other.kr and self.r0 == other.r0
+    
 #%%
 
 class Angle(Topology):
@@ -118,6 +121,9 @@ class Angle(Topology):
     
     def __repr__(self):
         return f"{self.__class__.__name__}({'-'.join(self.symbols)}, kr={self.kr}, theta0={self.theta0})"
+    
+    def __eq__(self, other):
+        return self.kr == other.kr and self.theta0 == other.theta0
 
 #%%
 
@@ -148,6 +154,9 @@ class Dihedral(Topology):
         symbols = '-'.join(self.symbols)
         values  = '|'.join([str(ii) for ii in self._values])
         return f"{self.__class__.__name__}({symbols}, A={values})"
+    
+    def __eq__(self, other):
+        return self.values == other.values
     
     def write(self, fout):
         atype = "{}-{}-{}-{}".format(*self.symbols)
