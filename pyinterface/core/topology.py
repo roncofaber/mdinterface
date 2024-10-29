@@ -6,6 +6,7 @@ Created on Fri Apr 19 14:05:39 2024
 @author: roncofaber
 """
 
+import copy
 #%%
 
 class Topology(object):
@@ -39,6 +40,9 @@ class Topology(object):
         
     def set_resname(self, value):
         self._resname = value
+        
+    def copy(self):
+        return copy.deepcopy(self)
 
 #%%
 

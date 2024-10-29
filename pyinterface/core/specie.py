@@ -9,12 +9,9 @@ Created on Fri Apr 19 13:58:43 2024
 import ase
 import ase.build
 import ase.visualize
-from ase.geometry.analysis import Analysis
-from ase.neighborlist import NeighborList, natural_cutoffs
 import MDAnalysis as mda
 
-from pyinterface.utils.auxiliary import as_list, find_smallest_missing,\
-    remove_inverted_tuples, atoms_to_indexes
+from pyinterface.utils.auxiliary import as_list, find_smallest_missing, atoms_to_indexes
     
 from pyinterface.core.topology import Atom
 import pyinterface.utils.auxiliary as aux
@@ -29,14 +26,14 @@ class Specie(object):
     
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
-                 name=None, lammps_data=None):
+                 name=None, lammps_data=None, fix_missing=False):
         
         # if file provided, read it
         if lammps_data is not None:
             atoms, atom_types, bonds, angles, dihedrals = read_lammps_data_file(lammps_data)
-
-        # read/update atoms atoms
-        atoms = self._read_atoms(atoms, charges)
+        else:
+            # read/update atoms atoms
+            atoms, atom_types = self._read_atoms(atoms, charges)
         
         # assign name
         if name is None:
@@ -53,7 +50,8 @@ class Specie(object):
             atom_types = self._atom_types_from_lj(lj)
             
         # set up internal topology attributes
-        self._setup_topology(atom_types, bonds, angles, dihedrals, impropers)
+        self._setup_topology(atom_types, bonds, angles, dihedrals, impropers,
+                             fix_missing=fix_missing)
         
         # initialize topology info
         self._update_topology()
@@ -78,10 +76,16 @@ class Specie(object):
             if len(charges) == 1:
                 charges = len(atoms)*charges
             atoms.set_initial_charges(charges)
+            
+        if "stype" in atoms.arrays:
+            stype = atoms.arrays["stype"]
+        else:
+            stype = None
 
-        return atoms
+        return atoms, stype
     
-    def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers):
+    def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers,
+                        fix_missing=False):
         
         # map list of inputs
         atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
@@ -108,8 +112,38 @@ class Specie(object):
         self._dids = dihedral_ids
         self._iids = improper_ids
         
-        # self._atom_types = types_map
-        # self.atoms.set_tags(atom_type_ids)
+        if fix_missing: #ugly but seems to work
+            
+            mss_bnd = pmap.generate_missing_interactions(self, "bonds")
+            mss_ang = pmap.generate_missing_interactions(self, "angles")
+            mss_dih = pmap.generate_missing_interactions(self, "dihedrals")
+            mss_imp = pmap.generate_missing_interactions(self, "impropers")
+            
+            # map list of inputs
+            # atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
+            bonds_list, bond_map, bond_ids = pmap.map_bonds(as_list(bonds) + mss_bnd)
+            angles_list, angle_map, angle_ids = pmap.map_angles(as_list(angles) + mss_ang)
+            dihedrals_list, dihedral_map, dihedral_ids = pmap.map_dihedrals(as_list(dihedrals) + mss_dih)
+            impropers_list, improper_map, improper_ids = pmap.map_impropers(as_list(impropers) + mss_imp)
+            
+            self._btype = bonds_list
+            self._atype = angles_list
+            self._dtype = dihedrals_list
+            self._itype = impropers_list
+            self._stype = atoms_list
+            
+            self._smap = atom_map
+            self._bmap = bond_map
+            self._amap = angle_map
+            self._dmap = dihedral_map
+            self._imap = improper_map
+            
+            self._sids = atom_ids
+            self._bids = bond_ids
+            self._aids = angle_ids
+            self._dids = dihedral_ids
+            self._iids = improper_ids
+
         return
     
     # function to setup atom types
@@ -220,7 +254,7 @@ class Specie(object):
         # populate with bonds and angles
         for att in ["bonds", "angles", "dihedrals", "impropers"]:
             attribute, types = self.__getattribute__(att)
-            att_types = self.type2id(att, types)
+            att_types = self._type2id(att, types)
             uni._add_topology_objects(att, attribute, types=att_types)
         
         # add charges
@@ -271,112 +305,151 @@ class Specie(object):
     @property
     def graph(self):
         return self._graph
+    
+    def _find_interactions(self, path_length, tag_map):
+        paths = aux.find_unique_paths_of_length(self.graph, path_length)
+        interaction_list = []
+        interaction_type = []
         
+        for indices in paths:
+            atoms = [self._sids[idx] for idx in indices]
+            symbols = [atom.split("_")[0] for atom in atoms]
+            
+            if tuple(atoms) in tag_map:
+                interaction_list.append(indices)
+                interaction_type.append(tag_map[tuple(atoms)])
+            elif tuple(atoms[::-1]) in tag_map:
+                interaction_list.append(indices[::-1])
+                interaction_type.append(tag_map[tuple(atoms[::-1])])
+            elif tuple(symbols) in tag_map:
+                interaction_list.append(indices)
+                interaction_type.append(tag_map[tuple(symbols)])
+            elif tuple(symbols[::-1]) in tag_map:
+                interaction_list.append(indices[::-1])
+                interaction_type.append(tag_map[tuple(symbols[::-1])])
+        
+        interaction_list = np.array(interaction_list, dtype=int)
+        interaction_type = np.array(interaction_type, dtype=int)
+        
+        return [interaction_list.tolist(), interaction_type.tolist()]
+    
     @property
     def bonds(self):
-        # Find all unique paths of length 1 (which corresponds to bonds)
-        bonds = aux.find_unique_paths_of_length(self.graph, 1)
-        bond_tags = self._bmap
-        bond_list = []
-        bond_type = []
-        
-        for i, j in bonds:
-            a1 = self._sids[i]
-            a2 = self._sids[j]
-            
-            s1 = a1.split("_")[0]
-            s2 = a2.split("_")[0]
-            
-            if (a1, a2) in bond_tags:
-                bond_list.append([i, j])
-                bond_type.append(bond_tags[(a1, a2)])
-            elif (a2, a1) in bond_tags:
-                bond_list.append([j, i])
-                bond_type.append(bond_tags[(a2, a1)])
-            elif (s1, s2) in bond_tags:
-                bond_list.append([i, j])
-                bond_type.append(bond_tags[(s1, s2)])
-            elif (s2, s1) in bond_tags:
-                bond_list.append([j, i])
-                bond_type.append(bond_tags[(s2, s1)])
-        
-        bond_list = np.array(bond_list, dtype=int)
-        bond_type = np.array(bond_type, dtype=int)
-        
-        return [bond_list.tolist(), bond_type.tolist()]
+        return self._find_interactions(1, self._bmap)
     
     @property
     def angles(self):
-        # Find all unique paths of length 2 (which corresponds to angles)
-        angles = aux.find_unique_paths_of_length(self.graph, 2)
-        angle_tags = self._amap
-        angle_list = []
-        angle_type = []
-        
-        for i, j, k in angles:
-            a1 = self._sids[i]
-            a2 = self._sids[j]
-            a3 = self._sids[k]
-            
-            s1 = a1.split("_")[0]
-            s2 = a2.split("_")[0]
-            s3 = a3.split("_")[0]
-            
-            if (a1, a2, a3) in angle_tags:
-                angle_list.append([i, j, k])
-                angle_type.append(angle_tags[(a1, a2, a3)])
-            elif (a3, a2, a1) in angle_tags:
-                angle_list.append([k, j, i])
-                angle_type.append(angle_tags[(a3, a2, a1)])
-            elif (s1, s2, s3) in angle_tags:
-                angle_list.append([i, j, k])
-                angle_type.append(angle_tags[(s1, s2, s3)])
-            elif (s3, s2, s1) in angle_tags:
-                angle_list.append([k, j, i])
-                angle_type.append(angle_tags[(s3, s2, s1)])
-
-            
-        angle_list = np.array(angle_list, dtype=int)
-        angle_type = np.array(angle_type, dtype=int)
-        
-        return [angle_list.tolist(), angle_type.tolist()]
+        return self._find_interactions(2, self._amap)
     
     @property
     def dihedrals(self):
-        # Find all unique paths of length 3 (which corresponds to dihedrals)
-        dihedrals = aux.find_unique_paths_of_length(self.graph, 3)
-        dihedral_tags = self._dmap
-        dihedral_list = []
-        dihedral_type = []
+        return self._find_interactions(3, self._dmap)
         
-        for i, j, k, l in dihedrals:
-            a1 = self._sids[i]
-            a2 = self._sids[j]
-            a3 = self._sids[k]
-            a4 = self._sids[l]
+    # @property
+    # def bonds(self):
+    #     # Find all unique paths of length 1 (which corresponds to bonds)
+    #     bonds = aux.find_unique_paths_of_length(self.graph, 1)
+    #     bond_tags = self._bmap
+    #     bond_list = []
+    #     bond_type = []
+        
+    #     for i, j in bonds:
+    #         a1 = self._sids[i]
+    #         a2 = self._sids[j]
             
-            s1 = a1.split("_")[0]
-            s2 = a2.split("_")[0]
-            s3 = a3.split("_")[0]
-            s4 = a4.split("_")[0]
+    #         s1 = a1.split("_")[0]
+    #         s2 = a2.split("_")[0]
             
-            if (a1, a2, a3, a4) in dihedral_tags:
-                dihedral_list.append([i, j, k, l])
-                dihedral_type.append(dihedral_tags[(a1, a2, a3, a4)])
-            elif (a4, a3, a2, a1) in dihedral_tags:
-                dihedral_list.append([l, k, j, i])
-                dihedral_type.append(dihedral_tags[(a4, a3, a2, a1)])
-            elif (s1, s2, s3, s4) in dihedral_tags:
-                dihedral_list.append([i, j, k, l])
-                dihedral_type.append(dihedral_tags[(s1, s2, s3, s4)])
-            elif (s4, s3, s2, s1) in dihedral_tags:
-                dihedral_list.append([l, k, j, i])
-                dihedral_type.append(dihedral_tags[(s4, s3, s2, s1)])
+    #         if (a1, a2) in bond_tags:
+    #             bond_list.append([i, j])
+    #             bond_type.append(bond_tags[(a1, a2)])
+    #         elif (a2, a1) in bond_tags:
+    #             bond_list.append([j, i])
+    #             bond_type.append(bond_tags[(a2, a1)])
+    #         elif (s1, s2) in bond_tags:
+    #             bond_list.append([i, j])
+    #             bond_type.append(bond_tags[(s1, s2)])
+    #         elif (s2, s1) in bond_tags:
+    #             bond_list.append([j, i])
+    #             bond_type.append(bond_tags[(s2, s1)])
         
-        dihedral_list = np.array(dihedral_list, dtype=int)
-        dihedral_type = np.array(dihedral_type, dtype=int)
+    #     bond_list = np.array(bond_list, dtype=int)
+    #     bond_type = np.array(bond_type, dtype=int)
         
-        return [dihedral_list.tolist(), dihedral_type.tolist()]
+    #     return [bond_list.tolist(), bond_type.tolist()]
+    
+    # @property
+    # def angles(self):
+    #     # Find all unique paths of length 2 (which corresponds to angles)
+    #     angles = aux.find_unique_paths_of_length(self.graph, 2)
+    #     angle_tags = self._amap
+    #     angle_list = []
+    #     angle_type = []
+        
+    #     for i, j, k in angles:
+    #         a1 = self._sids[i]
+    #         a2 = self._sids[j]
+    #         a3 = self._sids[k]
+            
+    #         s1 = a1.split("_")[0]
+    #         s2 = a2.split("_")[0]
+    #         s3 = a3.split("_")[0]
+            
+    #         if (a1, a2, a3) in angle_tags:
+    #             angle_list.append([i, j, k])
+    #             angle_type.append(angle_tags[(a1, a2, a3)])
+    #         elif (a3, a2, a1) in angle_tags:
+    #             angle_list.append([k, j, i])
+    #             angle_type.append(angle_tags[(a3, a2, a1)])
+    #         elif (s1, s2, s3) in angle_tags:
+    #             angle_list.append([i, j, k])
+    #             angle_type.append(angle_tags[(s1, s2, s3)])
+    #         elif (s3, s2, s1) in angle_tags:
+    #             angle_list.append([k, j, i])
+    #             angle_type.append(angle_tags[(s3, s2, s1)])
+
+            
+    #     angle_list = np.array(angle_list, dtype=int)
+    #     angle_type = np.array(angle_type, dtype=int)
+        
+    #     return [angle_list.tolist(), angle_type.tolist()]
+    
+    # @property
+    # def dihedrals(self):
+    #     # Find all unique paths of length 3 (which corresponds to dihedrals)
+    #     dihedrals = aux.find_unique_paths_of_length(self.graph, 3)
+    #     dihedral_tags = self._dmap
+    #     dihedral_list = []
+    #     dihedral_type = []
+        
+    #     for i, j, k, l in dihedrals:
+    #         a1 = self._sids[i]
+    #         a2 = self._sids[j]
+    #         a3 = self._sids[k]
+    #         a4 = self._sids[l]
+            
+    #         s1 = a1.split("_")[0]
+    #         s2 = a2.split("_")[0]
+    #         s3 = a3.split("_")[0]
+    #         s4 = a4.split("_")[0]
+            
+    #         if (a1, a2, a3, a4) in dihedral_tags:
+    #             dihedral_list.append([i, j, k, l])
+    #             dihedral_type.append(dihedral_tags[(a1, a2, a3, a4)])
+    #         elif (a4, a3, a2, a1) in dihedral_tags:
+    #             dihedral_list.append([l, k, j, i])
+    #             dihedral_type.append(dihedral_tags[(a4, a3, a2, a1)])
+    #         elif (s1, s2, s3, s4) in dihedral_tags:
+    #             dihedral_list.append([i, j, k, l])
+    #             dihedral_type.append(dihedral_tags[(s1, s2, s3, s4)])
+    #         elif (s4, s3, s2, s1) in dihedral_tags:
+    #             dihedral_list.append([l, k, j, i])
+    #             dihedral_type.append(dihedral_tags[(s4, s3, s2, s1)])
+        
+    #     dihedral_list = np.array(dihedral_list, dtype=int)
+    #     dihedral_type = np.array(dihedral_type, dtype=int)
+        
+    #     return [dihedral_list.tolist(), dihedral_type.tolist()]
     
     @property
     def impropers(self):
@@ -384,7 +457,6 @@ class Specie(object):
         imp_list = []
         imp_type = []
         
-        # all_bonds = self.ana.all_bonds[0]
         all_bonds = [list(self.graph.neighbors(ii))for ii in range(len(self.atoms))]
         
         for improper in self._itype:
@@ -405,8 +477,6 @@ class Specie(object):
         
         type_indexes = np.array([self._smap[ii] for ii in self._sids])
         atom_types   = np.array([self._stype[ii].extended_label for ii in type_indexes])
-        # atom_types = np.array([ii + "_" + self.resname for ii in self._sids])
-        # atom_types = np.array([atom.extended_label for atom in self._stype])
             
         if return_index:
             return atom_types, type_indexes
@@ -442,7 +512,7 @@ class Specie(object):
         ase.visualize.view(self.atoms)
         return
 
-    def type2id(self, attribute, types):
+    def _type2id(self, attribute, types):
         
         # Get the corresponding attribute list
         if attribute == "bonds":
@@ -460,65 +530,23 @@ class Specie(object):
         
         return [attribute_list[idx].id for idx in types]
     
-    def suggest_missing_interactions(self, type="all"):
-        # Get current bonds, angles, and dihedrals
-        current_bonds = set(tuple(bond) for bond in self.bonds[0])
-        current_angles = set(tuple(angle) for angle in self.angles[0])
-        current_dihedrals = set(tuple(dihedral) for dihedral in self.dihedrals[0])
+    def suggest_missing_interactions(self, stype="all"):
         
-        # Initialize sets to store suggested interactions
-        suggested_bonds = set()
-        suggested_angles = set()
-        suggested_dihedrals = set()
-        suggested_lj = {}
+    
+        # Check for missing interactions
+        missing_bonds = pmap.find_missing_bonds(self)
+        missing_angles = pmap.find_missing_angles(self)
+        missing_dihedrals = pmap.find_missing_dihedrals(self)
+        missing_impropers = []#pmap.find_missing_impropers(self) #TODO change
         
-        # Get all possible bonds, angles, and dihedrals based on the graph
-        possible_bonds = aux.find_unique_paths_of_length(self.graph, 1)
-        possible_angles = aux.find_unique_paths_of_length(self.graph, 2)
-        possible_dihedrals = aux.find_unique_paths_of_length(self.graph, 3)
+        suggestions = {
+            "bonds": missing_bonds,
+            "angles": missing_angles,
+            "dihedrals": missing_dihedrals,
+            "impropers": missing_impropers
+        }
         
-        tags = self.atoms.get_tags()
+        if stype == "all":
+            return suggestions
         
-        # Check for missing bonds
-        for bond in possible_bonds:
-            bond_tuple = tuple(bond)
-            bond_tuple_rev = tuple(reversed(bond))
-            if bond_tuple not in current_bonds and bond_tuple_rev not in current_bonds:
-                a1, a2 = bond
-                bond_type = f"{self._atom_types[tags[a1]]}-{self._atom_types[tags[a2]]}"
-                suggested_bonds.add(bond_type)
-        
-        # Check for missing angles
-        for angle in possible_angles:
-            angle_tuple = tuple(angle)
-            angle_tuple_rev = tuple(reversed(angle))
-            if angle_tuple not in current_angles and angle_tuple_rev not in current_angles:
-                a1, a2, a3 = angle
-                angle_type = f"{self._atom_types[tags[a1]]}-{self._atom_types[tags[a2]]}-{self._atom_types[tags[a3]]}"
-                suggested_angles.add(angle_type)
-        
-        # Check for missing dihedrals
-        for dihedral in possible_dihedrals:
-            dihedral_tuple = tuple(dihedral)
-            dihedral_tuple_rev = tuple(reversed(dihedral))
-            if dihedral_tuple not in current_dihedrals and dihedral_tuple_rev not in current_dihedrals:
-                a1, a2, a3, a4 = dihedral
-                dihedral_type = f"{self._atom_types[tags[a1]]}-{self._atom_types[tags[a2]]}-{self._atom_types[tags[a3]]}-{self._atom_types[tags[a4]]}"
-                suggested_dihedrals.add(dihedral_type)
-        
-        # Check for missing LJ parameters
-        for atom in self._stype:
-            if atom.eps is None or atom.sig is None:
-                suggested_lj[atom.label] = (None, None)  # Placeholder for missing LJ parameters
-        
-        suggestion = {
-            "bonds": list(suggested_bonds),
-            "angles": list(suggested_angles),
-            "dihedrals": list(suggested_dihedrals),
-            "lj": suggested_lj
-            }
-        
-        if type == "all":
-            return suggestion
-        
-        return suggestion[type]
+        return suggestions[stype]

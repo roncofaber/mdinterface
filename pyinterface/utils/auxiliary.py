@@ -241,7 +241,7 @@ def find_unique_paths_of_length(graph, length):
     # Sort paths lexicographically
     paths.sort()
     
-    return paths
+    return np.array(paths, dtype=int)
 
 def same_rev_check(list1, list2):
     if list(list1) == list(list2):
