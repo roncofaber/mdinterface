@@ -26,14 +26,14 @@ class Specie(object):
     
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
-                 name=None, lammps_data=None, fix_missing=False):
+                 name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0):
         
         # if file provided, read it
         if lammps_data is not None:
             atoms, atom_types, bonds, angles, dihedrals = read_lammps_data_file(lammps_data)
         else:
             # read/update atoms atoms
-            atoms, atom_types = self._read_atoms(atoms, charges)
+            atoms, atom_types = self._read_atoms(atoms, charges, chg_scaling=chg_scaling)
         
         # assign name
         if name is None:
@@ -60,7 +60,7 @@ class Specie(object):
     
     # read atoms to return ase.Atoms
     @staticmethod
-    def _read_atoms(atoms, charges):
+    def _read_atoms(atoms, charges, chg_scaling=1.0):
         
         # initialize atoms obj
         if isinstance(atoms, str):
@@ -71,12 +71,19 @@ class Specie(object):
         elif isinstance(atoms, ase.Atoms):
             atoms = atoms.copy()
         
+        # assign charges
         if charges is not None:
             charges = as_list(charges)
             if len(charges) == 1:
                 charges = len(atoms)*charges
-            atoms.set_initial_charges(charges)
+        else:
+            charges = atoms.get_initial_charges()
             
+        # rescale charges if needed
+        charges = chg_scaling*np.asarray(charges)
+        atoms.set_initial_charges(charges)
+        
+        # see if stype is already present
         if "stype" in atoms.arrays:
             stype = atoms.arrays["stype"]
         else:
@@ -177,7 +184,7 @@ class Specie(object):
         
         self._atoms = atoms
         
-        self._graph = aux.molecule_to_graph(atoms)
+        self._graph = aux.molecule_to_graph(atoms, cutoff_scale=cutoff)
         
         return
     
@@ -345,111 +352,13 @@ class Specie(object):
     def dihedrals(self):
         return self._find_interactions(3, self._dmap)
         
-    # @property
-    # def bonds(self):
-    #     # Find all unique paths of length 1 (which corresponds to bonds)
-    #     bonds = aux.find_unique_paths_of_length(self.graph, 1)
-    #     bond_tags = self._bmap
-    #     bond_list = []
-    #     bond_type = []
-        
-    #     for i, j in bonds:
-    #         a1 = self._sids[i]
-    #         a2 = self._sids[j]
-            
-    #         s1 = a1.split("_")[0]
-    #         s2 = a2.split("_")[0]
-            
-    #         if (a1, a2) in bond_tags:
-    #             bond_list.append([i, j])
-    #             bond_type.append(bond_tags[(a1, a2)])
-    #         elif (a2, a1) in bond_tags:
-    #             bond_list.append([j, i])
-    #             bond_type.append(bond_tags[(a2, a1)])
-    #         elif (s1, s2) in bond_tags:
-    #             bond_list.append([i, j])
-    #             bond_type.append(bond_tags[(s1, s2)])
-    #         elif (s2, s1) in bond_tags:
-    #             bond_list.append([j, i])
-    #             bond_type.append(bond_tags[(s2, s1)])
-        
-    #     bond_list = np.array(bond_list, dtype=int)
-    #     bond_type = np.array(bond_type, dtype=int)
-        
-    #     return [bond_list.tolist(), bond_type.tolist()]
-    
-    # @property
-    # def angles(self):
-    #     # Find all unique paths of length 2 (which corresponds to angles)
-    #     angles = aux.find_unique_paths_of_length(self.graph, 2)
-    #     angle_tags = self._amap
-    #     angle_list = []
-    #     angle_type = []
-        
-    #     for i, j, k in angles:
-    #         a1 = self._sids[i]
-    #         a2 = self._sids[j]
-    #         a3 = self._sids[k]
-            
-    #         s1 = a1.split("_")[0]
-    #         s2 = a2.split("_")[0]
-    #         s3 = a3.split("_")[0]
-            
-    #         if (a1, a2, a3) in angle_tags:
-    #             angle_list.append([i, j, k])
-    #             angle_type.append(angle_tags[(a1, a2, a3)])
-    #         elif (a3, a2, a1) in angle_tags:
-    #             angle_list.append([k, j, i])
-    #             angle_type.append(angle_tags[(a3, a2, a1)])
-    #         elif (s1, s2, s3) in angle_tags:
-    #             angle_list.append([i, j, k])
-    #             angle_type.append(angle_tags[(s1, s2, s3)])
-    #         elif (s3, s2, s1) in angle_tags:
-    #             angle_list.append([k, j, i])
-    #             angle_type.append(angle_tags[(s3, s2, s1)])
+    @property
+    def _sids(self):
+        return self.atoms.arrays["sids"]
 
-            
-    #     angle_list = np.array(angle_list, dtype=int)
-    #     angle_type = np.array(angle_type, dtype=int)
-        
-    #     return [angle_list.tolist(), angle_type.tolist()]
-    
-    # @property
-    # def dihedrals(self):
-    #     # Find all unique paths of length 3 (which corresponds to dihedrals)
-    #     dihedrals = aux.find_unique_paths_of_length(self.graph, 3)
-    #     dihedral_tags = self._dmap
-    #     dihedral_list = []
-    #     dihedral_type = []
-        
-    #     for i, j, k, l in dihedrals:
-    #         a1 = self._sids[i]
-    #         a2 = self._sids[j]
-    #         a3 = self._sids[k]
-    #         a4 = self._sids[l]
-            
-    #         s1 = a1.split("_")[0]
-    #         s2 = a2.split("_")[0]
-    #         s3 = a3.split("_")[0]
-    #         s4 = a4.split("_")[0]
-            
-    #         if (a1, a2, a3, a4) in dihedral_tags:
-    #             dihedral_list.append([i, j, k, l])
-    #             dihedral_type.append(dihedral_tags[(a1, a2, a3, a4)])
-    #         elif (a4, a3, a2, a1) in dihedral_tags:
-    #             dihedral_list.append([l, k, j, i])
-    #             dihedral_type.append(dihedral_tags[(a4, a3, a2, a1)])
-    #         elif (s1, s2, s3, s4) in dihedral_tags:
-    #             dihedral_list.append([i, j, k, l])
-    #             dihedral_type.append(dihedral_tags[(s1, s2, s3, s4)])
-    #         elif (s4, s3, s2, s1) in dihedral_tags:
-    #             dihedral_list.append([l, k, j, i])
-    #             dihedral_type.append(dihedral_tags[(s4, s3, s2, s1)])
-        
-    #     dihedral_list = np.array(dihedral_list, dtype=int)
-    #     dihedral_type = np.array(dihedral_type, dtype=int)
-        
-    #     return [dihedral_list.tolist(), dihedral_type.tolist()]
+    @_sids.setter
+    def _sids(self, atom_ids):
+        self.atoms.arrays["sids"] = atom_ids
     
     @property
     def impropers(self):

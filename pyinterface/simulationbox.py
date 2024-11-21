@@ -164,8 +164,11 @@ class SimulationBox():
         except:
             print("WARNING: packmol might not have worked, check system.")
         
-        universe = mda.Universe(output_file)
-        
+        try:
+            universe = mda.Universe(output_file)
+        except:
+            universe = None
+
         # remove temp mol files and packmol files
         subprocess.call(['rm'] + tmp_files)
         

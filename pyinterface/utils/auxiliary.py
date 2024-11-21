@@ -153,10 +153,10 @@ def get_nth_neighbors(graph, start_node, n):
 
     return neighbors
 
-def molecule_to_graph(molecule):
+def molecule_to_graph(molecule, cutoff_scale=1.0):
     
     # Generate cutoff
-    cutOff = np.array(neighborlist.natural_cutoffs(molecule))
+    cutOff = cutoff_scale*np.array(neighborlist.natural_cutoffs(molecule))
     ignore_atoms = ""  # Assuming ignore_atoms is an empty string
     cutOff[atoms_to_indexes(molecule, ignore_atoms)] = 0
 
