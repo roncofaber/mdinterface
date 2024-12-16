@@ -6,10 +6,13 @@ Example script demonstrating how to use the mdinterface package to build a simul
 Author: Roncofaber
 """
 
-import ase
 from mdinterface import SimulationBox
 from mdinterface.core.specie import Specie
 from mdinterface.core.topology import Bond, Angle
+from mdinterface.utils.database import Water
+
+import ase
+from ase.build import fcc111
 
 #%% Set up simulation box
 
@@ -21,13 +24,17 @@ a1 = Angle("H", "O", "H", kr=55, theta0=104.52)
 mol = Specie("H2O", charges=[-0.83, 0.415, 0.415], bonds=b1, angles=a1,
              lj={"O": [0.102, 3.188], "H": [0.0, 0.0]})
 
+# alternatively you can load water as:
+wat = Water()
+
 # Ions setup
 # https://www.sciencedirect.com/science/article/pii/S0167732216322760
 Na = Specie("Na", charges=+0.8, lj={"Na": [0.00280, 3.3304]})
 Cl = Specie("Cl", charges=-0.8, lj={"Cl": [0.1178, 4.41720]})
 
 # Interface setup
-interface = Specie("gold.pdb", charges=0.0, lj={"Au": [5.29, 2.62904212]})
+gold      = fcc111('Au', size=(1,2,3), orthogonal=True, periodic=True)
+interface = Specie(gold, charges=0.0, lj={"Au": [5.29, 2.62904212]})
 
 #%% Create a SimulationBox instance
 
