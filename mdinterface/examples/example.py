@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Example script demonstrating how to use the pyinterface package to build a simulation box.
+Example script demonstrating how to use the mdinterface package to build a simulation box.
 
 Author: Roncofaber
 """
 
 import ase
-from pyinterface import SimulationBox
-from pyinterface.core.specie import Specie
-from pyinterface.core.topology import Bond, Angle
+from mdinterface import SimulationBox
+from mdinterface.core.specie import Specie
+from mdinterface.core.topology import Bond, Angle
 
 #%% Set up simulation box
 

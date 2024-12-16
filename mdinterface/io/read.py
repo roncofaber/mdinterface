@@ -11,7 +11,7 @@ import numpy as np
 import ase
 import ase.visualize
 import ase.io.lammpsdata
-from pyinterface.core.topology import Atom, Bond, Angle, Dihedral
+from mdinterface.core.topology import Atom, Bond, Angle, Dihedral, Improper
 
 #%%
 
@@ -23,25 +23,29 @@ def read_lammps_data_file(filename):
 
     symbols = system.get_chemical_symbols()
     # Initialize data containers
-    bond_coeff = []
-    angle_coeff = []
+    bond_coeff     = []
+    angle_coeff    = []
     dihedral_coeff = []
+    improper_coeff = []
     
-    atoms = []
-    bonds = []
-    angles = []
+    atoms     = []
+    bonds     = []
+    angles    = []
     dihedrals = []
+    impropers = []
     
     # Define a dictionary to map section names to their corresponding data lists
     section_map = {
-        'pair coeffs': 'pair_coeff',
-        'bond coeffs': 'bond_coeff',
-        'angle coeffs': 'angle_coeff',
-        'dihedral coeffs': 'dihedral_coeff',
-        'atoms': 'atoms',
-        'bonds': 'bonds',
-        'angles': 'angles',
-        'dihedrals': 'dihedrals',
+        'pair coeffs'     : 'pair_coeff',
+        'bond coeffs'     : 'bond_coeff',
+        'angle coeffs'    : 'angle_coeff',
+        'dihedral coeffs' : 'dihedral_coeff',
+        'improper coeffs' : 'improper_coeff',
+        'atoms'     : 'atoms',
+        'bonds'     : 'bonds',
+        'angles'    : 'angles',
+        'dihedrals' : 'dihedrals',
+        'impropers' : 'impropers'
     }
     
     # Read the file and process lines
@@ -83,6 +87,10 @@ def read_lammps_data_file(filename):
             elif to_read == "dihedral_coeff":
                 values = [float(ii) for ii in line[1:]]
                 dihedral_coeff.append(values)
+                
+            elif to_read == "improper_coeff":
+                values = [float(line[1]), int(line[2]), int(line[3])]
+                improper_coeff.append(values)
             
             elif to_read == "bonds":
                 idx1 = int(line[2]) - 1
@@ -102,8 +110,17 @@ def read_lammps_data_file(filename):
             elif to_read == "dihedrals":
                 idxs = [int(ii) - 1 for ii in line[2:]]
                 values = dihedral_coeff[int(line[1]) - 1]
-                dihedral = Dihedral(atoms[idxs[0]].label, atoms[idxs[1]].label, atoms[idxs[2]].label, atoms[idxs[3]].label, *values)
+                dihedral = Dihedral(atoms[idxs[0]].label, atoms[idxs[1]].label,
+                                    atoms[idxs[2]].label, atoms[idxs[3]].label, *values)
                 dihedrals.append(dihedral)
                 
+            elif to_read == "impropers":
+                idxs = [int(ii) - 1 for ii in line[2:]]
+                values = improper_coeff[int(line[1]) - 1]
+                improper = Improper(atoms[idxs[0]].label, atoms[idxs[1]].label,
+                                    atoms[idxs[2]].label, atoms[idxs[3]].label,
+                                    K=values[0], d=values[1], n=values[2])
+                impropers.append(improper)
+                
     system.new_array("stype", np.array(atoms))
-    return system, atoms, bonds, angles, dihedrals
+    return system, atoms, bonds, angles, dihedrals, impropers

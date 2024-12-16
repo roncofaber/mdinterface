@@ -6,9 +6,9 @@ Created on Tue Oct 24 15:14:41 2023
 @author: roncoroni
 """
 
-from pyinterface.utils.auxiliary import label_to_element, as_list, find_smallest_missing
-from pyinterface.io.lammpswriter import DATAWriter
-from pyinterface.io.packmol import header, box_place, fix_place
+from mdinterface.utils.auxiliary import label_to_element, as_list, find_smallest_missing
+from mdinterface.io.lammpswriter import DATAWriter
+from mdinterface.io.packmol import header, box_place, fix_place
 
 import MDAnalysis as mda
 

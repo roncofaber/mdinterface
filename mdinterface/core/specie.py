@@ -9,17 +9,22 @@ Created on Fri Apr 19 13:58:43 2024
 import ase
 import ase.build
 import ase.visualize
+from ase.data.colors import jmol_colors
 import MDAnalysis as mda
 
-from pyinterface.utils.auxiliary import as_list, find_smallest_missing, atoms_to_indexes
+from mdinterface.utils.auxiliary import as_list, find_smallest_missing, atoms_to_indexes
     
-from pyinterface.core.topology import Atom
-import pyinterface.utils.auxiliary as aux
-from pyinterface.io.read import read_lammps_data_file
-import pyinterface.utils.map as pmap
+from mdinterface.core.topology import Atom
+import mdinterface.utils.auxiliary as aux
+from mdinterface.io.read import read_lammps_data_file
+import mdinterface.utils.map as pmap
 
 import copy
 import numpy as np
+import networkx as nx
+
+import matplotlib.pyplot as plt
+
 #%%
 
 class Specie(object):
@@ -30,7 +35,7 @@ class Specie(object):
         
         # if file provided, read it
         if lammps_data is not None:
-            atoms, atom_types, bonds, angles, dihedrals = read_lammps_data_file(lammps_data)
+            atoms, atom_types, bonds, angles, dihedrals, impropers = read_lammps_data_file(lammps_data)
         else:
             # read/update atoms atoms
             atoms, atom_types = self._read_atoms(atoms, charges, chg_scaling=chg_scaling)
@@ -313,8 +318,13 @@ class Specie(object):
     def graph(self):
         return self._graph
     
-    def _find_interactions(self, path_length, tag_map):
-        paths = aux.find_unique_paths_of_length(self.graph, path_length)
+    def _find_interactions(self, path_length, tag_map, impropers=False):
+        
+        if not impropers:
+            paths = aux.find_unique_paths_of_length(self.graph, path_length)
+        else:
+            paths = aux.find_improper_idxs(self.graph)
+            
         interaction_list = []
         interaction_type = []
         
@@ -351,6 +361,10 @@ class Specie(object):
     @property
     def dihedrals(self):
         return self._find_interactions(3, self._dmap)
+    
+    @property
+    def impropers(self):
+        return self._find_interactions(3, self._imap, impropers=True)
         
     @property
     def _sids(self):
@@ -359,26 +373,7 @@ class Specie(object):
     @_sids.setter
     def _sids(self, atom_ids):
         self.atoms.arrays["sids"] = atom_ids
-    
-    @property
-    def impropers(self):
-        
-        imp_list = []
-        imp_type = []
-        
-        all_bonds = [list(self.graph.neighbors(ii))for ii in range(len(self.atoms))]
-        
-        for improper in self._itype:
-            idxs = atoms_to_indexes(self.atoms, improper.symbols)
             
-            new_imps = [(cc, *ii) for cc, ii in enumerate(all_bonds)
-                       if len(ii) == 3 and cc in idxs]
-            
-            imp_list.extend(new_imps)
-            imp_type.extend(len(new_imps)*[improper.id])
-            
-        return [imp_list, imp_type]
-    
     def copy(self):
         return copy.deepcopy(self)
     
@@ -459,3 +454,54 @@ class Specie(object):
             return suggestions
         
         return suggestions[stype]
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.resname})"
+
+    def find_relevant_distances(self, Nmax, Nmin=0, centers=None, Ninv=0):
+        
+        # get list of relevant nodes
+        if centers is None:
+            relevant_nodes = self.graph.nodes()
+        else:
+            relevant_nodes = aux.as_list(centers)
+        
+        # Set to store unique pairs
+        unique_pairs = set()
+
+        # Iterate over all nodes in the graph
+        for node1 in relevant_nodes:
+            # Get the shortest path lengths from node node to all other reachable nodes
+            shortest_paths = nx.single_source_shortest_path_length(self.graph, node1)
+            
+            longest_path = max([dist for _, dist in shortest_paths.items()])
+            
+            # Collect pairs where the distance is within N but above Nmin
+            for node2, distance in shortest_paths.items():
+                if distance <= Nmax and distance > Nmin:
+                    # Use tuple (min(node, n), max(node, n)) to avoid duplicates
+                    pair = (min(node1, node2), max(node1, node2))
+                    unique_pairs.add(pair)
+                elif Ninv > longest_path - distance:
+                    pair = (min(node1, node2), max(node1, node2))
+                    unique_pairs.add(pair)
+
+        # Convert set to list
+        unique_pairs_list = list(unique_pairs)
+        unique_pairs_list.sort()
+        
+        return np.array(unique_pairs_list, dtype=int)
+
+    def plot_graph(self, **kwargs):
+        
+        colors = [jmol_colors[a.number] for a in self.atoms]
+        
+        fig, ax = plt.subplots()
+        nx.draw(self.graph, with_labels=True, node_color=colors,
+                node_size=1000, edge_color='black', linewidths=2, font_size=15,
+                edgecolors="black", ax=ax, width=2)
+        
+        
+        plt.show()
+        
+        return

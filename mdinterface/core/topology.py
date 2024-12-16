@@ -78,9 +78,13 @@ class Atom(Topology):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.label}, eps={self.eps}, sig={self.sig})"
     
+    # TODO CHANGE BACK IF DOESN'T WORK
     def __eq__(self, other):
         return self.eps == other.eps and self.sig == other.sig and self.symbol == other.symbol
 
+    # def __eq__(self, other):
+    #     return self.eps == other.eps and self.sig == other.sig and self.label == other.label
+    
 #%%
 
 class Bond(Topology):
@@ -176,21 +180,36 @@ class Dihedral(Topology):
 
 
 class Improper(Topology):  # cvff improper style
-    def __init__(self, a1, K=None, d=None, n=None):
+    def __init__(self, a1, a2="x", a3="x", a4="x", K=None, d=None, n=None):
         super(Improper, self).__init__()
+        
         self._a1 = a1
+        self._a2 = a2
+        self._a3 = a3
+        self._a4 = a4
+        
         self._K = K
+        
+        assert d in [1, -1], "Wrong 'd' value"
         self._d = d
+        
+        assert n in [0,1,2,3,4,5,6], "Wrong 'n' value"
         self._n = n
+        
         return
 
     @property
     def symbols(self):
-        return self._a1
+        return self._a1, self._a2, self._a3, self._a4
 
     @property
     def values(self):
         return self._K, self._d, self._n
+    
+    def __repr__(self):
+        symbols = '-'.join(self.symbols)
+        values = '|'.join([str(ii) for ii in self.values])
+        return f"{self.__class__.__name__}({symbols}, K,d,n={values})"
 
     def __eq__(self, other):
         return (self.values == other.values and

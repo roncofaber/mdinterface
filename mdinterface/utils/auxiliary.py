@@ -243,6 +243,17 @@ def find_unique_paths_of_length(graph, length):
     
     return np.array(paths, dtype=int)
 
+def find_improper_idxs(graph):
+    nodes = [node for node, degree in dict(graph.degree()).items() if degree == 3]
+
+    # Find all nodes connected to those nodes
+    improper_idxs = []
+    for node in nodes:
+        improper_idxs.append(sorted([node,* graph.neighbors(node)]))
+        
+    return improper_idxs
+
+
 def same_rev_check(list1, list2):
     if list(list1) == list(list2):
         return True

@@ -9,8 +9,8 @@ Created on Mon Aug  5 17:13:50 2024
 import numpy as np
 
 # internal modules
-from pyinterface.core.specie import Specie
-from pyinterface.core.topology import Bond, Angle, Atom, Dihedral, Improper
+from mdinterface.core.specie import Specie
+from mdinterface.core.topology import Bond, Angle, Atom, Dihedral, Improper
 
 import ase.build
 
@@ -23,7 +23,7 @@ class Graphene(Specie):
         system.cell[-1][-1] = 3.35
         g_b = Bond("C", "C", kr=469, r0=1.4)
         g_d = Dihedral("C", "C", "C", "C", A1=7.25, A2=0, A3=-7.25, A4=0, A5=0)
-        g_i = Improper("C", K=1.1, d=-1, n=2)
+        g_i = Improper(a1="C", K=1.1, d=-1, n=2)
         g_a = Angle("C", "C", "C", kr=63, theta0=120)
         lj = {"C": [0.07, 3.54996412]}
 
