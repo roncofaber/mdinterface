@@ -1,6 +1,6 @@
-# mdinterface: build interface systems for Molecular Dynamics simulations
+# mdinterface: Build Interface Systems for Molecular Dynamics Simulations
 
-`mdinterface` is a Python package for building systems to use in Molecular Dynamics (MD) simulations. The package was primarly developed to help construct electrolyte/electrode interfaces, but is well suited to generate suitable MD boxes of liquids, electrolyte systems and polymer networks.
+`mdinterface` is a Python package designed to build systems for Molecular Dynamics (MD) simulations. Initially developed to construct electrolyte/electrode interfaces, it is also well-suited for generating MD boxes of liquids, electrolyte systems, and polymer networks.
 
 ## Features
 
@@ -15,6 +15,12 @@
 
 Check the file [requirements.txt](requirements.txt) to see which packages are needed. Installing the package using `pip` should already take care of all dependencies.
 
+Additionaly, you need the `packmol` utility installed to generate MD boxes. You can follow the instructions at [https://m3g.github.io/packmol/](https://m3g.github.io/packmol/) to install it. Alternatively, you can install it using `conda`:
+
+```bash
+conda install -c conda-forge packmol
+```
+
 ## Installation
 
 ### Install using `pip`
@@ -27,7 +33,7 @@ pip install mdinterface
 
 ### Install directly the source code
 
-Alternatively you can obtain `mdinterface` directly from the repository by following those steps:
+Alternatively you can obtain `mdinterface` directly from the repository by following these steps:
 
 Clone the repository in the desired location:
 
@@ -55,3 +61,7 @@ If you plan of making changes, clone the package and install the requirements bu
 ```bash
 pip install --no-build-isolation --no-deps -e .
 ```
+
+## Usage
+
+Check the files in [examples](mdinterface/examples/) to learn how to use the package.

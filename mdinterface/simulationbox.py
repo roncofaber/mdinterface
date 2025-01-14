@@ -8,15 +8,13 @@ Created on Tue Oct 24 15:14:41 2023
 
 from mdinterface.utils.auxiliary import label_to_element, as_list, find_smallest_missing
 from mdinterface.io.lammpswriter import DATAWriter
-from mdinterface.io.packmol import header, box_place, fix_place
-
-import MDAnalysis as mda
+from mdinterface.build.box import make_interface_slab, make_solvent_box
 
 import ase
-from ase import units
+import MDAnalysis as mda
+
 import numpy as np
 
-import subprocess
 import shutil
 
 import warnings
@@ -39,7 +37,6 @@ class SimulationBox():
         self._update_topology_indexes()
         
         return
-    
     
     def _setup_species(self, solvent, solute, interface, enderface):
         
@@ -72,7 +69,6 @@ class SimulationBox():
                 
         return
                     
-    
     def _update_topology_indexes(self):
         
         nitems = {
@@ -105,214 +101,6 @@ class SimulationBox():
         
         return
     
-
-    # populate a box with solvent and ions
-    @staticmethod
-    def populate_box(volume, instructions, input_file="input_packmol.in",
-                     output_file="system.pdb"):
-
-        if not instructions:
-            return None
-
-        # check volume
-        assert len(volume) == 3, "Check volume!"
-        
-        # generate box boundaries with 1 AA padding
-        box = np.concatenate(([1,1,1], np.asarray(volume)-1)).tolist()
-        
-        tmp_files = ["packmol.log", "input_packmol.in", "system.pdb"]
-        with open(input_file, "w") as fout:
-            
-            fout.write(header.format(output_file, np.random.randint(100000)))
-            
-            for cc, instruction in enumerate(instructions):
-                
-                # unpack instructions
-                mol = instruction[0]
-                rep = instruction[1]
-                typ = instruction[2]
-                
-                if isinstance(rep, int):
-                    if not rep:
-                        continue
-                
-                if typ == "box": # normal add
-                    fout.write(box_place.format(cc, rep, " ".join(map(str, box))))
-                
-                elif typ == "fixed": # coordinate -> fixed point
-                    
-                    fout.write(fix_place.format(cc, *rep))
-                    # make temp box to fill
-                    # tbox     = box.copy()
-                    # tbox[2]  = rep - 1
-                    # tbox[-1] = rep + 1
-                
-                    # fout.write(box_place.format(cc, 1, " ".join(map(str, tbox))))
-                
-                else:
-                    raise "Wrong instructions"
-                
-                # write tmp pdb file and store info
-                mol.atoms.write("mol_{}.pdb".format(cc))
-                tmp_files.append("mol_{}.pdb".format(cc))
-                
-        # run packmol
-        try:
-            subprocess.run(['packmol < {} > packmol.log'.format(input_file)],
-                           shell=True, check=True, text=True)
-
-        except:
-            print("WARNING: packmol might not have worked, check system.")
-        
-        try:
-            universe = mda.Universe(output_file)
-        except:
-            universe = None
-
-        # remove temp mol files and packmol files
-        subprocess.call(['rm'] + tmp_files)
-        
-        return universe
-
-    # generate a slab from a unit cell
-    @staticmethod
-    def make_interface_slab(interface_uc, xsize, ysize, layers=1):
-        
-        if layers == 0 or interface_uc is None:
-            return None
-        
-        xrep = int(np.round(xsize/interface_uc.atoms.get_cell()[0][0]))
-        yrep = int(np.round(ysize/interface_uc.atoms.get_cell()[1][1]))
-        
-        slab = interface_uc.copy()
-        
-        if not np.isclose(np.dot(slab.atoms.cell[0], [1,0,0]), slab.atoms.cell[0][0]):
-            xrep +=1
-            print("WARNING: check interface if pattern matches")
-        
-        if not np.isclose(np.dot(slab.atoms.cell[1], [0,1,0]), slab.atoms.cell[1][1]):
-            yrep +=1
-            print("WARNING: check interface if pattern matches")
-            
-        slab.repeat((xrep, yrep, 1), make_cubic=True)
-        
-        if layers > 1: # helps with indexing
-            slab.repeat([1,1,layers])
-        
-        slab.atoms.center()
-        # slab.atoms.rattle()
-        
-        return slab
-    
-    @staticmethod #THANKS CHATGPT
-    def populate_with_ions(ions, nions, volume, ion_pos=False):
-        volume = np.array(volume)
-        ion_coords = []
-        instructions = []
-    
-        to_center = False
-        
-        if ion_pos == "left":
-            volume[2] /= 2
-        elif ion_pos == "center":
-            if not isinstance(nions, int) and len(nions) != 1:
-                raise ValueError("Center positioning can only be used with a single ion")
-            to_center = True
-        elif ion_pos == "box":
-            for cc, ion in enumerate(ions):
-                nrep = nions if isinstance(nions, int) else nions[cc]
-                instructions.append((ion.to_universe(), nrep, "box"))
-            return instructions
-    
-        for cc, ion in enumerate(ions):
-            ion_radius = ion.estimate_sphere_radius()
-            nrep = nions[cc] if isinstance(nions, list) else nions
-    
-            for _ in range(nrep):
-                max_attempts = 100  # Limit placement attempts to avoid infinite loop
-                for _ in range(max_attempts):
-                    if to_center:
-                        new_coord = volume / 2
-                    else:
-                        new_coord = ion_radius + 1 + np.random.rand(3) * (volume - 2 * (ion_radius + 1))
-    
-                    if ion_coords:
-                        distances = np.linalg.norm(ion_coords - new_coord, axis=1)
-                        if np.all(distances > 3):
-                            break
-                    else:
-                        break
-                else:
-                    print(f"Warning: Failed to place ion {ion} after {max_attempts} attempts")
-    
-                ion_coords.append(new_coord)
-                instructions.append((ion.to_universe(), new_coord, "fixed"))
-    
-        return instructions
-
-    
-    def make_solvent_box(self, solvent, ions, volume, density, nions, concentration,
-                         conmodel, ion_pos):
-        
-        # make sure info is sound
-        assert not( nions is not None and concentration is not None),\
-            "'nions' and 'concentration' cannot both be not None"
-        
-        # convert concentration to number of ions
-        if concentration is not None:
-            nions = int(concentration*np.prod(volume)*units.mol/((units.m/10)**3))
-        
-        # define instructions for packmol
-        instructions = []
-        
-        # populate according to continuum model
-        if conmodel is not None:
-            z_positions = conmodel.discretize_profile(volume)
-            
-            for cc, ion in enumerate(ions):
-                for z_pos in z_positions[cc]:
-                    
-                    # radius = conmodel.species[cc].radius
-                    instructions.append([ion, z_pos, "fixed"])
-        
-        # populate according to fixed number of ions
-        elif nions is not None and ions is not None:
-            
-            ion_instr = self.populate_with_ions(ions, nions, volume, ion_pos=ion_pos)
-            instructions.extend(ion_instr)
-        
-        # add solvent
-        if solvent is not None:
-            solvent_volume   = 1e-24*np.prod(volume)
-            mass = solvent.atoms.masses.sum()
-    
-            # number of solvent molecules
-            nummols = int(units.mol*density*(1.0/mass)*solvent_volume)
-            
-            instructions.append([solvent, nummols, "box"])
-        
-        # generate universe file
-        universe = self.populate_box(volume, instructions)
-        
-        if universe is None:
-            return None
-        
-        # Create a dictionary for quick lookup of species by residue name
-        species_dict = {specie.residues.resnames[0]: specie for specie in self.species}
-        
-        alist = []
-        for res in universe.residues:
-            resname = res.resname
-            if resname in species_dict:
-                nmol = species_dict[resname].copy()
-                nmol.atoms.positions = res.atoms.positions
-                alist.append(nmol.atoms)
-        
-        solution = mda.Merge(*alist)
-        solution.dimensions = volume + [90,90,90]
-        
-        return solution
-    
     @staticmethod
     def _get_size_from_slab(slab):
         
@@ -320,9 +108,9 @@ class SimulationBox():
         ysize = [0,1,0]@slab.atoms.cell@[0,1,0]
         slab_depth = [0,0,1]@slab.atoms.cell@[0,0,1]
         
-        
         return xsize, ysize, slab_depth
     
+    # main driver to generate a simulation box given instructions
     def make_simulation_box(self, solvent_vol, solvent_rho, nions=None,
                             concentration=None, conmodel=None, layers=1,
                             padding=1.5, to_ase=False, mirror=False,
@@ -334,8 +122,8 @@ class SimulationBox():
         xsize, ysize, zsize = solvent_vol
         
         # make slab
-        islab = self.make_interface_slab(self._interface, xsize, ysize, layers=layers)
-        eslab = self.make_interface_slab(self._enderface, xsize, ysize, layers=layers)
+        islab = make_interface_slab(self._interface, xsize, ysize, layers=layers)
+        eslab = make_interface_slab(self._enderface, xsize, ysize, layers=layers)
         
         xi, yi, sdi, xe, ye, sde = 0, 0, 0, 0, 0, 0
         # update the volume with multiples of UC
@@ -358,9 +146,9 @@ class SimulationBox():
             ysize = np.maximum(yi, ye)
         
         # make solvent box
-        solvent = self.make_solvent_box(self.solvent, self._solute,
-                                        [xsize, ysize, zsize], solvent_rho,
-                                        nions, concentration, conmodel, ion_pos)
+        solvent = make_solvent_box(self.species, self.solvent, self._solute,
+                                   [xsize, ysize, zsize], solvent_rho,
+                                   nions, concentration, conmodel, ion_pos)
         
         # now build system
         system = None
@@ -393,7 +181,6 @@ class SimulationBox():
                     system = mda.Merge(system.atoms, eslab.atoms)
                     zdim   += sde + padding
                 
-        
         system.dimensions = [xsize, ysize, zdim] + [90, 90, 90] #TODO not like this
         
         if vacuum is not None:
@@ -593,7 +380,6 @@ class SimulationBox():
     
     @property
     def _species(self):
-        
         return np.concatenate((as_list(self._solvent), as_list(self._solute),
                                       as_list(self._interface), as_list(self._enderface)))
     

@@ -9,15 +9,15 @@ Created on Fri Apr 19 13:58:43 2024
 import ase
 import ase.build
 import ase.visualize
+from ase.data import vdw_radii
 from ase.data.colors import jmol_colors
 import MDAnalysis as mda
 
-from mdinterface.utils.auxiliary import as_list, find_smallest_missing, atoms_to_indexes
-    
-from mdinterface.core.topology import Atom
-import mdinterface.utils.auxiliary as aux
-from mdinterface.io.read import read_lammps_data_file
 import mdinterface.utils.map as pmap
+import mdinterface.utils.auxiliary as aux
+from mdinterface.core.topology import Atom
+from mdinterface.io.read import read_lammps_data_file
+from mdinterface.utils.auxiliary import as_list, find_smallest_missing
 
 import copy
 import numpy as np
@@ -387,30 +387,25 @@ class Specie(object):
         
         return atom_types
     
-    def estimate_sphere_radius(self):
-        """
-        Estimate the radius of the sphere containing the given points.
-
-        Parameters:
-        points (numpy.ndarray): A 2D array of shape (n, 3) where n is the number of points.
-
-        Returns:
-        float: The estimated radius of the sphere.
-        """
+    # method to estimate the volume of the specie
+    def estimate_specie_volume(self, probe_radius=0):
         
-        points = self.atoms.get_positions()
-        
-        # Calculate the centroid of the points
-        centroid = np.mean(points, axis=0)
+        try:
+            from libarvo import molecular_vs
+        except:
+            print("libarvo NOT found. Install it.")
 
-        # Calculate the distances from the centroid to each point
-        distances = np.linalg.norm(points - centroid, axis=1)
+        centers = self.atoms.get_positions()
+        radii = [vdw_radii[ii] for ii in self.atoms.get_atomic_numbers()]
 
-        # The radius of the sphere is the maximum distance from the centroid to any point
-        radius = np.max(distances)
+        volume, surface = molecular_vs(centers, radii, probe_radius)
 
-        return radius
+        return volume
     
+    # method to estimate the radius of the specie if it were a sphere
+    def estimate_specie_radius(self, probe_radius=0):
+        volume = self.estimate_specie_volume(probe_radius=probe_radius)
+        return (3 * volume / (4 * np.pi)) ** (1/3)
     
     def view(self):
         ase.visualize.view(self.atoms)
