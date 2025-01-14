@@ -14,7 +14,7 @@ nloop     100
 seed      {}
 
 filetype  pdb
-# movebadrandom
+movebadrandom
         """
 
 box_place = """
