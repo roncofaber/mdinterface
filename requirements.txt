@@ -2,3 +2,4 @@ mdanalysis
 ase
 numpy
 networkx
+libarvo
