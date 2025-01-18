@@ -1,15 +1,17 @@
 # mdinterface: Build Interface Systems for Molecular Dynamics Simulations
 
-`mdinterface` is a Python package designed to build systems for Molecular Dynamics (MD) simulations. Initially developed to construct electrolyte/electrode interfaces, it is also well-suited for generating MD boxes of liquids, electrolyte systems, and polymer networks.
+`mdinterface` is a Python package designed to build systems for Molecular Dynamics (MD) simulations. Initially developed to construct electrolyte/electrode solid-liquid interfaces, it is also well-suited for generating MD boxes of liquids, electrolyte systems, and polymer networks.
 
 ## Features
 
+Using `mdinterface` you can:
+
 - Create and configure molecular systems with solvents, solutes, and interfaces.
-- Generate simulation boxes for MD simulations.
-- Populate boxes with ions and solvents using PACKMOL.
+- Populate your system with ions and solvents using PACKMOL.
+- Provide the starting concentration profile of the species to get the MD where you want it to be, but faster.
 - Automatically write LAMMPS data files and coefficients.
-- Database of common liquids/gases with pre-defined classical force fields parameters.
-- Generate polymer chains from given monomers.
+- Import common molecules/metals/polymers with pre-defined classical force fields parameters in the database.
+- Generate polymer chains of any length from a starting monomer.
 
 ## Requirements
 

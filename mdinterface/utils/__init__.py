@@ -5,5 +5,4 @@ utils: Utility functions and helpers.
 """
 
 from .auxiliary import *
-from .database import *
 from .map import *
