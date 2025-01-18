@@ -3,16 +3,13 @@
 """
 Example script demonstrating how to use the mdinterface package to build a simulation box.
 
-Author: Roncofaber
+Author: roncofaber
 """
 
 from mdinterface import SimulationBox
 from mdinterface.core.specie import Specie
 from mdinterface.core.topology import Bond, Angle
-from mdinterface.utils.database import Water
-
-import ase
-from ase.build import fcc111
+from mdinterface.database import Water, Metal111
 
 #%% Set up simulation box
 
@@ -33,8 +30,7 @@ Na = Specie("Na", charges=+0.8, lj={"Na": [0.00280, 3.3304]})
 Cl = Specie("Cl", charges=-0.8, lj={"Cl": [0.1178, 4.41720]})
 
 # Interface setup
-gold      = fcc111('Au', size=(1,2,3), orthogonal=True, periodic=True)
-interface = Specie(gold, charges=0.0, lj={"Au": [5.29, 2.62904212]})
+interface = Metal111("Au")
 
 #%% Create a SimulationBox instance
 
