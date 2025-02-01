@@ -19,7 +19,9 @@ from mdinterface.core.topology import Atom
 from mdinterface.io.read import read_lammps_data_file
 from mdinterface.utils.auxiliary import as_list, find_smallest_missing
 
+import os
 import copy
+import random
 import numpy as np
 import networkx as nx
 
@@ -31,14 +33,16 @@ class Specie(object):
     
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
-                 name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0):
+                 name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
+                 pbc=False):
         
         # if file provided, read it
         if lammps_data is not None:
             atoms, atom_types, bonds, angles, dihedrals, impropers = read_lammps_data_file(lammps_data)
         else:
             # read/update atoms atoms
-            atoms, atom_types = self._read_atoms(atoms, charges, chg_scaling=chg_scaling)
+            atoms, atom_types = self._read_atoms(atoms, charges,
+                                                 chg_scaling=chg_scaling, pbc=pbc)
         
         # assign name
         if name is None:
@@ -65,7 +69,7 @@ class Specie(object):
     
     # read atoms to return ase.Atoms
     @staticmethod
-    def _read_atoms(atoms, charges, chg_scaling=1.0):
+    def _read_atoms(atoms, charges, chg_scaling=1.0, pbc=False):
         
         # initialize atoms obj
         if isinstance(atoms, str):
@@ -93,7 +97,7 @@ class Specie(object):
             stype = atoms.arrays["stype"]
         else:
             stype = None
-
+            
         return atoms, stype
     
     def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers,
@@ -244,7 +248,6 @@ class Specie(object):
         
         return
 
-
     # covnert to mda.Universe
     def to_universe(self, charges=True, layered=False):
         
@@ -257,6 +260,9 @@ class Specie(object):
         # add some stuff
         uni.add_TopologyAttr("masses", self.atoms.get_masses())
         uni.add_TopologyAttr("resnames", [self.resname])
+        # add atom symbols
+        atom_symbols = self.atoms.get_chemical_symbols()  # Assuming this method exists
+        uni.add_TopologyAttr("names", atom_symbols)
         
         # generate type
         types, indexes = self.get_atom_types(return_index=True)
@@ -431,7 +437,6 @@ class Specie(object):
     
     def suggest_missing_interactions(self, stype="all"):
         
-    
         # Check for missing interactions
         missing_bonds = pmap.find_missing_bonds(self)
         missing_angles = pmap.find_missing_angles(self)
@@ -496,7 +501,56 @@ class Specie(object):
                 node_size=1000, edge_color='black', linewidths=2, font_size=15,
                 edgecolors="black", ax=ax, width=2)
         
-        
         plt.show()
+        
+        return
+
+    # charge_models = [ "eem", "mmff94", "gasteiger", "qeq", "qtpie", 
+    #                   "eem2015ha", "eem2015hm", "eem2015hn", 
+    #                   "eem2015ba", "eem2015bm", "eem2015bn" ]
+    def calculate_charges(self, charge_type="eem", assign=False):
+        
+        try:
+            import openbabel as ob
+        except:
+            print("openbabel NOT found. Install it.")
+        
+        # Create an OBConversion object
+        obConversion = ob.OBConversion()
+        obConversion.SetInFormat("xyz")
+
+        # Create an OBMol object
+        mol = ob.OBMol()
+
+        # Write and read the XYZ file
+        # Generate a random 8-digit integer
+        random_number = random.randint(10000000, 99999999)
+        
+        # Convert to obabel format
+        filename = f"tmp_{random_number}.xyz"
+        ase.io.write(filename, self.atoms)
+        obConversion.ReadFile(mol, filename)
+        os.remove(filename)
+
+        ob_charge_model = ob.OBChargeModel.FindType(charge_type)
+        ob_charge_model.ComputeCharges(mol)
+        charges = ob_charge_model.GetPartialCharges()
+        
+        if assign:
+            self.atoms.set_initial_charges(charges)
+        
+        return np.array(charges)
+
+    def update_positions(self, positions=None, cellpar=None, atoms=None):
+        
+        if atoms is not None:
+            positions = atoms.get_positions()
+            cellpar   = atoms.get_cell()
+        
+        if positions is not None:
+            self.atoms.set_positions(positions)
+        
+        if cellpar:
+            self.atoms.set_cell(cellpar)
         
         return

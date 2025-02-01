@@ -13,8 +13,39 @@ import networkx as nx
 
 import ase
 from ase import neighborlist
+from ase.data import atomic_masses, chemical_symbols
 #%%
 
+def mass2symbol(mass, possible_symbols, tolerance=0.1):
+    """
+    Guess the atomic symbol from the given mass, restricted to a set of possible symbols.
+
+    Parameters:
+    mass (float): The atomic mass to guess the symbol for.
+    possible_symbols (list): A list of possible atomic symbols to consider.
+    tolerance (float): The tolerance within which to consider a match (default is 0.1).
+
+    Returns:
+    str: The guessed atomic symbol, or None if no match is found within the tolerance.
+    """
+    closest_mass = None
+    closest_symbol = None
+    min_diff = float('inf')
+
+    for symbol in possible_symbols:
+        index = chemical_symbols.index(symbol)
+        atomic_mass = atomic_masses[index]
+        diff = abs(mass - atomic_mass)
+        if diff < min_diff:
+            min_diff = diff
+            closest_mass = atomic_mass
+            closest_symbol = symbol
+
+    if min_diff <= tolerance:
+        return closest_symbol
+    else:
+        raise "Could NOT guess atom type."
+    
 def label_to_element(atostr, atomss):
     """
     Attempts to determine the chemical element symbol corresponding to a given 

@@ -25,10 +25,10 @@ warnings.filterwarnings('ignore')
 class SimulationBox():
     
     def __init__(self, solvent=None, solute=None, interface=None,
-                 enderface=None):
+                 enderface=None, miderface=None):
         
         # start species
-        self._setup_species(solvent, solute, interface, enderface)
+        self._setup_species(solvent, solute, interface, enderface, miderface)
         
         # check interface indexing
         self._make_sandwich()
@@ -38,12 +38,13 @@ class SimulationBox():
         
         return
     
-    def _setup_species(self, solvent, solute, interface, enderface):
+    def _setup_species(self, solvent, solute, interface, enderface, miderface):
         
         self._solvent   = None
         self._solute    = None
         self._interface = None
         self._enderface = None
+        self._miderface = None
         
         # assign variables
         if solvent is not None:
@@ -54,6 +55,8 @@ class SimulationBox():
             self._interface = interface.copy()
         if enderface is not None:
             self._enderface = enderface.copy() # use this to make a good sandwich!
+        if miderface is not None:
+            self._miderface = miderface.copy() # add some yummy stuffing!
         
         return
     
@@ -66,6 +69,10 @@ class SimulationBox():
         if self._enderface is not None:
             for atom in self._enderface._stype:
                 atom.set_label(atom.label + "_e")
+                
+        if self._miderface is not None:
+            for atom in self._miderface._stype:
+                atom.set_label(atom.label + "_m")   
                 
         return
                     
@@ -121,11 +128,22 @@ class SimulationBox():
         # solvent volume
         xsize, ysize, zsize = solvent_vol
         
-        # make slab
-        islab = make_interface_slab(self._interface, xsize, ysize, layers=layers)
-        eslab = make_interface_slab(self._enderface, xsize, ysize, layers=layers)
+        # Determine the number of layers for each slab
+        if isinstance(layers, int):
+            layers_dict = {'interface': layers, 'enderface': layers, 'miderface': layers}
+        elif isinstance(layers, dict):
+            layers_dict = {'interface': layers.get('interface', 0),
+                           'enderface': layers.get('enderface', 0),
+                           'miderface': layers.get('miderface', 0)}
+        else:
+            raise ValueError("Layers should be either an integer or a dictionary.")
         
-        xi, yi, sdi, xe, ye, sde = 0, 0, 0, 0, 0, 0
+        # make slabs
+        islab = make_interface_slab(self._interface, xsize, ysize, layers=layers_dict['interface'])
+        eslab = make_interface_slab(self._enderface, xsize, ysize, layers=layers_dict['enderface'])
+        mslab = make_interface_slab(self._miderface, xsize, ysize, layers=layers_dict['miderface'])
+        
+        xi, yi, sdi, xe, ye, sde, xm, ym, sdm = 0, 0, 0, 0, 0, 0, 0, 0, 0
         # update the volume with multiples of UC
         if islab is not None:
             xi, yi, sdi = self._get_size_from_slab(islab)
@@ -133,61 +151,76 @@ class SimulationBox():
         if eslab is not None:
             xe, ye, sde = self._get_size_from_slab(eslab)
             eslab = eslab.to_universe(layered=layered)
+        if mslab is not None:
+            xm, ym, sdm = self._get_size_from_slab(mslab)
+            mslab = mslab.to_universe(layered=layered)
             
         if eslab is not None and islab is not None: # check they have same size
             assert xi == xe
             assert yi == ye
         else:
-            # slab_depth = 0
             padding    = 0
         
-        if eslab is not None or islab is not None:
-            xsize = np.maximum(xi, xe)
-            ysize = np.maximum(yi, ye)
+        if eslab is not None or islab is not None or mslab is not None:
+            xsize = np.max([xi, xe, xm])
+            ysize = np.max([yi, ye, ym])
         
         # make solvent box
         solvent = make_solvent_box(self.species, self.solvent, self._solute,
                                    [xsize, ysize, zsize], solvent_rho,
                                    nions, concentration, conmodel, ion_pos)
         
-        # now build system
+        def add_component(system, component, zdim, padding=0):
+            
+            # nothing to add here
+            if component is None:
+                return system, zdim
+            
+            # ohh, let's lego the shit out of this
+            component = component.copy()
+            
+            # component: "look at me, I am the system now."
+            if system is None:
+                system = component
+                zdim += component.dimensions[2]
+            
+            # make space and add it to the pile
+            else:
+                component.atoms.translate([0, 0, zdim + padding])
+                system = mda.Merge(system.atoms, component.atoms)
+                zdim += component.dimensions[2] + padding
+            return system, zdim
+
+        # now build system - starting from nothing
         system = None
         zdim   = 0
         
-        if islab is not None:
-            system = islab
-            zdim   += sdi
+        # add the interface
+        system, zdim = add_component(system, islab, zdim, padding=padding)
         
-        if solvent is not None:
-            if system is None:
-                system = solvent
-                zdim   += zsize
-            else:
-                solvent.atoms.translate([0, 0, sdi + padding])
-                system = mda.Merge(system.atoms, solvent.atoms)
-                zdim   += zsize + padding
+        # add the 1st solvent
+        system, zdim = add_component(system, solvent, zdim, padding=padding)
         
-        if eslab is not None:
-            if system is None:
-                system = eslab
-                zdim   += sde
-            else:
-                if solvent is None:
-                    eslab.atoms.translate([0, 0, zdim])
-                    system = mda.Merge(system.atoms, eslab.atoms)
-                    zdim   += sde
-                else:
-                    eslab.atoms.translate([0, 0, zdim + padding])
-                    system = mda.Merge(system.atoms, eslab.atoms)
-                    zdim   += sde + padding
+        # add the midterface
+        system, zdim = add_component(system, mslab, zdim, padding=padding)
+        
+        # add the second solvent - only if midterface is there tho...
+        if mslab is not None:
+            system, zdim = add_component(system, solvent, zdim, padding=padding)
+        
+        # let's close the sandwich, if needed.
+        system, zdim = add_component(system, eslab, zdim, padding=padding)
                 
+        # update my system's dimensions        
         system.dimensions = [xsize, ysize, zdim] + [90, 90, 90] #TODO not like this
         
+        # add vacuum
         if vacuum is not None:
             system.dimensions[2] += vacuum
             system.atoms.translate([0,0,+vacuum/2])
             zdim += vacuum
         
+        # move of half unit along z
         if center_electrode:
             system.atoms.translate([0,0,zdim/2])
             _ = system.atoms.wrap()
@@ -197,12 +230,13 @@ class SimulationBox():
             system.dimensions = hijack.get_cell_lengths_and_angles()
             system.atoms.positions = hijack.get_positions()
         
+        # write data file
         if write_data:
             self.write_lammps_file(system, filename=filename)
         
+        # convert to ase, or not
         if to_ase:
             return self.to_ase(system)
-        
         return system
     
     def write_lammps_file(self, system,  write_coeff=True, filename="data.lammps"):
@@ -372,16 +406,24 @@ class SimulationBox():
         return self._enderface.to_universe()
     
     @property
+    def miderface(self):
+        if self._miderface is None:
+            return None
+        return self._miderface.to_universe()
+    
+    @property
     def species(self):
         # merge all species in system
         all_species = np.concatenate((as_list(self.solvent), as_list(self.solute),
-                                      as_list(self.interface), as_list(self.enderface)))
+                                      as_list(self.interface), as_list(self.enderface),
+                                      as_list(self.miderface)))
         return [ii for ii in all_species if ii is not None]
     
     @property
     def _species(self):
         return np.concatenate((as_list(self._solvent), as_list(self._solute),
-                                      as_list(self._interface), as_list(self._enderface)))
+                                      as_list(self._interface), as_list(self._enderface),
+                                      as_list(self._miderface)))
     
     def get_sorted_attribute(self, attribute):
         
