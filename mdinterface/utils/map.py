@@ -6,10 +6,12 @@ Created on Mon Oct 28 11:30:04 2024
 @author: roncofaber
 """
 
+# not repo
 import numpy as np
-import mdinterface.utils.auxiliary as aux
-from mdinterface.core.topology import Bond, Angle, Dihedral, Improper
 
+# repo
+from mdinterface.core.topology import Bond, Angle, Dihedral, Improper
+from mdinterface.utils.graphs import find_unique_paths_of_length
 #%%
 
 def map_atoms(atoms):
@@ -124,7 +126,7 @@ def map_impropers(impropers):
 
 def find_missing_bonds(nas):
     tmp_bonds, _ = nas.bonds
-    all_bonds = aux.find_unique_paths_of_length(nas.graph, 1)
+    all_bonds = find_unique_paths_of_length(nas.graph, 1)
 
     # Convert tmp_bonds to a set of tuples for efficient membership checking
     tmp_bonds_set = set(tuple(bond) for bond in tmp_bonds)
@@ -141,7 +143,7 @@ def find_missing_bonds(nas):
 
 def find_missing_angles(nas):
     tmp_angles, _ = nas.angles
-    all_angles = aux.find_unique_paths_of_length(nas.graph, 2)
+    all_angles = find_unique_paths_of_length(nas.graph, 2)
 
     # Convert tmp_angles to a set of tuples for efficient membership checking
     tmp_angles_set = set(tuple(angle) for angle in tmp_angles)
@@ -157,7 +159,7 @@ def find_missing_angles(nas):
 
 def find_missing_dihedrals(nas):
     tmp_dihedrals, _ = nas.dihedrals
-    all_dihedrals = aux.find_unique_paths_of_length(nas.graph, 3)
+    all_dihedrals = find_unique_paths_of_length(nas.graph, 3)
 
     # Convert tmp_dihedrals to a set of tuples for efficient membership checking
     tmp_dihedrals_set = set(tuple(dihedral) for dihedral in tmp_dihedrals)
@@ -174,7 +176,7 @@ def find_missing_dihedrals(nas):
 
 def find_missing_impropers(nas):
     tmp_impropers, _ = nas.impropers
-    all_impropers = aux.find_unique_paths_of_length(nas.graph, 3)  # Assuming path length 3 for impropers
+    all_impropers = find_unique_paths_of_length(nas.graph, 3)  # Assuming path length 3 for impropers
 
     # Convert tmp_impropers to a set of tuples for efficient membership checking
     tmp_impropers_set = set(tuple(improper) for improper in tmp_impropers)
@@ -265,5 +267,4 @@ def generate_missing_interactions(nas, interaction_type):
             new_interactions.append(ninteraction)
             found_interaction = True
             
-
     return new_interactions

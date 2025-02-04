@@ -101,7 +101,7 @@ class Bond(Topology):
         return self._a1, self._a2
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({'-'.join(self.symbols)},kr={self.kr}, r0={self.r0})"
+        return f"{self.__class__.__name__}({'-'.join(self.symbols)}, kr={self.kr}, r0={self.r0})"
     
     @property
     def elements(self):

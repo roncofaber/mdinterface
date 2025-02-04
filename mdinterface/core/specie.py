@@ -14,14 +14,14 @@ from ase.data.colors import jmol_colors
 import MDAnalysis as mda
 
 import mdinterface.utils.map as pmap
-import mdinterface.utils.auxiliary as aux
 from mdinterface.core.topology import Atom
 from mdinterface.io.read import read_lammps_data_file
 from mdinterface.utils.auxiliary import as_list, find_smallest_missing
+from mdinterface.externals import run_ligpargen, run_OBChargeModel
+from mdinterface.utils.graphs import molecule_to_graph, find_unique_paths_of_length,\
+    find_improper_idxs,find_relevant_distances, find_atom_types
 
-import os
 import copy
-import random
 import numpy as np
 import networkx as nx
 
@@ -34,7 +34,7 @@ class Specie(object):
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
-                 pbc=False):
+                 pbc=False, ligpargen=False, tot_charge=0):
         
         # if file provided, read it
         if lammps_data is not None:
@@ -43,6 +43,11 @@ class Specie(object):
             # read/update atoms atoms
             atoms, atom_types = self._read_atoms(atoms, charges,
                                                  chg_scaling=chg_scaling, pbc=pbc)
+        
+        # run ligpargen to calculate parameters
+        if ligpargen:
+            atoms, atom_types, bonds, angles, dihedrals, impropers = run_ligpargen(
+                atoms, charge=tot_charge)
         
         # assign name
         if name is None:
@@ -166,7 +171,7 @@ class Specie(object):
     def _atom_types_from_lj(self, lj):
         
         # use function to retrieve IDs
-        atom_type_ids, types_map = aux.find_atom_types(self.atoms, max_depth=1)
+        atom_type_ids, types_map = find_atom_types(self.atoms, max_depth=1)
         
         atom_types = []
         for atom_id in atom_type_ids:
@@ -192,8 +197,7 @@ class Specie(object):
     def set_atoms(self, atoms, cutoff=1.0):
         
         self._atoms = atoms
-        
-        self._graph = aux.molecule_to_graph(atoms, cutoff_scale=cutoff)
+        self._graph = molecule_to_graph(atoms, cutoff_scale=cutoff)
         
         return
     
@@ -214,7 +218,6 @@ class Specie(object):
         
         return
 
-    
     def add_topology(self, attribute):
         # Determine the type of the attribute
         attribute_type = attribute.__class__.__name__
@@ -316,20 +319,12 @@ class Specie(object):
         
         return
     
-    @property
-    def atoms(self):
-        return self._atoms
-    
-    @property
-    def graph(self):
-        return self._graph
-    
     def _find_interactions(self, path_length, tag_map, impropers=False):
         
         if not impropers:
-            paths = aux.find_unique_paths_of_length(self.graph, path_length)
+            paths = find_unique_paths_of_length(self.graph, path_length)
         else:
-            paths = aux.find_improper_idxs(self.graph)
+            paths = find_improper_idxs(self.graph)
             
         interaction_list = []
         interaction_type = []
@@ -355,6 +350,14 @@ class Specie(object):
         interaction_type = np.array(interaction_type, dtype=int)
         
         return [interaction_list.tolist(), interaction_type.tolist()]
+    
+    @property
+    def atoms(self):
+        return self._atoms
+    
+    @property
+    def graph(self):
+        return self._graph
     
     @property
     def bonds(self):
@@ -452,7 +455,6 @@ class Specie(object):
         
         if stype == "all":
             return suggestions
-        
         return suggestions[stype]
 
     def __repr__(self):
@@ -460,37 +462,9 @@ class Specie(object):
 
     def find_relevant_distances(self, Nmax, Nmin=0, centers=None, Ninv=0):
         
-        # get list of relevant nodes
-        if centers is None:
-            relevant_nodes = self.graph.nodes()
-        else:
-            relevant_nodes = aux.as_list(centers)
-        
-        # Set to store unique pairs
-        unique_pairs = set()
-
-        # Iterate over all nodes in the graph
-        for node1 in relevant_nodes:
-            # Get the shortest path lengths from node node to all other reachable nodes
-            shortest_paths = nx.single_source_shortest_path_length(self.graph, node1)
-            
-            longest_path = max([dist for _, dist in shortest_paths.items()])
-            
-            # Collect pairs where the distance is within N but above Nmin
-            for node2, distance in shortest_paths.items():
-                if distance <= Nmax and distance > Nmin:
-                    # Use tuple (min(node, n), max(node, n)) to avoid duplicates
-                    pair = (min(node1, node2), max(node1, node2))
-                    unique_pairs.add(pair)
-                elif Ninv > longest_path - distance:
-                    pair = (min(node1, node2), max(node1, node2))
-                    unique_pairs.add(pair)
-
-        # Convert set to list
-        unique_pairs_list = list(unique_pairs)
-        unique_pairs_list.sort()
-        
-        return np.array(unique_pairs_list, dtype=int)
+        unique_pairs_list = find_relevant_distances(self.graph, Nmax, Nmin=Nmin,
+                                                    centers=centers, Ninv=Ninv)
+        return unique_pairs_list
 
     def plot_graph(self, **kwargs):
         
@@ -505,42 +479,6 @@ class Specie(object):
         
         return
 
-    # charge_models = [ "eem", "mmff94", "gasteiger", "qeq", "qtpie", 
-    #                   "eem2015ha", "eem2015hm", "eem2015hn", 
-    #                   "eem2015ba", "eem2015bm", "eem2015bn" ]
-    def calculate_charges(self, charge_type="eem", assign=False):
-        
-        try:
-            import openbabel as ob
-        except:
-            print("openbabel NOT found. Install it.")
-        
-        # Create an OBConversion object
-        obConversion = ob.OBConversion()
-        obConversion.SetInFormat("xyz")
-
-        # Create an OBMol object
-        mol = ob.OBMol()
-
-        # Write and read the XYZ file
-        # Generate a random 8-digit integer
-        random_number = random.randint(10000000, 99999999)
-        
-        # Convert to obabel format
-        filename = f"tmp_{random_number}.xyz"
-        ase.io.write(filename, self.atoms)
-        obConversion.ReadFile(mol, filename)
-        os.remove(filename)
-
-        ob_charge_model = ob.OBChargeModel.FindType(charge_type)
-        ob_charge_model.ComputeCharges(mol)
-        charges = ob_charge_model.GetPartialCharges()
-        
-        if assign:
-            self.atoms.set_initial_charges(charges)
-        
-        return np.array(charges)
-
     def update_positions(self, positions=None, cellpar=None, atoms=None):
         
         if atoms is not None:
@@ -554,3 +492,30 @@ class Specie(object):
             self.atoms.set_cell(cellpar)
         
         return
+    
+    def estimate_charges(self, method="obabel", charge=None, assign=False):
+        
+        if charge is None:
+            charge = 0
+            print("YOU WANT TO CHECK CHARGE BUD.")
+        
+        if method == "obabel":
+            charges = run_OBChargeModel(self.atoms)
+        elif method == "ligpargen":
+            system, _, _, _, _, _ = run_ligpargen(self.atoms, charge=charge)
+            charges = system.get_initial_charges()
+            
+        if assign:
+            self.atoms.set_charges(charges)
+        
+        return charges
+
+    def estimate_OPLSAA_parameters(self, charge=None):
+        
+        if charge is None:
+            charge = 0
+        
+        system, atoms, bonds, angles, dihedrals, impropers = run_ligpargen(
+            self.atoms, charge=charge)
+        
+        return system, atoms, bonds, angles, dihedrals, impropers

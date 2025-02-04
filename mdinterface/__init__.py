@@ -7,9 +7,15 @@ electrolyte systems, and polymer networks.
 
 """
 
-__version__ = '1.1.0'
-__date__ = '14 Jan. 2025'
+__version__ = '1.1.0a'
+__date__ = '02 Feb. 2025'
 __author__ = 'Fabrice Roncoroni'
-__all__ = ['SimulationBox']
+__all__ = ['SimulationBox', "Specie", "Polymer"]
 
 from .simulationbox import SimulationBox
+from .core.specie import Specie
+from .core.polymer import Polymer
+
+# load configuration file
+from .config import load_config
+load_config()

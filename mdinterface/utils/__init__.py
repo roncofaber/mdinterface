@@ -6,3 +6,4 @@ utils: Utility functions and helpers.
 
 from .auxiliary import *
 from .map import *
+from .graphs import *

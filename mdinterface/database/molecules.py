@@ -6,12 +6,9 @@ Created on Wed Jan 15 11:40:58 2025
 @author: roncofaber
 """
 
-import numpy as np
-
 from mdinterface.core.specie import Specie
 from mdinterface.core.topology import Atom, Bond, Angle, Dihedral, Improper
 
-import ase
 #%%
 # solvent https://docs.lammps.org/Howto_tip3p.html (Ewald model)
 class Water(Specie):
