@@ -118,7 +118,7 @@ class SimulationBox():
         return xsize, ysize, slab_depth
     
     # main driver to generate a simulation box given instructions
-    def make_simulation_box(self, solvent_vol, solvent_rho, nions=None,
+    def make_simulation_box(self, solvent_vol, solvent_rho=None, nions=None,
                             concentration=None, conmodel=None, layers=1,
                             padding=1.5, to_ase=False, mirror=False,
                             write_data=False, filename="data.lammps",

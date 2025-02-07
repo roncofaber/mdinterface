@@ -34,7 +34,7 @@ class Specie(object):
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
-                 pbc=False, ligpargen=False, tot_charge=0):
+                 pbc=False, ligpargen=False, tot_charge=0, prune=False):
         
         # if file provided, read it
         if lammps_data is not None:
@@ -65,7 +65,7 @@ class Specie(object):
             
         # set up internal topology attributes
         self._setup_topology(atom_types, bonds, angles, dihedrals, impropers,
-                             fix_missing=fix_missing)
+                             fix_missing=fix_missing, prune=prune)
         
         # initialize topology info
         self._update_topology()
@@ -106,7 +106,7 @@ class Specie(object):
         return atoms, stype
     
     def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers,
-                        fix_missing=False):
+                        fix_missing=False, prune=False):
         
         # map list of inputs
         atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
@@ -196,7 +196,7 @@ class Specie(object):
     
     def set_atoms(self, atoms, cutoff=1.0):
         
-        self._atoms = atoms
+        self._atoms = atoms.copy()
         self._graph = molecule_to_graph(atoms, cutoff_scale=cutoff)
         
         return
@@ -385,6 +385,10 @@ class Specie(object):
             
     def copy(self):
         return copy.deepcopy(self)
+    
+    @property
+    def charges(self):
+        return self.atoms.get_initial_charges()
     
     def get_atom_types(self, return_index=False):
         

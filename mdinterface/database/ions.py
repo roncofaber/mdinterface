@@ -164,3 +164,25 @@ class Perchlorate(Specie):
 
         super().__init__(atoms=pclo, lj=lj, bonds=[b1, b2], angles=a1, cutoff=1.5, **kwargs)
         return
+
+
+# hydronium https://pubs.acs.org/doi/pdf/10.1021/jp036842c
+class Hydronium(Specie):
+    def __init__(self, **kwargs):
+        
+        # make ion by cheating and making NH3 first
+        hyd = ase.build.molecule("NH3")
+        hyd.set_chemical_symbols(["O", "H", "H", "H"])
+
+        # factor 1/2 included in LAMMPS harmonic!
+        b1 = Bond("O", "H", kr=1085.9565/2, r0=0.9820)
+        a1 = Angle("H", "O", "H", kr=79.0263/2, theta0=113.4)
+        
+        # changed to -0.3819 -> -0.3818 to give +1 
+        charges = [-0.3818, 0.4606, 0.4606, 0.4606]
+        
+        # divide by (2**(1/6)) to go from R0 to sig
+        lj = {"O": [0.1848, 3.1655], "H": [0.010, 0.8018]}
+
+        super().__init__(hyd, charges=charges, bonds=b1, angles=a1, lj=lj, **kwargs)
+        return

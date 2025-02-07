@@ -33,10 +33,9 @@ def build_polymer(monomer, substitute, nrep, start_end_idxs=None, target_distanc
     # if start end is provided, do substitution here
     if start_end_idxs is not None:
         assert len(start_end_idxs) == 2
-        
         symbols = monomer.get_chemical_symbols()
         symbols[start_end_idxs[0]] = "X"
-        symbols[start_end_idxs[0]] = "X"
+        symbols[start_end_idxs[1]] = "X"
         monomer.set_chemical_symbols(symbols)
     
     # Check if nrep is at least 1
@@ -91,5 +90,6 @@ def build_polymer(monomer, substitute, nrep, start_end_idxs=None, target_distanc
     symbols = np.array(sout.get_chemical_symbols())
     symbols[symbols == "X"] = substitute
     sout.set_chemical_symbols(symbols)
+    sout.center()
 
     return sout

@@ -49,7 +49,7 @@ class Topology(object):
 class Atom(Topology):
     def __init__(self, symbol, label=None, eps=None, sig=None):
         
-        super(Atom, self).__init__()
+        super().__init__()
         
         self.symbol  = symbol
         
@@ -89,7 +89,9 @@ class Atom(Topology):
 
 class Bond(Topology):
     def __init__(self, a1, a2, kr=None, r0=None):
-        super(Bond, self).__init__()
+        
+        super().__init__()
+        
         self._a1 = a1
         self._a2 = a2
         self.kr = kr
@@ -110,11 +112,20 @@ class Bond(Topology):
     def __eq__(self, other):
         return (self.kr == other.kr and self.r0 == other.r0 and
                 (self.elements == other.elements or self.elements == other.elements[::-1]))
+    
+    @property
+    def values(self):
+        return self.kr, self.r0
+    
+    def __bool__(self):
+        return any([bool(val) for val in self.values])
 
 
 class Angle(Topology):
     def __init__(self, a1, a2, a3, kr=None, theta0=None):
-        super(Angle, self).__init__()
+        
+        super().__init__()
+        
         self._a1 = a1
         self._a2 = a2
         self._a3 = a3
@@ -130,6 +141,10 @@ class Angle(Topology):
     def elements(self):
         return self._a1.split('_')[0], self._a2.split('_')[0], self._a3.split('_')[0]
     
+    @property
+    def values(self):
+        return self.kr, self.theta0
+    
     def __repr__(self):
         return f"{self.__class__.__name__}({'-'.join(self.symbols)}, kr={self.kr}, theta0={self.theta0})"
 
@@ -137,10 +152,14 @@ class Angle(Topology):
         return (self.kr == other.kr and self.theta0 == other.theta0 and
                 (self.elements == other.elements or self.elements == other.elements[::-1]))
 
+    def __bool__(self):
+        return any([bool(val) for val in self.values])
 
 class Dihedral(Topology):
     def __init__(self, a1, a2, a3, a4, A1=None, A2=None, A3=None, A4=None, A5=None):
-        super(Dihedral, self).__init__()
+       
+        super().__init__()
+       
         self._a1 = a1
         self._a2 = a2
         self._a3 = a3
@@ -177,11 +196,15 @@ class Dihedral(Topology):
         else:
             value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*self.values[:-1])
         fout.write("{:>5}    {}  #  {:<8} | {}\n".format(self.id, value, atype, self.resname))
+        
+    def __bool__(self):
+        return any([bool(val) for val in self.values])
 
 
 class Improper(Topology):  # cvff improper style
     def __init__(self, a1, a2="x", a3="x", a4="x", K=None, d=None, n=None):
-        super(Improper, self).__init__()
+        
+        super().__init__()
         
         self._a1 = a1
         self._a2 = a2
@@ -215,6 +238,8 @@ class Improper(Topology):  # cvff improper style
         return (self.values == other.values and
                 self._a1.split('_')[0] == other._a1.split('_')[0])
 
+    def __bool__(self):
+        return any([bool(val) for val in self.values])
 
 
 

@@ -45,6 +45,9 @@ def map_bonds(bonds):
     bonds_list = []
     
     for cc, bond in enumerate(bonds):
+        
+        if not bool(bond):
+            continue
         if bond not in bonds_list:
             bond_type_ids.append(type_id)
             bonds_list.append(bond)
@@ -65,6 +68,8 @@ def map_angles(angles):
     angles_list = []
     
     for cc, angle in enumerate(angles):
+        if not bool(angle):
+            continue
         if angle not in angles_list:
             angle_type_ids.append(type_id)
             angles_list.append(angle)
@@ -85,6 +90,8 @@ def map_dihedrals(dihedrals):
     dihedrals_list = []
     
     for cc, dihedral in enumerate(dihedrals):
+        if not bool(dihedral):
+            continue
         if dihedral not in dihedrals_list:
             dihedral_type_ids.append(type_id)
             dihedrals_list.append(dihedral)
@@ -109,6 +116,9 @@ def map_impropers(impropers):
     impropers_list = []
     
     for cc, improper in enumerate(impropers):
+        if not bool(improper):
+            continue
+        
         if improper not in impropers_list:
             improper_type_ids.append(type_id)
             impropers_list.append(improper)
