@@ -3,3 +3,5 @@ ase
 numpy
 networkx
 libarvo
+platformdirs
+configparser

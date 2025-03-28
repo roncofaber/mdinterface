@@ -225,7 +225,7 @@ class DATAWriter(base.WriterBase):
 
         features = {}
         with util.openany(self.filename, 'wt') as self.f:
-            self.f.write('LAMMPS data file via MDAnalysis\n')
+            self.f.write('LAMMPS data file via MDAnalysis and mdinterface\n')
             self.f.write('\n')
             self.f.write('{:>12d}  atoms\n'.format(len(atoms)))
 

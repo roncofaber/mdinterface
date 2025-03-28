@@ -47,7 +47,7 @@ def make_solvent_box(species, solvent, ions, volume, density, nions, concentrati
         nummols = int(units.mol*density*(1.0/mass)*solvent_volume)
         
         instructions.append([solvent, nummols, "box"])
-    
+
     # generate universe file
     universe = populate_box(volume, instructions)
     
@@ -228,3 +228,27 @@ def populate_with_ions(ions, nions, volume, ion_pos=False, conmodel=None):
         volume[2] /= 2
 
     return place_ions_random(ions, nions, volume, to_center, max_attempts=max_attempts)
+
+
+# add a component to the system
+def add_component(system, component, zdim, padding=0):
+    
+    # nothing to add here
+    if component is None:
+        return system, zdim
+    
+    # ohh, let's lego the shit out of this
+    component = component.copy()
+    
+    # component: "look at me, I am the system now."
+    if system is None:
+        component.atoms.translate([0, 0, zdim])
+        system = component
+        zdim += component.dimensions[2]
+    
+    # make space and add it to the pile
+    else:
+        component.atoms.translate([0, 0, zdim + padding])
+        system = mda.Merge(system.atoms, component.atoms)
+        zdim += component.dimensions[2] + padding
+    return system, zdim

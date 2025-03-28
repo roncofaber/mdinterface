@@ -8,19 +8,40 @@ Created on Tue Oct 24 15:14:41 2023
 
 from mdinterface.utils.auxiliary import label_to_element, as_list, find_smallest_missing
 from mdinterface.io.lammpswriter import DATAWriter
-from mdinterface.build.box import make_interface_slab, make_solvent_box
+from mdinterface.build.box import make_interface_slab, make_solvent_box, add_component
 
 import ase
-import MDAnalysis as mda
 
 import numpy as np
 
 import shutil
-
 import warnings
 warnings.filterwarnings('ignore')
 
 #%%
+
+default_params = {
+    "interface": {
+        "nlayers": 1,
+    },
+    "solvent": {
+        "rho": None,
+        "zdim": None,
+        "nions": None,
+        "concentration": None,
+        "conmodel": None,
+        "ion_pos": None
+    },
+    "miderface": {
+        "nlayers": 1,
+    },
+    "enderface": {
+        "nlayers": 1,
+    },
+    "vacuum": {
+        "zdim": 0,
+    }
+}
 
 class SimulationBox():
     
@@ -118,107 +139,64 @@ class SimulationBox():
         return xsize, ysize, slab_depth
     
     # main driver to generate a simulation box given instructions
-    def make_simulation_box(self, solvent_vol, solvent_rho=None, nions=None,
-                            concentration=None, conmodel=None, layers=1,
-                            padding=1.5, to_ase=False, mirror=False,
+    def make_simulation_box(self, xysize, layering, padding=1.5, to_ase=False,
                             write_data=False, filename="data.lammps",
-                            center_electrode=False, vacuum=None, layered=False,
-                            ion_pos=None, hijack=None):
+                            center_electrode=False, layered=False, hijack=None,
+                            match_cell=False, remove_charges=False):
         
-        # solvent volume
-        xsize, ysize, zsize = solvent_vol
+        # define approximate cross_section
+        assert len(xysize) == 2, "'xysize' should have length of 2 [xsize, ysize]"
+        xsize, ysize = xysize
         
-        # Determine the number of layers for each slab
-        if isinstance(layers, int):
-            layers_dict = {'interface': layers, 'enderface': layers, 'miderface': layers}
-        elif isinstance(layers, dict):
-            layers_dict = {'interface': layers.get('interface', 0),
-                           'enderface': layers.get('enderface', 0),
-                           'miderface': layers.get('miderface', 0)}
-        else:
-            raise ValueError("Layers should be either an integer or a dictionary.")
-        
-        # make slabs
-        islab = make_interface_slab(self._interface, xsize, ysize, layers=layers_dict['interface'])
-        eslab = make_interface_slab(self._enderface, xsize, ysize, layers=layers_dict['enderface'])
-        mslab = make_interface_slab(self._miderface, xsize, ysize, layers=layers_dict['miderface'])
-        
-        xi, yi, sdi, xe, ye, sde, xm, ym, sdm = 0, 0, 0, 0, 0, 0, 0, 0, 0
-        # update the volume with multiples of UC
-        if islab is not None:
-            xi, yi, sdi = self._get_size_from_slab(islab)
-            islab = islab.to_universe(layered=layered)
-        if eslab is not None:
-            xe, ye, sde = self._get_size_from_slab(eslab)
-            eslab = eslab.to_universe(layered=layered)
-        if mslab is not None:
-            xm, ym, sdm = self._get_size_from_slab(mslab)
-            mslab = mslab.to_universe(layered=layered)
+        # make slabs of solid stuff to find actual cross_section
+        slabs = []
+        for layer in layering:
+            layer_type = layer["type"]
+            for k, v in default_params[layer_type].items():
+                layer.setdefault(k, v)
             
-        if eslab is not None and islab is not None: # check they have same size
-            assert xi == xe
-            assert yi == ye
-        else:
-            padding    = 0
+            if layer_type in ["interface", "enderface", "miderface"]:
+                tslab = getattr(self, "_" + layer["type"])
+                tslab = make_interface_slab(tslab, xsize, ysize, layers=layer['nlayers'])
+                slabs.append(tslab)
+                layer["slab"] = tslab
         
-        if eslab is not None or islab is not None or mslab is not None:
-            xsize = np.max([xi, xe, xm])
-            ysize = np.max([yi, ye, ym])
+        # define ACTUAL cell boundaries
+        xsize, ysize = self._define_cell_boundaries(xsize, ysize, slabs)
         
-        # make solvent box
-        solvent = make_solvent_box(self.species, self.solvent, self._solute,
-                                   [xsize, ysize, zsize], solvent_rho,
-                                   nions, concentration, conmodel, ion_pos)
-        
-        def add_component(system, component, zdim, padding=0):
-            
-            # nothing to add here
-            if component is None:
-                return system, zdim
-            
-            # ohh, let's lego the shit out of this
-            component = component.copy()
-            
-            # component: "look at me, I am the system now."
-            if system is None:
-                system = component
-                zdim += component.dimensions[2]
-            
-            # make space and add it to the pile
-            else:
-                component.atoms.translate([0, 0, zdim + padding])
-                system = mda.Merge(system.atoms, component.atoms)
-                zdim += component.dimensions[2] + padding
-            return system, zdim
-
-        # now build system - starting from nothing
+        # build cake, layer by layer - starting from nothing
         system = None
         zdim   = 0
-        
-        # add the interface
-        system, zdim = add_component(system, islab, zdim, padding=padding)
-        
-        # add the 1st solvent
-        system, zdim = add_component(system, solvent, zdim, padding=padding)
-        
-        # add the midterface
-        system, zdim = add_component(system, mslab, zdim, padding=padding)
-        
-        # add the second solvent - only if midterface is there tho...
-        if mslab is not None:
-            system, zdim = add_component(system, solvent, zdim, padding=padding)
-        
-        # let's close the sandwich, if needed.
-        system, zdim = add_component(system, eslab, zdim, padding=padding)
+        for layer in layering:
+            
+            layer_type = layer["type"]
+            
+            if layer_type == "solvent":
+                zsize    = layer["zdim"]
+                solv_rho = layer["rho"]
+                nions    = layer["nions"]
+                concentration = layer["concentration"]
+                conmodel = layer["conmodel"]
+                ion_pos  = layer["ion_pos"]
                 
+                # make solvent box
+                solvent = make_solvent_box(self.species, self.solvent, self._solute,
+                                           [xsize, ysize, zsize], solv_rho,
+                                           nions, concentration, conmodel, ion_pos)
+
+                # add component
+                system, zdim = add_component(system, solvent, zdim, padding=padding)
+                
+            elif layer_type in ["interface", "enderface", "miderface"]:
+                tslab = layer["slab"].to_universe(layered=layered, match_cell=match_cell, xydim=[xsize, ysize])
+                # add the slab
+                system, zdim = add_component(system, tslab, zdim, padding=padding)
+            
+            elif layer_type == "vacuum":
+                zdim += layer["zdim"]
+            
         # update my system's dimensions        
         system.dimensions = [xsize, ysize, zdim] + [90, 90, 90] #TODO not like this
-        
-        # add vacuum
-        if vacuum is not None:
-            system.dimensions[2] += vacuum
-            system.atoms.translate([0,0,+vacuum/2])
-            zdim += vacuum
         
         # move of half unit along z
         if center_electrode:
@@ -232,14 +210,18 @@ class SimulationBox():
         
         # write data file
         if write_data:
-            self.write_lammps_file(system, filename=filename)
+            self.write_lammps_file(system, filename=filename, remove_charges=remove_charges)
         
         # convert to ase, or not
         if to_ase:
             return self.to_ase(system)
         return system
     
-    def write_lammps_file(self, system,  write_coeff=True, filename="data.lammps"):
+    def write_lammps_file(self, system,  write_coeff=True, filename="data.lammps",
+                          remove_charges=False):
+        
+        if remove_charges:
+            system.del_TopologyAttr("charges")
         
         # first write data file
         with DATAWriter(filename) as dt:
@@ -375,55 +357,49 @@ class SimulationBox():
         if system.dimensions is not None:
             ase_system.set_cell(system.dimensions)
             ase_system.set_pbc(True)
-            
-        if system.atoms.charges is not None:
-            ase_system.set_initial_charges(system.atoms.charges)
+        
+        try:
+            if system.atoms.charges is not None:
+                ase_system.set_initial_charges(system.atoms.charges)
+        except:
+            pass
         
         return ase_system
 
     @property
     def solvent(self):
-        if self._solvent is None:
-            return None
-        return self._solvent.to_universe()
+        return self._solvent.to_universe() if self._solvent else None
     
     @property
     def solute(self):
-        if self._solute is None:
-            return None
-        return [ii.to_universe() for ii in self._solute]
+        return [ii.to_universe() for ii in self._solute] if self._solute else None
     
     @property
     def interface(self):
-        if self._interface is None:
-            return None
-        return self._interface.to_universe()
+        return self._interface.to_universe() if self._interface else None
     
     @property
     def enderface(self):
-        if self._enderface is None:
-            return None
-        return self._enderface.to_universe()
+        return self._enderface.to_universe() if self._enderface else None
     
     @property
     def miderface(self):
-        if self._miderface is None:
-            return None
-        return self._miderface.to_universe()
+        return self._miderface.to_universe() if self._miderface else None
     
     @property
     def species(self):
-        # merge all species in system
-        all_species = np.concatenate((as_list(self.solvent), as_list(self.solute),
-                                      as_list(self.interface), as_list(self.enderface),
-                                      as_list(self.miderface)))
-        return [ii for ii in all_species if ii is not None]
+        return [ii.to_universe() for ii in self._species if ii is not None]
     
     @property
     def _species(self):
-        return np.concatenate((as_list(self._solvent), as_list(self._solute),
-                                      as_list(self._interface), as_list(self._enderface),
-                                      as_list(self._miderface)))
+        all_species = np.concatenate((
+            as_list(self._solvent), 
+            as_list(self._solute),
+            as_list(self._interface), 
+            as_list(self._enderface),
+            as_list(self._miderface)
+        )).tolist()
+        return all_species
     
     def get_sorted_attribute(self, attribute):
         
@@ -447,3 +423,16 @@ class SimulationBox():
                 
         return [attributes[ii] for ii in np.argsort(indexes)]
     
+    def _define_cell_boundaries(self, xsize, ysize, slabs):
+        
+        if not slabs:
+            return xsize, ysize
+        
+        xsize_t, ysize_t = np.NaN, np.NaN
+        
+        for tslab in slabs:
+            xi, yi, _ = self._get_size_from_slab(tslab)
+            xsize_t = np.nanmax([xi, xsize_t])
+            ysize_t = np.nanmax([yi, ysize_t])
+        
+        return xsize_t, ysize_t

@@ -21,7 +21,7 @@ a1 = Angle("H", "O", "H", kr=55, theta0=104.52)
 mol = Specie("H2O", charges=[-0.83, 0.415, 0.415], bonds=b1, angles=a1,
              lj={"O": [0.102, 3.188], "H": [0.0, 0.0]})
 
-# alternatively you can load water as:
+# alternatively you can load water from the database as:
 wat = Water()
 
 # Ions setup
@@ -38,28 +38,38 @@ simobj = SimulationBox(
     solvent   = mol,
     solute    = [Na, Cl],
     interface = interface,
-    # enderface = interface
+    enderface = interface
 )
 
 #%% Define simulation box parameters
 
-solvent_vol = [15, 15, 25]  # Size of solvent box in Å
-solvent_rho = 0.99713       # Density in g/cm³
-nions       = 1             # Number of ions
-nlayers     = 1             # Number of interface layers
+xysize = [15, 15] # XY cross section
+
+# add subsequent layers of building blocks
+layering = [
+    # add the interface type slab
+    {"type": "interface", "nlayers" : 1 },
+    # add a solvent slab, nions can be a list with the number of ions as provided above in solute
+    {"type": "solvent", "rho": 1.0, "zdim": 25, "nions": 1},
+    # add an enderface type slab
+    {"type": "enderface", "nlayers" : 1 },
+    # add vacuum, if you want
+    {"type": "vacuum", "zdim": 5},
+    ]
 
 #%% Build the simulation box
 
+# main function to build a box given the instructions defined above
 system = simobj.make_simulation_box(
-    solvent_vol      = solvent_vol,
-    solvent_rho      = solvent_rho,
-    nions            = nions,
-    # concentration  = 0.35,  # Molar concentration
-    # conmodel       = cm,
-    layers           = nlayers,
-    to_ase           = True,
-    write_data       = True,
-    # padding       = -1.5
-    center_electrode = False,
-    ion_pos          = "left"
-)
+    xysize, # XY cross section
+    layering, # layering info
+    padding = 0.5, # pad this amount between any layer (Angstrom)
+    to_ase = True, # return an ase.Atoms object, otherwishe mda.Universe
+    write_data = False, # write LAMMPS data file
+    filename = "data.lammps", # name of the LAMMPS data file
+    center_electrode = False, # shifts everything by 50% along Z to place the first interface in the center (it's better to layer instead)
+    layered = False, # assign different molecule indexes to each layer of interface/enderface type slabs for LAMMPS
+    hijack = None, # give an ase.Atoms to override the positions (ATTENTION: should have exactly same order, use with CARE (or just don't...))
+    match_cell = False, # if trying to mix slabs with different cross section, use this to deform them so they match XY, use with care
+    remove_charges = False # do not write charges in LAMMPS data file
+    )

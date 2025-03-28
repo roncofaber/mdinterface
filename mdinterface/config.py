@@ -22,7 +22,10 @@ def load_config():
         config_file = user_config_file
     else:
         # Fall back to the default configuration file in the package directory
+        print(f"No config.ini file found:\n{user_config_file}")
         config_file = os.path.join(os.path.dirname(__file__), 'config.ini')
+        print(f"Defaulting on reading file:\n{config_file}")
+        print("Make sure it makes sense.")
     
     config = configparser.ConfigParser()
     config.optionxform = str

@@ -16,8 +16,8 @@ import MDAnalysis as mda
 import mdinterface.utils.map as pmap
 from mdinterface.core.topology import Atom
 from mdinterface.io.read import read_lammps_data_file
-from mdinterface.utils.auxiliary import as_list, find_smallest_missing
-from mdinterface.externals import run_ligpargen, run_OBChargeModel
+from mdinterface.utils.auxiliary import as_list, find_smallest_missing, round_list_to_sum
+from mdinterface.externals import run_ligpargen, run_OBChargeModel, calculate_RESP_charges
 from mdinterface.utils.graphs import molecule_to_graph, find_unique_paths_of_length,\
     find_improper_idxs,find_relevant_distances, find_atom_types
 
@@ -34,7 +34,10 @@ class Specie(object):
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
-                 pbc=False, ligpargen=False, tot_charge=0, prune=False):
+                 pbc=False, ligpargen=False, tot_charge=0, prune_z=False):
+        
+        # store int. variables
+        self.cutoff = cutoff
         
         # if file provided, read it
         if lammps_data is not None:
@@ -54,10 +57,12 @@ class Specie(object):
             name = atoms.get_chemical_formula()
         if len(name) > 4:
             print("ATTENTION: resname for Specie could be misleading")
-        self.resname = name
+            print("You wan the name to be 4 characters long otherwise packmol")
+            print("will have problems...")
+        self.resname = name[:4]
         
         # set up atoms and generate graph of specie
-        self.set_atoms(atoms, cutoff)
+        self.set_atoms(atoms, cutoff, prune_z=prune_z)
         
         # read atom_types from LJ
         if atom_types is None:
@@ -65,7 +70,7 @@ class Specie(object):
             
         # set up internal topology attributes
         self._setup_topology(atom_types, bonds, angles, dihedrals, impropers,
-                             fix_missing=fix_missing, prune=prune)
+                             fix_missing=fix_missing)
         
         # initialize topology info
         self._update_topology()
@@ -106,7 +111,7 @@ class Specie(object):
         return atoms, stype
     
     def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers,
-                        fix_missing=False, prune=False):
+                        fix_missing=False):
         
         # map list of inputs
         atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
@@ -194,9 +199,26 @@ class Specie(object):
                 
         return atom_types
     
-    def set_atoms(self, atoms, cutoff=1.0):
+    def round_charges(self, nround=7):
         
-        self._atoms = atoms.copy()
+        rcharges = round_list_to_sum(self.charges, round(sum(self.charges), nround), nround)
+        self.atoms.set_initial_charges(rcharges)
+        
+        return
+    
+    def set_atoms(self, atoms, cutoff=1.0, prune_z=False):
+        
+        # make sure no mess
+        atoms = atoms.copy()
+        
+        if prune_z:
+            zmin = atoms.get_positions(wrap=True)[:,2].min()
+            zmax = atoms.get_positions(wrap=True)[:,2].max()
+            atoms.translate([0,0,-zmin])
+            atoms.cell[2][2] = zmax-zmin
+            atoms.pbc[2] = False
+        
+        self._atoms = atoms
         self._graph = molecule_to_graph(atoms, cutoff_scale=cutoff)
         
         return
@@ -252,7 +274,7 @@ class Specie(object):
         return
 
     # covnert to mda.Universe
-    def to_universe(self, charges=True, layered=False):
+    def to_universe(self, charges=True, layered=False, match_cell=False, xydim=None):
         
         # empty top object
         top = mda.core.topology.Topology(n_atoms=len(self.atoms))
@@ -296,8 +318,19 @@ class Specie(object):
             
             # uni.residues[0].resids = layer_idxs
         
+        # match the cell!
+        if match_cell:
+            assert xydim is not None
+            zz = self.atoms.get_cell()[2][2]
+            tatoms = self.atoms.copy()
+            
+            tatoms.set_cell([xydim[0], xydim[1], zz], scale_atoms=True)
+            
+            uni.dimensions = tatoms.cell.cellpar()
+            uni.atoms.positions = tatoms.get_positions()
+            
         # if has cell info, pass them along
-        if self.atoms.get_cell():
+        elif self.atoms.get_cell():
             uni.dimensions = self.atoms.cell.cellpar()
                 
         return uni
@@ -361,18 +394,22 @@ class Specie(object):
     
     @property
     def bonds(self):
+        if not self._bmap: return [[], []]
         return self._find_interactions(1, self._bmap)
     
     @property
     def angles(self):
+        if not self._amap: return [[], []]
         return self._find_interactions(2, self._amap)
     
     @property
     def dihedrals(self):
+        if not self._dmap: return [[], []]
         return self._find_interactions(3, self._dmap)
     
     @property
     def impropers(self):
+        if not self._imap: return [[], []]
         return self._find_interactions(3, self._imap, impropers=True)
         
     @property
@@ -406,7 +443,7 @@ class Specie(object):
         try:
             from libarvo import molecular_vs
         except:
-            print("libarvo NOT found. Install it.")
+            raise ImportError("libarvo NOT found. Install it.")
 
         centers = self.atoms.get_positions()
         radii = [vdw_radii[ii] for ii in self.atoms.get_atomic_numbers()]
@@ -483,21 +520,24 @@ class Specie(object):
         
         return
 
-    def update_positions(self, positions=None, cellpar=None, atoms=None):
+    def update_positions(self, positions=None, cellpar=None, atoms=None, prune_z=False):
         
         if atoms is not None:
             positions = atoms.get_positions()
             cellpar   = atoms.get_cell()
         
-        if positions is not None:
-            self.atoms.set_positions(positions)
+        atoms = self._atoms.copy()
         
-        if cellpar:
-            self.atoms.set_cell(cellpar)
+        if positions is not None:
+            atoms.set_positions(positions)
+        if cellpar is not None:
+            atoms.set_cell(cellpar)
+            
+        self.set_atoms(atoms, cutoff=self.cutoff, prune_z=prune_z)
         
         return
     
-    def estimate_charges(self, method="obabel", charge=None, assign=False):
+    def estimate_charges(self, method="obabel", charge=None, assign=False, **respargs):
         
         if charge is None:
             charge = 0
@@ -508,9 +548,12 @@ class Specie(object):
         elif method == "ligpargen":
             system, _, _, _, _, _ = run_ligpargen(self.atoms, charge=charge)
             charges = system.get_initial_charges()
+        elif method == "resp":
+            charges, atoms = calculate_RESP_charges(self, **respargs)
             
         if assign:
-            self.atoms.set_charges(charges)
+            self.atoms.set_positions(atoms.get_positions())
+            self.atoms.set_initial_charges(charges)
         
         return charges
 

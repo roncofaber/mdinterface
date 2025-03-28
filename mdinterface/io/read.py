@@ -16,10 +16,12 @@ from mdinterface.utils.auxiliary import mass2symbol
 
 #%%
 
-def read_lammps_data_file(filename):
+def read_lammps_data_file(filename, pbc=False):
     system = ase.io.lammpsdata.read_lammps_data(filename)
-    system.set_pbc(False)
-    system.set_cell(None)
+    
+    if not pbc:
+        system.set_pbc(False)
+        system.set_cell(None)
 
     symbols = system.get_chemical_symbols()
     unique_symbols = set(symbols)

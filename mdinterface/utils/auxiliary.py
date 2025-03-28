@@ -171,3 +171,23 @@ def same_rev_check(list1, list2):
     elif list(list1) == list(reversed(list2)):
         return True
     return False
+
+
+def round_list_to_sum(lst, target_sum, decimals=3):
+    rounded_list = [round(x, decimals) for x in lst]
+    current_sum = sum(rounded_list)
+    difference = target_sum - current_sum
+    
+    # Sort the list by the decimal part to minimize the adjustment impact
+    sorted_indices = sorted(range(len(lst)), key=lambda i: lst[i] - rounded_list[i], reverse=True)
+    
+    for i in sorted_indices:
+        if abs(difference) < 10**(-(decimals+1)):
+            break
+        adjustment = round(difference, decimals)
+        new_value = round(rounded_list[i] + adjustment, decimals)
+        if new_value != rounded_list[i]:
+            rounded_list[i] = new_value
+            difference -= adjustment
+    
+    return rounded_list

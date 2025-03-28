@@ -12,8 +12,11 @@ from .auxiliary import atoms_to_indexes, as_list
 # not repo
 import collections
 import numpy as np
-import networkx as nx
 from ase import neighborlist
+
+# networking
+import networkx as nx
+from networkx.algorithms.isomorphism import GraphMatcher
 
 #%%
 # bunch of functions to work with NetworkX graphs
@@ -103,6 +106,46 @@ def find_atom_types(molecule, max_depth=1):
         atom_type_ids[node] = atom_types[atom_type]
 
     return atom_type_ids, {v: k for k, v in atom_types.items()}
+
+# similar to find atoms types but works for whole graph. Keep an eye on this #TODO
+def find_equivalent_atoms(G):
+
+    # Step 1: Find automorphisms
+    # Use the GraphMatcher to find all automorphisms of the graph
+    GM = GraphMatcher(G, G)
+    automorphisms = list(GM.isomorphisms_iter())
+    
+    # Step 2: Identify topologically equivalent atoms
+    # Create a dictionary to store equivalence classes
+    equivalence_classes = {}
+    
+    for i, atom in enumerate(G.nodes()):
+        equivalence_classes[atom] = {atom}
+    
+    for automorphism in automorphisms:
+        for atom, mapped_atom in automorphism.items():
+            equivalence_classes[atom].add(mapped_atom)
+    
+    # Convert sets to sorted lists for easier interpretation
+    for atom in equivalence_classes:
+        equivalence_classes[atom] = sorted(equivalence_classes[atom])
+
+    # Step 3: Assign unique labels to each equivalence class
+    class_labels = {}
+    label = 0
+    for atom, eq_class in equivalence_classes.items():
+        eq_class = frozenset(eq_class)
+        if eq_class not in class_labels:
+            class_labels[eq_class] = label
+            label += 1
+    
+    # Step 4: Create the list with equivalence class labels
+    equivalence_list = [0] * len(G.nodes())
+    for atom, eq_class in equivalence_classes.items():
+        eq_class = frozenset(eq_class)
+        equivalence_list[atom] = class_labels[eq_class]
+            
+    return equivalence_classes, np.array(equivalence_list)
 
 def find_unique_paths_of_length(graph, length):
     def dfs(current_node, current_path):
