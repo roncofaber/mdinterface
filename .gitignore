@@ -1,6 +1,7 @@
 # custom files
 *.pkl
 *.png
+!assets/mdinterface.png
 
 ## AUTO GENERATED
 # Byte-compiled / optimized / DLL files
