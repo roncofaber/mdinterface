@@ -176,7 +176,7 @@ class Specie(object):
     def _atom_types_from_lj(self, lj):
         
         # use function to retrieve IDs
-        atom_type_ids, types_map = find_atom_types(self.atoms, max_depth=1)
+        atom_type_ids, types_map = find_atom_types(self.graph, max_depth=1)
         
         atom_types = []
         for atom_id in atom_type_ids:
@@ -220,7 +220,7 @@ class Specie(object):
         
         self._atoms = atoms
         self._graph = molecule_to_graph(atoms, cutoff_scale=cutoff)
-        
+
         return
     
     def _update_topology(self):
@@ -511,8 +511,11 @@ class Specie(object):
         
         colors = [jmol_colors[a.number] for a in self.atoms]
         
+        # node_pos = nx.spring_layout(self.graph, k=1.5/np.sqrt(self.graph.order()))
+        node_pos = nx.kamada_kawai_layout(self.graph)
+        
         fig, ax = plt.subplots()
-        nx.draw(self.graph, with_labels=True, node_color=colors,
+        nx.draw(self.graph, pos=node_pos, with_labels=True, node_color=colors,
                 node_size=1000, edge_color='black', linewidths=2, font_size=15,
                 edgecolors="black", ax=ax, width=2)
         

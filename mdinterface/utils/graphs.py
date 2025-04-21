@@ -13,6 +13,7 @@ from .auxiliary import atoms_to_indexes, as_list
 import collections
 import numpy as np
 from ase import neighborlist
+from collections import defaultdict
 
 # networking
 import networkx as nx
@@ -56,7 +57,14 @@ def molecule_to_graph(molecule, cutoff_scale=1.0):
     
     # Generate graph
     G = nx.Graph()
-    G.add_nodes_from(list(range(len(molecule))))
+    
+    symbols = molecule.get_chemical_symbols()
+    node_attr = []
+    for ii in range(len(molecule)):
+        na = (ii, {"element": symbols[ii]})
+        node_attr.append(na)
+    
+    G.add_nodes_from(node_attr)
     
     # Iterate through neighbors to add edges
     for atom_index, bonded_atoms in enumerate(neighborList.nl.neighbors):
@@ -71,27 +79,25 @@ def molecule_to_graph(molecule, cutoff_scale=1.0):
     
     return G
 
-def find_atom_types(molecule, max_depth=1):
-    
-    G = molecule_to_graph(molecule)
+def find_atom_types(graph, max_depth=1):
     
     # Get chemical symbols
-    symbols = molecule.get_chemical_symbols()
+    symbols = [data["element"] for node, data in graph.nodes(data=True)]
     
     # Create a dictionary to store the unique atom types and their IDs
     atom_types = {}
     type_id = 0
 
     # Create an array to store the type ID of each atom
-    atom_type_ids = np.zeros(len(molecule), dtype=int)
+    atom_type_ids = np.zeros(graph.order(), dtype=int)
 
     # Iterate over each node in the graph
-    for node in G.nodes:
+    for node in graph.nodes:
         # Get the element of the current atom
         element = symbols[node]
         
         # Get the elements of the nth nearest neighboring atoms
-        nth_neighbors = get_nth_neighbors(G, node, max_depth)
+        nth_neighbors = get_nth_neighbors(graph, node, max_depth)
         neighbor_elements = sorted([symbols[neighbor] for neighbor in nth_neighbors])
         
         # Create a unique identifier for the atom type
@@ -108,44 +114,62 @@ def find_atom_types(molecule, max_depth=1):
     return atom_type_ids, {v: k for k, v in atom_types.items()}
 
 # similar to find atoms types but works for whole graph. Keep an eye on this #TODO
-def find_equivalent_atoms(G):
+def find_equivalent_atoms(graph):
 
-    # Step 1: Find automorphisms
-    # Use the GraphMatcher to find all automorphisms of the graph
-    GM = GraphMatcher(G, G)
-    automorphisms = list(GM.isomorphisms_iter())
+    def get_distance_groups(graph, start_node):
+        # Get the shortest path lengths from the source node to all other nodes
+        path_lengths = nx.single_source_shortest_path_length(graph, start_node)
     
-    # Step 2: Identify topologically equivalent atoms
-    # Create a dictionary to store equivalence classes
-    equivalence_classes = {}
+        # Group nodes by their distances
+        max_distance = max(path_lengths.values())
+        distance_groups = [[] for _ in range(max_distance + 1)]
     
-    for i, atom in enumerate(G.nodes()):
-        equivalence_classes[atom] = {atom}
+        for node, distance in path_lengths.items():
+            distance_groups[distance].append(graph.nodes[node]["element"])
     
-    for automorphism in automorphisms:
-        for atom, mapped_atom in automorphism.items():
-            equivalence_classes[atom].add(mapped_atom)
+        # Sort each group alphabetically
+        for group in distance_groups:
+            group.sort()
     
-    # Convert sets to sorted lists for easier interpretation
-    for atom in equivalence_classes:
-        equivalence_classes[atom] = sorted(equivalence_classes[atom])
-
-    # Step 3: Assign unique labels to each equivalence class
-    class_labels = {}
+        return distance_groups
+    
+    # Dictionary to store distance groups for each start node
+    all_distance_groups = {}
+    
+    # Iterate over all nodes in the graph
+    for start_node in graph.nodes():
+        distance_groups = get_distance_groups(graph, start_node)
+        all_distance_groups[start_node] = distance_groups
+    
+    # Dictionary to store nodes by their distance group representation
+    distance_group_to_nodes = defaultdict(list)
+    
+    for node, distance_groups in all_distance_groups.items():
+        # Convert distance groups to a tuple of tuples for hashable comparisons
+        distance_groups_tuple = tuple(tuple(group) for group in distance_groups)
+        distance_group_to_nodes[distance_groups_tuple].append(node)
+    
+    # Sort the distance groups alphabetically
+    sorted_distance_groups = sorted(distance_group_to_nodes.items(), key=lambda x: x[0])
+    
+    # Assign labels to nodes
+    node_labels = [[] for _ in range(graph.order())]
     label = 0
-    for atom, eq_class in equivalence_classes.items():
-        eq_class = frozenset(eq_class)
-        if eq_class not in class_labels:
-            class_labels[eq_class] = label
-            label += 1
+    for distance_groups_tuple, nodes in sorted_distance_groups:
+        for node in nodes:
+            node_labels[node] = label
+        label += 1
+    node_labels = np.array(node_labels)
     
-    # Step 4: Create the list with equivalence class labels
-    equivalence_list = [0] * len(G.nodes())
-    for atom, eq_class in equivalence_classes.items():
-        eq_class = frozenset(eq_class)
-        equivalence_list[atom] = class_labels[eq_class]
-            
-    return equivalence_classes, np.array(equivalence_list)
+    
+    node_list = {}
+    
+    for cc, lab in enumerate(node_labels):
+        idxs = np.atleast_1d(np.squeeze(np.argwhere(node_labels == lab)))
+        node_list[cc] = idxs
+        
+    return node_list, node_labels
+
 
 def find_unique_paths_of_length(graph, length):
     def dfs(current_node, current_path):

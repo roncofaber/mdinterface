@@ -68,17 +68,16 @@ class DATAWriter(base.WriterBase):
         self.units['velocity'] = kwargs.pop('velocityunit',
                                  self.units['length']+'/'+self.units['time'])
 
-    def _write_atoms(self, atoms, data):
+    def _write_atoms(self, atoms, data, atom_style):
         self.f.write('\n')
         self.f.write('Atoms\n')
         self.f.write('\n')
 
         try:
             charges = atoms.charges
+            has_charges = True
         except (NoDataError, AttributeError):
             has_charges = False
-        else:
-            has_charges = True
 
         indices = atoms.indices + 1
         i_l = len(str(indices.max()))
@@ -96,18 +95,26 @@ class DATAWriter(base.WriterBase):
         b_l = len(str(int(coordinates.max()))) + 1
         b_t = b_l + 6
 
-        if has_charges:
-            for index, moltag, atype, charge, coords in zip(indices, moltags,
-                    types, charges, coordinates):
+        if atom_style == "atomic":
+            for index, atype, coords in zip(indices, types, coordinates):
                 x, y, z = coords
-                self.f.write(f"{index:{i_l}d} {moltag:{m_l}d}  {atype:{t_l}d}  {charge: .7f}"
+                self.f.write(f"{index:{i_l}d}  {atype:{t_l}d}"
                              f"  {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
-        else:
-            for index, moltag, atype, coords in zip(indices, moltags, types,
-                    coordinates):
-                x, y, z = coords
-                self.f.write(f"{index:{i_l}d} {moltag:{m_l}d} {atype:{t_l}d}"
-                             f" {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
+        elif atom_style == "full":
+            
+            if not has_charges:
+                for index, moltag, atype, coords in zip(indices, moltags, types,
+                        coordinates):
+                    x, y, z = coords
+                    self.f.write(f"{index:{i_l}d} {moltag:{m_l}d} {atype:{t_l}d}"
+                                 f" {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
+            elif has_charges:
+                for index, moltag, atype, charge, coords in zip(indices, moltags,
+                                                                types, charges, coordinates):
+                    x, y, z = coords
+                    self.f.write(f"{index:{i_l}d} {moltag:{m_l}d} {atype:{t_l}d}"
+                                 f"  {charge: .7f}"
+                                 f" {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
 
     def _write_velocities(self, atoms):
         self.f.write('\n')
@@ -172,7 +179,7 @@ class DATAWriter(base.WriterBase):
         self.f.write('\n')
 
     @requires('types', 'masses')
-    def write(self, selection, frame=None):
+    def write(self, selection, frame=None, atom_style='full'):
         """Write selection at current trajectory frame to file.
 
         The sections for Atoms, Masses, Velocities, Bonds, Angles,
@@ -233,11 +240,14 @@ class DATAWriter(base.WriterBase):
                 ('dihedral', 'dihedrals'), ('improper', 'impropers')]
 
             for btype, attr_name in attrs:
-                features[btype] = atoms.__getattribute__(attr_name)
-                self.f.write('{:>12d}  {}\n'.format(len(features[btype]),
-                                                    attr_name))
-                features[btype] = features[btype].atomgroup_intersection(
-                                    atoms, strict=True)
+                try:
+                    features[btype] = atoms.__getattribute__(attr_name)
+                    self.f.write('{:>12d}  {}\n'.format(len(features[btype]),
+                                                        attr_name))
+                    features[btype] = features[btype].atomgroup_intersection(
+                                        atoms, strict=True)
+                except:
+                    pass
 
             self.f.write('\n')
             
@@ -251,7 +261,7 @@ class DATAWriter(base.WriterBase):
             self._write_dimensions(atoms.dimensions)
 
             self._write_masses(atoms)
-            self._write_atoms(atoms, u.trajectory.ts.data)
+            self._write_atoms(atoms, u.trajectory.ts.data, atom_style)
             for attr in features.values():
                 if attr is None or len(attr) == 0:
                     continue

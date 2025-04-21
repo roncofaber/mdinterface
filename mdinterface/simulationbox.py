@@ -142,7 +142,7 @@ class SimulationBox():
     def make_simulation_box(self, xysize, layering, padding=1.5, to_ase=False,
                             write_data=False, filename="data.lammps",
                             center_electrode=False, layered=False, hijack=None,
-                            match_cell=False, remove_charges=False):
+                            match_cell=False, atom_style="full", write_coeff=True):
         
         # define approximate cross_section
         assert len(xysize) == 2, "'xysize' should have length of 2 [xsize, ysize]"
@@ -210,7 +210,8 @@ class SimulationBox():
         
         # write data file
         if write_data:
-            self.write_lammps_file(system, filename=filename, remove_charges=remove_charges)
+            self.write_lammps_file(system, filename=filename,
+                                   atom_style=atom_style, write_coeff=write_coeff)
         
         # convert to ase, or not
         if to_ase:
@@ -218,14 +219,22 @@ class SimulationBox():
         return system
     
     def write_lammps_file(self, system,  write_coeff=True, filename="data.lammps",
-                          remove_charges=False):
+                          atom_style="full"):
         
-        if remove_charges:
-            system.del_TopologyAttr("charges")
+        # just make sure we are not messing things up
+        system = system.copy()
+        
+        # remove coefficients
+        if not write_coeff:
+            for attribute in ["bonds", "angles", "dihedrals", "impropers"]:
+                try:
+                    system.del_TopologyAttr(attribute)
+                except:
+                    pass
         
         # first write data file
         with DATAWriter(filename) as dt:
-            dt.write(system.atoms)
+            dt.write(system.atoms, atom_style=atom_style)
             
         # now write coeff where they belong
         if write_coeff:
@@ -428,7 +437,7 @@ class SimulationBox():
         if not slabs:
             return xsize, ysize
         
-        xsize_t, ysize_t = np.NaN, np.NaN
+        xsize_t, ysize_t = np.nan, np.nan
         
         for tslab in slabs:
             xi, yi, _ = self._get_size_from_slab(tslab)

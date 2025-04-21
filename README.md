@@ -1,4 +1,3 @@
-
 <div style="display: flex; align-items: center;">
   <img src="./assets/mdinterface.png" alt="Logo" width="80"  style="margin-right: 10px;">
   <div style="display: flex; flex-direction: column;">
