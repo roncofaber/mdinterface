@@ -40,15 +40,18 @@ def calculate_RESP_charges(specie, basis='def2-svpd', xc="b3lyp", calc_type="RKS
         
         atoms = mole_to_ase(mol)
     
+    mol.cart = True    # PySCF uses spherical basis by default
+    
     # run calculation and calculate density matrix
     mf = make_pyscf_calculator(mol, xc=xc, calc_type=calc_type, gpu=gpu)
+    
     mf.kernel()
     dm = mf.make_rdm1()
     
     # now, start RESP with ESP first!
 
     # ESP charge (do I need this?)
-    q0 = esp.esp_solve(mol, dm)
+    # q0 = esp.esp_solve(mol, dm)
 
     # RESP charge // first stage fitting
     q1 = esp.resp_solve(mol, dm, maxit=maxit)
@@ -67,7 +70,7 @@ def calculate_RESP_charges(specie, basis='def2-svpd', xc="b3lyp", calc_type="RKS
             equal_constraints.append(tmp_idx.tolist())
             
     # RESP charge // second stage fitting
-    q2 = esp.resp_solve(mol, dm, resp_a=1e-4,
+    q2 = esp.resp_solve(mol, dm, resp_a=5e-4, resp_b=0.1, tol=1e-7,
                         sum_constraints=sum_constraints,
                         equal_constraints=equal_constraints, maxit=maxit)
 

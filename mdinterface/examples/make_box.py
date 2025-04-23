@@ -71,5 +71,6 @@ system = simobj.make_simulation_box(
     layered = False, # assign different molecule indexes to each layer of interface/enderface type slabs for LAMMPS
     hijack = None, # give an ase.Atoms to override the positions (ATTENTION: should have exactly same order, use with CARE (or just don't...))
     match_cell = False, # if trying to mix slabs with different cross section, use this to deform them so they match XY, use with care
-    remove_charges = False # do not write charges in LAMMPS data file
+    atom_style = "full", # write LAMMPS data file with the format 'full' or 'atomic'
+    write_coeff = True   # write or not coefficients in the LAMMPS data file
     )

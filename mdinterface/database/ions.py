@@ -166,7 +166,9 @@ class Perchlorate(Specie):
         return
 
 
-# hydronium https://pubs.acs.org/doi/pdf/10.1021/jp036842c
+# hydronium parameters:
+    # std:  https://pubs.acs.org/doi/pdf/10.1021/jp036842c
+    # netz: https://refubium.fu-berlin.de/bitstream/handle/fub188/15473/1.4942771.pdf
 class Hydronium(Specie):
     def __init__(self, **kwargs):
         
@@ -185,4 +187,23 @@ class Hydronium(Specie):
         lj = {"O": [0.1848, 3.1655], "H": [0.010, 0.8018]}
 
         super().__init__(hyd, charges=charges, bonds=b1, angles=a1, lj=lj, **kwargs)
+        return
+
+# hydroxide parameters:
+    # netz: https://refubium.fu-berlin.de/bitstream/handle/fub188/15473/1.4942771.pdf
+class Hydroxide(Specie):
+    def __init__(self, **kwargs):
+        
+        # make ion by cheating and making NH3 first
+        hoh = ase.build.molecule("OH")
+
+        # bond is fixed in paper #FIXME used hydronium bond with r0=1
+        b1 = Bond("O", "H", kr=1085.9565/2, r0=1.000)
+        
+        charges = [-1.000, 0.000]
+        
+        # converted J to cal
+        lj = {"O": [0.01195, 3.8100], "H": [0.000, 0.000]}
+
+        super().__init__(hoh, charges=charges, bonds=b1, lj=lj, **kwargs)
         return
