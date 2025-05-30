@@ -125,7 +125,7 @@ class Ion(Specie):
         **kwargs: Additional keyword arguments to pass to the Specie superclass.
     """
     
-    def __init__(self, element, ffield="Jorgensen", chg_scaling=0.8, **kwargs):
+    def __init__(self, element, ffield="Jorgensen", chg_scaling=1.0, **kwargs):
         
         charge, lj = lookup_parameters(element, ffield)
         lj = {element: lj}
