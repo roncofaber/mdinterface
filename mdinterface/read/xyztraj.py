@@ -27,7 +27,7 @@ class XYZTraj(Trajectory):
     @staticmethod
     def _read_trajectory(filename, datafile, index, parallel=False, every=1):
         
-        traj = ase.io.read(filename + "@:")
+        traj = ase.io.read(filename)
         data = None
     
         return traj, data

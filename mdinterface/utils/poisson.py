@@ -16,8 +16,7 @@ from scipy.integrate import simpson
 from scipy.integrate import solve_bvp
 
 # internal modules
-import continuum_electrolyte
-from continuum_electrolyte.utils.units import eps00
+from mdinterface.utils.units import eps00
 
 import copy
 
