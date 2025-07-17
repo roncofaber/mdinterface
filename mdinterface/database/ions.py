@@ -108,6 +108,8 @@ ions_parameters = {
 
 def lookup_parameters(element, ffield):
     try:
+        if ffield.lower() == "merz":
+            ffield = "sengupta"
         charge = ions_parameters[element]["charge"]
         lj = ions_parameters[element]["ffield"][ffield.lower()]
         return charge, lj

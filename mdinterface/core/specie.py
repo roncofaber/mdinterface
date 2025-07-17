@@ -20,6 +20,7 @@ from mdinterface.utils.auxiliary import as_list, find_smallest_missing, round_li
 from mdinterface.externals import run_ligpargen, run_OBChargeModel, calculate_RESP_charges
 from mdinterface.utils.graphs import molecule_to_graph, find_unique_paths_of_length,\
     find_improper_idxs,find_relevant_distances, find_atom_types
+from mdinterface.utils.draw import draw_bond_markers
 
 import copy
 import numpy as np
@@ -507,7 +508,7 @@ class Specie(object):
                                                     centers=centers, Ninv=Ninv)
         return unique_pairs_list
 
-    def plot_graph(self, **kwargs):
+    def plot_graph(self, show_bonds=False):
         
         colors = [jmol_colors[a.number] for a in self.atoms]
         
@@ -519,6 +520,9 @@ class Specie(object):
                 node_size=1000, edge_color='black', linewidths=2, font_size=15,
                 edgecolors="black", ax=ax, width=2)
         
+        if show_bonds:
+            draw_bond_markers(ax, self, node_pos, jmol_colors)
+    
         plt.show()
         
         return
