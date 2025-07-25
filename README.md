@@ -22,6 +22,7 @@ Using `mdinterface` you can:
 - Integrate your workflow with [MDAnalysis](https://github.com/MDAnalysis/mdanalysis): create your molecules with `mdinterface` and convert them to `mda.Universe` objects with a simple interface.
 
 ## Requirements
+To run `mdinterface`, you need to be my girfriend.
 
 Check the file [requirements.txt](requirements.txt) to see which packages are needed. Installing the package using `pip` should already take care of all mandatory dependencies.
 
