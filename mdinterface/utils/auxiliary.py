@@ -6,13 +6,15 @@ Created on Fri Apr 12 14:04:43 2024
 @author: roncofaber
 """
 
-import re
 import collections
-import numpy as np
+import re
 
 import ase
+import numpy as np
 from ase.data import atomic_masses, chemical_symbols
-#%%
+
+# %%
+
 
 def mass2symbol(mass, possible_symbols, tolerance=0.1):
     """
@@ -28,7 +30,7 @@ def mass2symbol(mass, possible_symbols, tolerance=0.1):
     """
     closest_mass = None
     closest_symbol = None
-    min_diff = float('inf')
+    min_diff = float("inf")
 
     for symbol in possible_symbols:
         index = chemical_symbols.index(symbol)
@@ -43,10 +45,11 @@ def mass2symbol(mass, possible_symbols, tolerance=0.1):
         return closest_symbol
     else:
         raise "Could NOT guess atom type."
-    
+
+
 def label_to_element(atostr, atomss):
     """
-    Attempts to determine the chemical element symbol corresponding to a given 
+    Attempts to determine the chemical element symbol corresponding to a given
     string and atomic mass.
 
     Args:
@@ -60,16 +63,15 @@ def label_to_element(atostr, atomss):
         ValueError: If the function cannot determine a valid element from the input.
     """
 
+    new_label = re.sub(r"[^A-Za-z]", "", atostr).capitalize()  # Clean up input
 
-    new_label = re.sub(r'[^A-Za-z]', '', atostr).capitalize()    # Clean up input
-    
     # load ase info
     atomic_masses = ase.data.atomic_masses
     elements = ase.data.chemical_symbols
-    
+
     # initialize variables
     is_ready = False  # Flag to track if the element is found
-    tried_last_resort = False 
+    tried_last_resort = False
 
     while not is_ready:
         try:
@@ -85,7 +87,7 @@ def label_to_element(atostr, atomss):
             new_label = new_label[:-1]  # Shorten the label for the next attempt
 
             if not new_label:  # If the label is empty, try a last-resort approach
-                
+
                 new_label = elements[np.argmin(np.abs(atomss - atomic_masses))]
 
                 if tried_last_resort:
@@ -102,32 +104,32 @@ def as_list(inp):
         return []
     elif isinstance(inp, int) or isinstance(inp, np.int64):
         return [inp]
-    elif isinstance(inp, collections.abc.Iterable) and not isinstance(inp, str): 
+    elif isinstance(inp, collections.abc.Iterable) and not isinstance(inp, str):
         # Handles lists, tuples, NumPy arrays, etc. (Excludes strings)
-        return list(inp)  
+        return list(inp)
     else:
-        return [inp] # prone to error?
+        return [inp]  # prone to error?
         # raise TypeError(f"Cannot convert type {type(inp)} to list")
-        
+
 
 def find_smallest_missing(data, start=0):
     """Finds the next smallest integer that is not in the list.
-  
+
     This function efficiently finds the next smallest integer that is not present in the input list.
     It leverages sets for fast membership checks.
-    
+
     Args:
         data: A list of integers.
-  
+
     Returns:
         The next smallest integer that is not in the list.
-      """
+    """
 
     data_set = set(data)  # Convert the list to a set for efficient membership checks
-    smallest = start          # Start with the smallest possible positive integer
+    smallest = start  # Start with the smallest possible positive integer
     while smallest in data_set:  # Check if 'smallest' is in the set
-        smallest += 1              # If found, increment 'smallest'
-    return smallest            # Return the first integer not found in the set 
+        smallest += 1  # If found, increment 'smallest'
+    return smallest  # Return the first integer not found in the set
 
 
 def remove_inverted_tuples(list_of_tuples):
@@ -139,13 +141,14 @@ def remove_inverted_tuples(list_of_tuples):
             del list_of_tuples[i]  # Remove the tuple
         else:
             seen.add(tup)
-            
+
+
 # return list of indexes from mixed input of indexes and string (elements)
 def atoms_to_indexes(system, symbols):
 
     # check if symbols is a list of strings
     if isinstance(symbols, str):
-        if symbols == 'all':
+        if symbols == "all":
             return list(range(len(system.get_chemical_symbols())))
 
     symbols = as_list(symbols)
@@ -160,9 +163,11 @@ def atoms_to_indexes(system, symbols):
                     indexes.append(cc)
     return np.unique(indexes).tolist()
 
+
 # chunk a sequence in bits of approx. same size
 def chunker(seq, size):
-    return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+    return (seq[pos : pos + size] for pos in range(0, len(seq), size))
+
 
 # check if two lists are the same even if reversed
 def same_rev_check(list1, list2):
@@ -177,17 +182,19 @@ def round_list_to_sum(lst, target_sum, decimals=3):
     rounded_list = [round(x, decimals) for x in lst]
     current_sum = sum(rounded_list)
     difference = target_sum - current_sum
-    
+
     # Sort the list by the decimal part to minimize the adjustment impact
-    sorted_indices = sorted(range(len(lst)), key=lambda i: lst[i] - rounded_list[i], reverse=True)
-    
+    sorted_indices = sorted(
+        range(len(lst)), key=lambda i: lst[i] - rounded_list[i], reverse=True
+    )
+
     for i in sorted_indices:
-        if abs(difference) < 10**(-(decimals+1)):
+        if abs(difference) < 10 ** (-(decimals + 1)):
             break
         adjustment = round(difference, decimals)
         new_value = round(rounded_list[i] + adjustment, decimals)
         if new_value != rounded_list[i]:
             rounded_list[i] = new_value
             difference -= adjustment
-    
+
     return rounded_list

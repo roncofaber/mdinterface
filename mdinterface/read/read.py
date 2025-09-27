@@ -6,16 +6,19 @@ Created on Fri May 17 11:55:55 2024
 @author: roncofaber
 """
 
-import networkx as nx
-import numpy as np
-import ase
+from collections import deque
 from io import StringIO
 
-from mdinterface.utils.auxiliary import label_to_element
-from collections import deque
-from ase.io.lammpsrun import construct_cell, lammps_data_to_ase_atoms
+import ase
+import networkx as nx
+import numpy as np
 from ase import Atoms
-#%%
+from ase.io.lammpsrun import construct_cell, lammps_data_to_ase_atoms
+
+from mdinterface.utils.auxiliary import label_to_element
+
+# %%
+
 
 def read_lammps_dump_text(fileobj, **kwargs):
     """Process cleartext lammps dumpfiles
@@ -62,8 +65,7 @@ def read_lammps_dump_text(fileobj, **kwargs):
                 # ... otherwise assume default order in 3rd column
                 # (if the latter was present)
                 if len(tilt_items) >= 3:
-                    sort_index = [tilt_items.index(i)
-                                  for i in ["xy", "xz", "yz"]]
+                    sort_index = [tilt_items.index(i) for i in ["xy", "xz", "yz"]]
                     offdiag = offdiag[sort_index]
             else:
                 offdiag = (0.0,) * 3
@@ -83,7 +85,7 @@ def read_lammps_dump_text(fileobj, **kwargs):
             colnames = line.split()[2:]
             datarows = [lines.popleft() for _ in range(n_atoms)]
             data = np.loadtxt(datarows, dtype=str)
-            
+
             out_atoms = lammps_data_to_ase_atoms(
                 data=data,
                 colnames=colnames,
@@ -91,9 +93,9 @@ def read_lammps_dump_text(fileobj, **kwargs):
                 celldisp=celldisp,
                 atomsobj=Atoms,
                 pbc=pbc,
-                **kwargs
+                **kwargs,
             )
-            
+
     return out_atoms
 
 
@@ -104,29 +106,31 @@ def traj2chunks(filename, every=1):
         for cc, line in enumerate(fin):
             lines.append(line)
             if line.startswith("ITEM: TIMESTEP") and len(lines) > 1:
-                
-                if not cc%every:
+
+                if not cc % every:
                     yield "".join(lines[:-1])
                 lines = [line]
-                
+
         if lines:  # Handle remaining lines
             yield "".join(lines)
+
 
 def dump2ase(lines, specorder=None):
     # Your processing logic for a single item goes here
     # atoms = ase.io.read(StringIO("".join(lines)), format="lammps-dump-text",
-                        # parallel=False, specorder=specorder)
-    
+    # parallel=False, specorder=specorder)
+
     atoms = read_lammps_dump_text(StringIO("".join(lines)), specorder=specorder)
     return atoms
+
 
 # use networking algo to merge SeaUrchin coordination environments
 def merge_clusters(cluster_idxs, tar_idxs=None):
 
     def to_edges(l):
         """
-            treat `l` as a Graph and returns it's edges
-            to_edges(['a','b','c','d']) -> [(a,b), (b,c),(c,d)]
+        treat `l` as a Graph and returns it's edges
+        to_edges(['a','b','c','d']) -> [(a,b), (b,c),(c,d)]
         """
         it = iter(l)
         last = next(it)
@@ -145,6 +149,7 @@ def merge_clusters(cluster_idxs, tar_idxs=None):
 
     return [list(ii) for ii in nx.connected_components(clusters_graph)]
 
+
 # # use a data.lammps file, BEST for lammps trajectories!
 def read_data_file(dta_file, type2sym=False):
 
@@ -158,7 +163,7 @@ def read_data_file(dta_file, type2sym=False):
 
         read_types, read_atoms, read_bonds = False, False, False
         labels, atoms, bonds, charges = [], [], [], []
-        
+
         for line in nonblank_lines(fin):
             if line.endswith("atoms"):
                 n_atoms = int(line.strip().split()[0])
@@ -196,13 +201,13 @@ def read_data_file(dta_file, type2sym=False):
 
             elif read_bonds:
                 cline = line.split()
-                bonds.append([int(cline[ii])-1 for ii in [2,3]])
-                
+                bonds.append([int(cline[ii]) - 1 for ii in [2, 3]])
+
     if not atoms:
         raise RuntimeError("No atoms found in file -- check again!")
 
     # make list of atomic symbols
-    symbols = np.array([labels[ii-1] for ii in atoms])
+    symbols = np.array([labels[ii - 1] for ii in atoms])
 
     # use bonding info to calculate connectivity
     connectivity = [[] for _ in range(len(atoms))]
@@ -214,8 +219,9 @@ def read_data_file(dta_file, type2sym=False):
     connectivity = [list(set(con)) for con in connectivity]
 
     # generate atomic types depending on their environment (bonded to same elements)
-    connected_elements = ["".join(sorted([symbols[ii] for ii in con]))
-                          for con in connectivity]
+    connected_elements = [
+        "".join(sorted([symbols[ii] for ii in con])) for con in connectivity
+    ]
 
     atom_types = np.unique(connected_elements)
     ato_typ = []
@@ -223,7 +229,7 @@ def read_data_file(dta_file, type2sym=False):
         ato_typ.append(np.where(atom_type == atom_types)[0][0])
 
     # create list of atoms belonging to same molecule
-    list_of_molecules   = merge_clusters(bonds)
+    list_of_molecules = merge_clusters(bonds)
 
     # generate bonding data
     frame = ase.Atoms(symbols)
@@ -248,8 +254,8 @@ def read_data_file(dta_file, type2sym=False):
 
     # generate the molecule names
     mol_names = []
-    mol_typ = np.array(len(mol_idx)*[-1])
-    for  mol_id in set(mol_idx):
+    mol_typ = np.array(len(mol_idx) * [-1])
+    for mol_id in set(mol_idx):
 
         indexes = np.where(mol_idx == mol_id)[0]
         cmol = frame[indexes]
@@ -261,10 +267,25 @@ def read_data_file(dta_file, type2sym=False):
 
         idnr = np.where([chem_formula == mol_type for mol_type in mol_names])[0]
         mol_typ[indexes] = idnr
-        
+
     if type2sym:
-        return labels , symbols, np.array(mol_idx), np.array(mol_typ), mol_names,\
-            np.array(ato_typ), np.array(connectivity, dtype=object), np.array(charges)
-        
-    return symbols, np.array(mol_idx), np.array(mol_typ), mol_names,\
-        np.array(ato_typ), np.array(connectivity, dtype=object), np.array(charges)
+        return (
+            labels,
+            symbols,
+            np.array(mol_idx),
+            np.array(mol_typ),
+            mol_names,
+            np.array(ato_typ),
+            np.array(connectivity, dtype=object),
+            np.array(charges),
+        )
+
+    return (
+        symbols,
+        np.array(mol_idx),
+        np.array(mol_typ),
+        mol_names,
+        np.array(ato_typ),
+        np.array(connectivity, dtype=object),
+        np.array(charges),
+    )

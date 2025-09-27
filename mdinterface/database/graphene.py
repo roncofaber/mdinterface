@@ -6,14 +6,15 @@ Created on Mon Aug  5 17:13:50 2024
 @author: roncofaber
 """
 
+import ase
 import numpy as np
 
 # internal modules
 from mdinterface.core.specie import Specie
-from mdinterface.core.topology import Atom, Bond, Angle, Dihedral, Improper
+from mdinterface.core.topology import Angle, Atom, Bond, Dihedral, Improper
 
-import ase
-#%%
+# %%
+
 
 # graphene https://onlinelibrary.wiley.com/doi/10.1002/adma.201705791
 class Graphene(Specie):
@@ -26,10 +27,8 @@ class Graphene(Specie):
         g_a = Angle("C", "C", "C", kr=63, theta0=120)
         lj = {"C": [0.07, 3.54996412]}
 
-        super().__init__(system, bonds=g_b, dihedrals=g_d, impropers=g_i, angles=g_a, lj=lj, **kwargs)
-        
+        super().__init__(
+            system, bonds=g_b, dihedrals=g_d, impropers=g_i, angles=g_a, lj=lj, **kwargs
+        )
+
         return
-
-
-
-

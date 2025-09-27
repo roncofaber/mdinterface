@@ -7,15 +7,17 @@ Created on Wed Oct 25 15:03:47 2023
 """
 
 import numpy as np
-
-from MDAnalysis.lib import util, mdamath
+from MDAnalysis.coordinates import base
 from MDAnalysis.core.groups import requires
 from MDAnalysis.exceptions import NoDataError
-from MDAnalysis.coordinates import base
+from MDAnalysis.lib import mdamath, util
 
-
-btype_sections = {'bond':'Bonds', 'angle':'Angles',
-                  'dihedral':'Dihedrals', 'improper':'Impropers'}
+btype_sections = {
+    "bond": "Bonds",
+    "angle": "Angles",
+    "dihedral": "Dihedrals",
+    "improper": "Impropers",
+}
 
 
 class DATAWriter(base.WriterBase):
@@ -46,7 +48,8 @@ class DATAWriter(base.WriterBase):
     an integer >= 1.
 
     """
-    format = 'DATA'
+
+    format = "DATA"
 
     def __init__(self, filename, convert_units=True, **kwargs):
         """Set up a DATAWriter
@@ -58,20 +61,21 @@ class DATAWriter(base.WriterBase):
         convert_units : bool, optional
             units are converted to the MDAnalysis base format; [``True``]
         """
-        self.filename = util.filename(filename, ext='data', keep=True)
+        self.filename = util.filename(filename, ext="data", keep=True)
 
         self.convert_units = convert_units
 
-        self.units = {'time': 'fs', 'length': 'Angstrom'}
-        self.units['length'] = kwargs.pop('lengthunit', self.units['length'])
-        self.units['time'] = kwargs.pop('timeunit', self.units['time'])
-        self.units['velocity'] = kwargs.pop('velocityunit',
-                                 self.units['length']+'/'+self.units['time'])
+        self.units = {"time": "fs", "length": "Angstrom"}
+        self.units["length"] = kwargs.pop("lengthunit", self.units["length"])
+        self.units["time"] = kwargs.pop("timeunit", self.units["time"])
+        self.units["velocity"] = kwargs.pop(
+            "velocityunit", self.units["length"] + "/" + self.units["time"]
+        )
 
     def _write_atoms(self, atoms, data, atom_style):
-        self.f.write('\n')
-        self.f.write('Atoms\n')
-        self.f.write('\n')
+        self.f.write("\n")
+        self.f.write("Atoms\n")
+        self.f.write("\n")
 
         try:
             charges = atoms.charges
@@ -81,85 +85,101 @@ class DATAWriter(base.WriterBase):
 
         indices = atoms.indices + 1
         i_l = len(str(indices.max()))
-        
+
         unique_types, types = np.unique(atoms.types, return_inverse=True)
         types += 1
         t_l = len(str(len(unique_types)))
 
         moltags = atoms.resindices
-        m_l = len(str(moltags.max()))+1
-    
+        m_l = len(str(moltags.max())) + 1
+
         if self.convert_units:
             coordinates = self.convert_pos_to_native(atoms.positions, inplace=False)
-            
+
         b_l = len(str(int(coordinates.max()))) + 1
         b_t = b_l + 6
 
         if atom_style == "atomic":
             for index, atype, coords in zip(indices, types, coordinates):
                 x, y, z = coords
-                self.f.write(f"{index:{i_l}d}  {atype:{t_l}d}"
-                             f"  {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
+                self.f.write(
+                    f"{index:{i_l}d}  {atype:{t_l}d}"
+                    f"  {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n"
+                )
         elif atom_style == "full":
-            
+
             if not has_charges:
-                for index, moltag, atype, coords in zip(indices, moltags, types,
-                        coordinates):
+                for index, moltag, atype, coords in zip(
+                    indices, moltags, types, coordinates
+                ):
                     x, y, z = coords
-                    self.f.write(f"{index:{i_l}d} {moltag:{m_l}d} {atype:{t_l}d}"
-                                 f" {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
+                    self.f.write(
+                        f"{index:{i_l}d} {moltag:{m_l}d} {atype:{t_l}d}"
+                        f" {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n"
+                    )
             elif has_charges:
-                for index, moltag, atype, charge, coords in zip(indices, moltags,
-                                                                types, charges, coordinates):
+                for index, moltag, atype, charge, coords in zip(
+                    indices, moltags, types, charges, coordinates
+                ):
                     x, y, z = coords
-                    self.f.write(f"{index:{i_l}d} {moltag:{m_l}d} {atype:{t_l}d}"
-                                 f"  {charge: .7f}"
-                                 f" {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n")
+                    self.f.write(
+                        f"{index:{i_l}d} {moltag:{m_l}d} {atype:{t_l}d}"
+                        f"  {charge: .7f}"
+                        f" {x:> {b_t}.5f} {y:> {b_t}.5f} {z:> {b_t}.5f}\n"
+                    )
 
     def _write_velocities(self, atoms):
-        self.f.write('\n')
-        self.f.write('Velocities\n')
-        self.f.write('\n')
+        self.f.write("\n")
+        self.f.write("Velocities\n")
+        self.f.write("\n")
         indices = atoms.indices + 1
-        velocities = self.convert_velocities_to_native(atoms.velocities,
-                                                       inplace=False)
+        velocities = self.convert_velocities_to_native(atoms.velocities, inplace=False)
         for index, vel in zip(indices, velocities):
-            self.f.write('{i:d} {x:f} {y:f} {z:f}\n'.format(i=index, x=vel[0],
-                y=vel[1], z=vel[2]))
+            self.f.write(
+                "{i:d} {x:f} {y:f} {z:f}\n".format(
+                    i=index, x=vel[0], y=vel[1], z=vel[2]
+                )
+            )
 
     def _write_masses(self, atoms):
         # self.f.write('\n')
-        self.f.write('Masses\n')
-        self.f.write('\n')
-        
+        self.f.write("Masses\n")
+        self.f.write("\n")
+
         for cc, atype in enumerate(np.unique(atoms.types)):
-            
+
             # search entire universe for mass info, not just writing selection
-            masses = set(atoms.select_atoms('type {}'.format(atype)).masses)
-            
-            if len(masses) == 0:   
-                mass = 1.0  
+            masses = set(atoms.select_atoms("type {}".format(atype)).masses)
+
+            if len(masses) == 0:
+                mass = 1.0
             else:
                 mass = masses.pop()
-                
+
             if masses:
-                raise ValueError('LAMMPS DATAWriter: to write data file, '+
-                        'atoms with same type must have same mass')
-        
-        
-            self.f.write('{:d} {:> 8.3f}   # {}\n'.format(cc+1, mass, atype))
+                raise ValueError(
+                    "LAMMPS DATAWriter: to write data file, "
+                    + "atoms with same type must have same mass"
+                )
+
+            self.f.write("{:d} {:> 8.3f}   # {}\n".format(cc + 1, mass, atype))
 
     def _write_bonds(self, bonds):
-        self.f.write('\n')
-        self.f.write('{}\n'.format(btype_sections[bonds.btype]))
-        self.f.write('\n')
-        for bond, i in zip(bonds, range(1, len(bonds)+1)):
+        self.f.write("\n")
+        self.f.write("{}\n".format(btype_sections[bonds.btype]))
+        self.f.write("\n")
+        for bond, i in zip(bonds, range(1, len(bonds) + 1)):
             try:
-                self.f.write('{:d} {:d} '.format(i, int(bond.type))+\
-                        ' '.join((bond.atoms.indices + 1).astype(str))+'\n')
+                self.f.write(
+                    "{:d} {:d} ".format(i, int(bond.type))
+                    + " ".join((bond.atoms.indices + 1).astype(str))
+                    + "\n"
+                )
             except TypeError:
-                errmsg = (f"LAMMPS DATAWriter: Trying to write bond, but bond "
-                          f"type {bond.type} is not numerical.")
+                errmsg = (
+                    f"LAMMPS DATAWriter: Trying to write bond, but bond "
+                    f"type {bond.type} is not numerical."
+                )
                 raise TypeError(errmsg) from None
 
     def _write_dimensions(self, dimensions):
@@ -167,19 +187,23 @@ class DATAWriter(base.WriterBase):
         units and then write the dimensions section
         """
         if self.convert_units:
-            triv = self.convert_pos_to_native(mdamath.triclinic_vectors(
-                                              dimensions),inplace=False)
-        self.f.write('\n')
-        self.f.write('{:f} {:f} xlo xhi\n'.format(0., triv[0][0]))
-        self.f.write('{:f} {:f} ylo yhi\n'.format(0., triv[1][1]))
-        self.f.write('{:f} {:f} zlo zhi\n'.format(0., triv[2][2]))
+            triv = self.convert_pos_to_native(
+                mdamath.triclinic_vectors(dimensions), inplace=False
+            )
+        self.f.write("\n")
+        self.f.write("{:f} {:f} xlo xhi\n".format(0.0, triv[0][0]))
+        self.f.write("{:f} {:f} ylo yhi\n".format(0.0, triv[1][1]))
+        self.f.write("{:f} {:f} zlo zhi\n".format(0.0, triv[2][2]))
         if any([triv[1][0], triv[2][0], triv[2][1]]):
-            self.f.write('{xy:f} {xz:f} {yz:f} xy xz yz\n'.format(
-                xy=triv[1][0], xz=triv[2][0], yz=triv[2][1]))
-        self.f.write('\n')
+            self.f.write(
+                "{xy:f} {xz:f} {yz:f} xy xz yz\n".format(
+                    xy=triv[1][0], xz=triv[2][0], yz=triv[2][1]
+                )
+            )
+        self.f.write("\n")
 
-    @requires('types', 'masses')
-    def write(self, selection, frame=None, atom_style='full'):
+    @requires("types", "masses")
+    def write(self, selection, frame=None, atom_style="full"):
         """Write selection at current trajectory frame to file.
 
         The sections for Atoms, Masses, Velocities, Bonds, Angles,
@@ -231,32 +255,37 @@ class DATAWriter(base.WriterBase):
             has_velocities = True
 
         features = {}
-        with util.openany(self.filename, 'wt') as self.f:
-            self.f.write('LAMMPS data file via MDAnalysis and mdinterface\n')
-            self.f.write('\n')
-            self.f.write('{:>12d}  atoms\n'.format(len(atoms)))
+        with util.openany(self.filename, "wt") as self.f:
+            self.f.write("LAMMPS data file via MDAnalysis and mdinterface\n")
+            self.f.write("\n")
+            self.f.write("{:>12d}  atoms\n".format(len(atoms)))
 
-            attrs = [('bond', 'bonds'), ('angle', 'angles'),
-                ('dihedral', 'dihedrals'), ('improper', 'impropers')]
+            attrs = [
+                ("bond", "bonds"),
+                ("angle", "angles"),
+                ("dihedral", "dihedrals"),
+                ("improper", "impropers"),
+            ]
 
             for btype, attr_name in attrs:
                 try:
                     features[btype] = atoms.__getattribute__(attr_name)
-                    self.f.write('{:>12d}  {}\n'.format(len(features[btype]),
-                                                        attr_name))
+                    self.f.write(
+                        "{:>12d}  {}\n".format(len(features[btype]), attr_name)
+                    )
                     features[btype] = features[btype].atomgroup_intersection(
-                                        atoms, strict=True)
+                        atoms, strict=True
+                    )
                 except:
                     pass
 
-            self.f.write('\n')
-            
+            self.f.write("\n")
+
             ntypes = len(set(atoms.types))
-            self.f.write('{:>12d}  atom types\n'.format(ntypes))
+            self.f.write("{:>12d}  atom types\n".format(ntypes))
 
             for btype, attr in features.items():
-                self.f.write('{:>12d}  {} types\n'.format(len(attr.types()),
-                                                          btype))
+                self.f.write("{:>12d}  {} types\n".format(len(attr.types()), btype))
 
             self._write_dimensions(atoms.dimensions)
 

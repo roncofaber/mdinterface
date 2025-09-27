@@ -10,7 +10,7 @@ from typing import Optional
 def setup_logging(
     level: str = "INFO",
     log_file: Optional[Path] = None,
-    format_string: Optional[str] = None
+    format_string: Optional[str] = None,
 ) -> None:
     """Configure logging for mdinterface package.
 
@@ -29,9 +29,7 @@ def setup_logging(
     >>> setup_logging(level="INFO", log_file=Path("mdinterface.log"))
     """
     if format_string is None:
-        format_string = (
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        )
+        format_string = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
     # Configure root logger
     logging_config = {

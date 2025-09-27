@@ -24,7 +24,7 @@ structure mol_{}.pdb
     resnumbers  2
 end structure
             """
-            
+
 fix_place = """
 structure mol_{}.pdb
     number      1

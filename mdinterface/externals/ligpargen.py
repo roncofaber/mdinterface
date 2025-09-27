@@ -6,18 +6,20 @@ Created on Tue Jan 28 19:43:33 2025
 @author: roncofaber
 """
 
-# repo
-from mdinterface.io.read import read_lammps_data_file
-
 # not repo
 import os
-import ase
-import ase.io
 import random
 import shutil
 import subprocess
 
-#%%
+import ase
+import ase.io
+
+# repo
+from mdinterface.io.read import read_lammps_data_file
+
+# %%
+
 
 # helper folder to cleanup mess
 def cleanup(path, check_file):
@@ -39,6 +41,7 @@ def cleanup(path, check_file):
     else:
         print(f"{path} is neither a file nor a directory")
 
+
 # main ligpargen driver
 def run_ligpargen(system, charge=None):
     """
@@ -50,30 +53,37 @@ def run_ligpargen(system, charge=None):
     Returns:
     ase.Atoms: The atoms object from the generated lammps file.
     """
-    
+
     if "BOSSdir" not in os.environ:
         mdint = os.environ["MDINT_CONFIG_DIR"]
         print("BOSS was NOT found. Please either:")
         print("os.environ['BOSSdir'] = '/path/to/your/boss'")
         print("add 'BOSSdir = /path/to/your/boss' in [settings] in the")
         print(f"{mdint}/config.ini file.")
-        
+
     # write file and run ligpargen
     random_number = random.randint(10000000, 99999999)
     folder_name = f"test_{random_number}"
     os.makedirs(folder_name, exist_ok=True)
-    
+
     ase.io.write(f"{random_number}.xyz", system)
-    
+
     # define ligpargen command
     if charge is None:
-        ligpargen_command = f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -cgen CM1A"
+        ligpargen_command = (
+            f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -cgen CM1A"
+        )
     else:
         ligpargen_command = f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -c {charge} -cgen CM1A"
 
     try:
-        subprocess.run(ligpargen_command, shell=True, check=True,
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(
+            ligpargen_command,
+            shell=True,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
     except subprocess.CalledProcessError as e:
         print(f"An error occurred while running the command: {e}")
         # cleanup stuff
@@ -82,10 +92,11 @@ def run_ligpargen(system, charge=None):
         raise
 
     system, atoms, bonds, angles, dihedrals, impropers = read_lammps_data_file(
-        f"{folder_name}/{random_number}.lammps.lmp")
-    
+        f"{folder_name}/{random_number}.lammps.lmp"
+    )
+
     # cleanup stuff
     cleanup(folder_name, f"{random_number}")
     os.remove(f"{random_number}.xyz")
-    
+
     return system, atoms, bonds, angles, dihedrals, impropers

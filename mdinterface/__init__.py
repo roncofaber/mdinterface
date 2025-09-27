@@ -6,19 +6,20 @@ Initially developed to construct electrolyte/electrode interfaces, it is also we
 
 """
 
-__version__ = '1.3.0'
-__date__ = '17 Jul. 2025'
-__author__ = 'Fabrice Roncoroni'
-__all__ = ['SimulationBox', "Specie", "Polymer", "setup_logging"]
+__version__ = "1.3.0"
+__date__ = "17 Jul. 2025"
+__author__ = "Fabrice Roncoroni"
+__all__ = ["SimulationBox", "Specie", "Polymer", "setup_logging"]
+
+# Load configuration file
+from .config import load_config
+from .core.polymer import Polymer
+from .core.specie import Specie
 
 # Setup logging first
 from .logging_config import setup_logging
 
 # Import main classes
 from .simulationbox import SimulationBox
-from .core.specie import Specie
-from .core.polymer import Polymer
 
-# Load configuration file
-from .config import load_config
 load_config()
