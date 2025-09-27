@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 19 13:58:43 2024
+Specie module for mdinterface package.
 
-@author: roncofaber
+This module provides the Specie class for representing molecular species
+with their topology, force field parameters, and properties.
+
+Author: Fabrice Roncoroni
+Created: Fri Apr 19 13:58:43 2024
 """
+
+from __future__ import annotations
+
+import copy
+import logging
+from typing import Dict, List, Optional, Tuple, Union, Any
 
 import ase
 import ase.build
@@ -12,30 +22,111 @@ import ase.visualize
 from ase.data import vdw_radii
 from ase.data.colors import jmol_colors
 import MDAnalysis as mda
+import matplotlib.pyplot as plt
+import networkx as nx
+import numpy as np
+from numpy.typing import NDArray
 
 import mdinterface.utils.map as pmap
 from mdinterface.core.topology import Atom
 from mdinterface.io.read import read_lammps_data_file
 from mdinterface.utils.auxiliary import as_list, find_smallest_missing, round_list_to_sum
 from mdinterface.externals import run_ligpargen, run_OBChargeModel, calculate_RESP_charges
-from mdinterface.utils.graphs import molecule_to_graph, find_unique_paths_of_length,\
-    find_improper_idxs,find_relevant_distances, find_atom_types
+from mdinterface.utils.graphs import (
+    molecule_to_graph,
+    find_unique_paths_of_length,
+    find_improper_idxs,
+    find_relevant_distances,
+    find_atom_types
+)
 from mdinterface.utils.draw import draw_bond_markers
 
-import copy
-import numpy as np
-import networkx as nx
-
-import matplotlib.pyplot as plt
+# Setup logging
+logger = logging.getLogger(__name__)
 
 #%%
 
-class Specie(object):
+class Specie:
+    """Molecular species with topology and force field parameters.
+
+    The Specie class represents a molecular entity with complete topology
+    information including atoms, bonds, angles, dihedrals, and force field
+    parameters. It provides methods for force field parameter generation,
+    charge calculation, and conversion to various formats.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms or str, optional
+        Atomic structure as ASE Atoms object or filename to read from
+    charges : array-like, optional
+        Atomic charges
+    atom_types : array-like, optional
+        Atom type identifiers
+    bonds : array-like, optional
+        Bond connectivity information
+    angles : array-like, optional
+        Angle topology information
+    dihedrals : array-like, optional
+        Dihedral topology information
+    impropers : array-like, optional
+        Improper dihedral topology information
+    lj : dict, optional
+        Lennard-Jones parameters
+    cutoff : float, default=1.0
+        Cutoff distance for bond detection
+    name : str, optional
+        Name identifier for the species
+    lammps_data : str, optional
+        Path to LAMMPS data file to read
+    fix_missing : bool, default=False
+        Whether to automatically fix missing topology
+    chg_scaling : float, default=1.0
+        Scaling factor for charges
+    pbc : bool, default=False
+        Whether to use periodic boundary conditions
+    ligpargen : bool, default=False
+        Whether to use LigParGen for force field generation
+    tot_charge : int, default=0
+        Total molecular charge
+    prune_z : bool, default=False
+        Whether to remove atoms with zero coordinates
+
+    Attributes
+    ----------
+    atoms : ase.Atoms
+        Atomic structure
+    atom_types : List[Atom]
+        List of atom type objects
+    bonds : List
+        Bond connectivity
+    angles : List
+        Angle definitions
+    dihedrals : List
+        Dihedral definitions
+    impropers : List
+        Improper dihedral definitions
+    """
     
-    def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
-                 angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
-                 name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
-                 pbc=False, ligpargen=False, tot_charge=0, prune_z=False):
+    def __init__(
+        self,
+        atoms: Optional[Union[ase.Atoms, str]] = None,
+        charges: Optional[NDArray[np.float64]] = None,
+        atom_types: Optional[List[Atom]] = None,
+        bonds: Optional[List] = None,
+        angles: Optional[List] = None,
+        dihedrals: Optional[List] = None,
+        impropers: Optional[List] = None,
+        lj: Dict[str, Any] = None,
+        cutoff: float = 1.0,
+        name: Optional[str] = None,
+        lammps_data: Optional[str] = None,
+        fix_missing: bool = False,
+        chg_scaling: float = 1.0,
+        pbc: bool = False,
+        ligpargen: bool = False,
+        tot_charge: int = 0,
+        prune_z: bool = False,
+    ) -> None:
         
         # store int. variables
         self.cutoff = cutoff
