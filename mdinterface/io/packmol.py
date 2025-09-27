@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Nov 22 13:57:02 2023
+Packmol integration utilities.
 
-@author: roncoroni
+Template strings and utilities for generating Packmol input files
+to pack molecules into simulation boxes.
+
+Author: Fabrice Roncoroni
+Created: 2023-11-22
 """
 
 

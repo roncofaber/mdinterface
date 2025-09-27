@@ -1,7 +1,13 @@
-# utils/__init__.py
-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-utils: Utility functions and helpers.
+Utilities module for mdinterface package.
+
+Provides utility functions and helper modules for data manipulation,
+graph operations, mapping functions, and other common operations.
+
+Author: Fabrice Roncoroni
+Created: 2024-04-12
 """
 
 from .auxiliary import *

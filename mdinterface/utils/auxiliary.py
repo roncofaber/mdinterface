@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 12 14:04:43 2024
+Auxiliary utility functions for mdinterface.
 
-@author: roncofaber
+Provides helper functions for data manipulation, atomic mass/symbol conversion,
+list operations, and atom indexing utilities.
+
+Author: Fabrice Roncoroni
+Created: 2024-04-12
 """
 
 import collections
@@ -44,7 +48,7 @@ def mass2symbol(mass, possible_symbols, tolerance=0.1):
     if min_diff <= tolerance:
         return closest_symbol
     else:
-        raise "Could NOT guess atom type."
+        raise ValueError("Could NOT guess atom type.")
 
 
 def label_to_element(atostr, atomss):
@@ -179,20 +183,55 @@ def same_rev_check(list1, list2):
 
 
 def round_list_to_sum(lst, target_sum, decimals=3):
+    """
+    Round a list of numbers to specified decimals while preserving the target sum.
+
+    This algorithm solves the common problem in charge assignment where individual
+    charges need to be rounded but must sum to the correct total charge. It uses
+    a greedy approach to distribute rounding errors optimally.
+
+    Algorithm:
+    1. Round all values normally
+    2. Calculate total rounding error
+    3. Distribute error by adjusting values with largest fractional parts first
+    4. This minimizes the impact on individual values while ensuring exact sum
+
+    Parameters
+    ----------
+    lst : list of float
+        Values to round (e.g., atomic charges)
+    target_sum : float
+        Required sum after rounding (e.g., total molecular charge)
+    decimals : int, default=3
+        Number of decimal places for rounding
+
+    Returns
+    -------
+    list of float
+        Rounded values that sum exactly to target_sum
+    """
+    # Initial rounding - may not sum to target due to rounding errors
     rounded_list = [round(x, decimals) for x in lst]
     current_sum = sum(rounded_list)
     difference = target_sum - current_sum
 
-    # Sort the list by the decimal part to minimize the adjustment impact
+    # Sort indices by fractional part (largest first) to minimize adjustment impact
+    # Values with larger fractional parts are better candidates for adjustment
     sorted_indices = sorted(
         range(len(lst)), key=lambda i: lst[i] - rounded_list[i], reverse=True
     )
 
+    # Distribute the rounding error across values
     for i in sorted_indices:
+        # Stop when difference is negligible (smaller than rounding precision)
         if abs(difference) < 10 ** (-(decimals + 1)):
             break
+
+        # Calculate adjustment needed
         adjustment = round(difference, decimals)
         new_value = round(rounded_list[i] + adjustment, decimals)
+
+        # Apply adjustment if it actually changes the value
         if new_value != rounded_list[i]:
             rounded_list[i] = new_value
             difference -= adjustment

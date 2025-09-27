@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb  3 15:39:52 2025
+Graph-based molecular analysis utilities.
 
-@author: roncofaber
+Functions for working with NetworkX graphs to analyze molecular topology,
+find atom types, identify bonding patterns, and extract structural information.
+
+Author: Fabrice Roncoroni
+Created: 2025-02-03
 """
 
 # not repo
@@ -44,47 +48,74 @@ def get_nth_neighbors(graph, start_node, n):
 
 
 def molecule_to_graph(molecule, cutoff_scale=1.0):
+    """
+    Convert an ASE Atoms object to a NetworkX graph representing molecular connectivity.
 
-    # Generate cutoff
+    This function creates a graph where atoms are nodes and bonds are edges,
+    automatically detecting bonds based on distance criteria. Special handling
+    is included for polymer systems with cross-monomer connections.
+
+    Parameters
+    ----------
+    molecule : ase.Atoms
+        The molecular system to convert
+    cutoff_scale : float, default=1.0
+        Scaling factor for bond detection cutoffs
+
+    Returns
+    -------
+    networkx.Graph
+        Graph with atoms as nodes and bonds as edges
+    """
+
+    # Generate distance cutoffs for bond detection
+    # ASE provides natural cutoffs based on covalent radii
     cutOff = cutoff_scale * np.array(neighborlist.natural_cutoffs(molecule))
-    ignore_atoms = ""  # Assuming ignore_atoms is an empty string
+    ignore_atoms = ""  # Could be used to exclude certain atom types
     cutOff[atoms_to_indexes(molecule, ignore_atoms)] = 0
 
-    # Calculate neighbor list
+    # Build neighbor list using distance-based criteria
     neighborList = neighborlist.NeighborList(
-        cutOff, self_interaction=False, bothways=True
+        cutOff,                    # Distance cutoffs per atom type
+        self_interaction=False,    # Don't include atom with itself
+        bothways=True             # Ensure symmetric neighbor relationships
     )
     neighborList.update(molecule)
 
-    # Check if it's a polymer
+    # Check if this is a polymer system with special connectivity rules
     is_polymer = "is_connected" in molecule.arrays
 
-    # Generate graph
+    # Create empty graph and add all atoms as nodes
     G = nx.Graph()
 
+    # Add nodes with chemical element information
     symbols = molecule.get_chemical_symbols()
     node_attr = []
     for ii in range(len(molecule)):
+        # Each node stores its atomic number and element symbol
         na = (ii, {"element": symbols[ii]})
         node_attr.append(na)
 
     G.add_nodes_from(node_attr)
 
-    # Iterate through neighbors to add edges
+    # Add edges (bonds) based on neighbor list
     for atom_index, bonded_atoms in enumerate(neighborList.nl.neighbors):
         for neighbor_index in bonded_atoms:
+            # Special polymer handling: respect monomer boundaries
             if is_polymer:
-                # Skip if the atoms belong to different monomers and are not connected
+                # Check if atoms are in different monomers
                 if (
                     molecule.arrays["mon_id"][atom_index]
                     != molecule.arrays["mon_id"][neighbor_index]
                 ):
+                    # Only connect cross-monomer if both atoms are marked as connectable
                     if not (
                         molecule.arrays["is_connected"][atom_index]
                         and molecule.arrays["is_connected"][neighbor_index]
                     ):
-                        continue
-            # Add edge between the atoms
+                        continue  # Skip this bond
+
+            # Add bond as undirected edge
             G.add_edge(atom_index, neighbor_index)
 
     return G

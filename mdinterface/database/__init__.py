@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jan 15 11:40:37 2025
+Database module for mdinterface package.
 
-@author: roncofaber
+Provides access to predefined molecular structures, force field parameters,
+and material databases including metals, ions, and common molecules.
+
+Author: Fabrice Roncoroni
+Created: 2025-01-15
 """
 
 from .graphene import Graphene

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jan 28 19:43:33 2025
+LigParGen integration for force field generation.
 
-@author: roncofaber
+Interface to LigParGen server for generating OPLS-AA force field parameters
+for small molecules and ligands.
+
+Author: Fabrice Roncoroni
+Created: 2025-01-28
 """
 
 # not repo

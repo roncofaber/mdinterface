@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 19 14:05:39 2024
+Topology classes for molecular systems.
 
-@author: roncofaber
+Defines classes for representing molecular topology elements including atoms,
+bonds, angles, dihedrals, and impropers with their associated parameters.
+
+Author: Fabrice Roncoroni
+Created: 2024-04-19
 """
 
 import copy
@@ -77,7 +81,8 @@ class Atom(Topology):
 
     @property
     def extended_label(self):
-        return self._label + "_" + self.resname
+        resname = self.resname or ""
+        return f"{self._label}_{resname}" if resname else self._label
 
     def __repr__(self):
         return (
@@ -218,13 +223,21 @@ class Dihedral(Topology):
         )
 
     def write(self, fout):
+        """Write dihedral coefficients to LAMMPS data file format."""
+        # Create atom type string for comment
         atype = "{}-{}-{}-{}".format(*self.symbols)
+
+        # Format coefficient values - handle both 4 and 5 parameter cases
         if self._values[-1] is not None:
+            # Full 5-parameter format (A1, A2, A3, A4, A5)
             value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(
                 *self.values
             )
         else:
+            # 4-parameter format (A1, A2, A3, A4) - omit A5
             value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*self.values[:-1])
+
+        # Write in LAMMPS format: ID  coefficients  # comment
         fout.write(
             "{:>5}    {}  #  {:<8} | {}\n".format(self.id, value, atype, self.resname)
         )

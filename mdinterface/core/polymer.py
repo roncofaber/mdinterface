@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb  3 15:00:01 2025
+Polymer building and manipulation utilities.
 
-@author: roncofaber
+Classes and functions for creating, connecting, and manipulating
+polymer structures with proper topology handling.
+
+Author: Fabrice Roncoroni
+Created: 2025-02-03
 """
 
 import random

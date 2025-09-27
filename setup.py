@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Aug 16 17:07:19 2024
+Setup script for mdinterface package.
 
-@author: roncofaber
+Installation and packaging configuration for the mdinterface
+molecular dynamics interface building package.
+
+Author: Fabrice Roncoroni
+Created: 2024-08-16
 """
 
 from setuptools import setup

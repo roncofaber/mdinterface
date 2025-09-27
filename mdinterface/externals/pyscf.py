@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb 24 18:12:07 2025
+PySCF integration for RESP charge calculation.
 
-@author: roncofaber
+Interface to PySCF library for performing quantum chemical calculations
+and RESP (Restrained Electrostatic Potential) charge fitting.
+
+Author: Fabrice Roncoroni
+Created: 2025-02-24
 """
 
 import numpy as np

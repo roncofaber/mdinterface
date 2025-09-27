@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Oct 28 11:30:04 2024
+Topology mapping utilities.
 
-@author: roncofaber
+Functions for mapping and organizing molecular topology elements
+including bonds, angles, dihedrals, and impropers.
+
+Author: Fabrice Roncoroni
+Created: 2024-10-28
 """
 
 # not repo

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Config file reader blatantly copied from ASE
+Configuration file reader for mdinterface.
 
-@author: roncofaber
+Handles loading and parsing of configuration files for the mdinterface package.
+Based on ASE's configuration system.
+
+Author: Fabrice Roncoroni
+Created: 2024-04-19
 """
 
 import configparser

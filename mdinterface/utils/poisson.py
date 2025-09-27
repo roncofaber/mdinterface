@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri May 17 12:01:53 2024
+Poisson equation utilities.
 
-@author: roncofaber
+Functions for solving Poisson equations and electrostatic calculations
+in molecular dynamics simulations.
+
+Author: Fabrice Roncoroni
+Created: 2024-05-17
 """
 
 import copy

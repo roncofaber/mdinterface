@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jul 14 18:55:16 2025
+Molecular visualization utilities.
 
-@author: roncofaber
+Functions for drawing and visualizing molecular structures,
+bonds, and topology graphs using matplotlib.
+
+Author: Fabrice Roncoroni
+Created: 2025-07-14
 """
 
 import matplotlib.pyplot as plt

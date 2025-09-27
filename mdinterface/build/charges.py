@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb  3 14:50:47 2025
+Charge calculation utilities.
 
-@author: roncofaber
+Functions for calculating and assigning atomic charges using various
+methods and charge models for molecular dynamics simulations.
+
+Author: Fabrice Roncoroni
+Created: 2025-02-03
 """
 

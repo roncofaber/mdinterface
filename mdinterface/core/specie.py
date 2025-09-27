@@ -7,7 +7,7 @@ This module provides the Specie class for representing molecular species
 with their topology, force field parameters, and properties.
 
 Author: Fabrice Roncoroni
-Created: Fri Apr 19 13:58:43 2024
+Created: 2024-04-19
 """
 
 from __future__ import annotations
@@ -137,49 +137,52 @@ class Specie:
         prune_z: bool = False,
     ) -> None:
 
-        # store int. variables
-        self.cutoff = cutoff
-        self.tot_charge = tot_charge
+        # Store internal variables for bond detection and charge tracking
+        self.cutoff = cutoff  # Distance cutoff for automatic bond detection
+        self.tot_charge = tot_charge  # Total molecular charge for validation
 
-        # if file provided, read it
+        # Initialize molecular structure from different sources
         if lammps_data is not None:
+            # Read complete topology from LAMMPS data file
             atoms, atom_types, bonds, angles, dihedrals, impropers = (
                 read_lammps_data_file(lammps_data)
             )
         else:
-            # read/update atoms atoms
+            # Initialize from ASE Atoms object or molecule name/file
             atoms, atom_types = self._read_atoms(
                 atoms, charges, chg_scaling=chg_scaling, pbc=pbc
             )
 
-        # run ligpargen to calculate parameters
+        # Auto-generate force field parameters using LigParGen if requested
         if ligpargen:
+            # This will override any existing topology with OPLS-AA parameters
             atoms, atom_types, bonds, angles, dihedrals, impropers = run_ligpargen(
                 atoms, charge=tot_charge
             )
 
-        # assign name
+        # Set residue name for use in simulation packages
         if name is None:
-            name = atoms.get_chemical_formula()
+            name = atoms.get_chemical_formula()  # Use chemical formula as default
+        # Packmol requires residue names ≤ 4 characters
         if len(name) > 4:
             print("ATTENTION: resname for Specie could be misleading")
-            print("You wan the name to be 4 characters long otherwise packmol")
+            print("You want the name to be 4 characters long otherwise packmol")
             print("will have problems...")
-        self.resname = name[:4]
+        self.resname = name[:4]  # Truncate to 4 characters for compatibility
 
-        # set up atoms and generate graph of specie
+        # Create molecular graph for topology analysis and bond detection
         self.set_atoms(atoms, cutoff, prune_z=prune_z)
 
-        # read atom_types from LJ
+        # Generate atom types from Lennard-Jones parameters if not provided
         if atom_types is None:
             atom_types = self._atom_types_from_lj(lj)
 
-        # set up internal topology attributes
+        # Build internal topology representation with proper ID assignment
         self._setup_topology(
             atom_types, bonds, angles, dihedrals, impropers, fix_missing=fix_missing
         )
 
-        # initialize topology info
+        # Update topology IDs and ensure consistency across all elements
         self._update_topology()
 
         return
@@ -196,7 +199,7 @@ class Specie:
         if isinstance(atoms, str):
             try:
                 atoms = ase.io.read(atoms)
-            except:
+            except Exception:
                 atoms = ase.build.molecule(atoms)
         elif isinstance(atoms, ase.Atoms):
             atoms = atoms.copy()
@@ -224,11 +227,18 @@ class Specie:
     def _setup_topology(
         self, atoms, bonds, angles, dihedrals, impropers, fix_missing=False
     ):
+        """
+        Set up internal topology representation from input parameters.
 
-        # Store atom_types as instance attribute
+        This method processes and organizes all topology elements (atoms, bonds, angles,
+        dihedrals, impropers) into internal data structures with proper mapping and ID assignment.
+        """
+
+        # Store atom_types as instance attribute for external access
         self.atom_types = atoms
 
-        # map list of inputs
+        # Convert all inputs to lists and create mappings for topology elements
+        # The mapping process creates unique types and assigns indices for each element
         atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
         bonds_list, bond_map, bond_ids = pmap.map_bonds(as_list(bonds))
         angles_list, angle_map, angle_ids = pmap.map_angles(as_list(angles))
@@ -239,25 +249,30 @@ class Specie:
             as_list(impropers)
         )
 
-        self._btype = bonds_list
-        self._atype = angles_list
-        self._dtype = dihedrals_list
-        self._itype = impropers_list
-        self._stype = atoms_list
+        # Store topology type definitions (unique parameter sets)
+        self._btype = bonds_list      # Bond types with kr, r0 parameters
+        self._atype = angles_list     # Angle types with kr, theta0 parameters
+        self._dtype = dihedrals_list  # Dihedral types with A1-A5 parameters
+        self._itype = impropers_list  # Improper types with K, d, n parameters
+        self._stype = atoms_list      # Atom types with eps, sig parameters
 
-        self._smap = atom_map
-        self._bmap = bond_map
-        self._amap = angle_map
-        self._dmap = dihedral_map
-        self._imap = improper_map
+        # Store mappings from atom combinations to topology type indices
+        # Used to assign topology types to specific atom combinations in the molecule
+        self._smap = atom_map      # Maps atom labels to atom type indices
+        self._bmap = bond_map      # Maps (atom1, atom2) to bond type indices
+        self._amap = angle_map     # Maps (atom1, atom2, atom3) to angle type indices
+        self._dmap = dihedral_map  # Maps (atom1, atom2, atom3, atom4) to dihedral type indices
+        self._imap = improper_map  # Maps improper center atom to improper type indices
 
-        self._sids = atom_ids
-        self._bids = bond_ids
-        self._aids = angle_ids
-        self._dids = dihedral_ids
-        self._iids = improper_ids
+        # Store atom identifiers for topology assignment
+        self._sids = atom_ids      # Atom labels for each atom in the molecule
+        self._bids = bond_ids      # Bond type IDs
+        self._aids = angle_ids     # Angle type IDs
+        self._dids = dihedral_ids  # Dihedral type IDs
+        self._iids = improper_ids  # Improper type IDs
 
-        if fix_missing:  # ugly but seems to work
+        # Auto-generate missing topology interactions if requested
+        if fix_missing:  # Generate missing bonds/angles/dihedrals from molecular graph
 
             mss_bnd = pmap.generate_missing_interactions(self, "bonds")
             mss_ang = pmap.generate_missing_interactions(self, "angles")
@@ -580,7 +595,7 @@ class Specie:
 
         try:
             from libarvo import molecular_vs
-        except:
+        except ImportError:
             raise ImportError("libarvo NOT found. Install it.")
 
         centers = self.atoms.get_positions()

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb  3 15:34:20 2025
+OpenBabel integration for charge calculation.
 
-@author: roncofaber
+Interface to OpenBabel library for calculating atomic charges using
+various charge models including EEM, MMFF94, Gasteiger, and others.
+
+Author: Fabrice Roncoroni
+Created: 2025-02-03
 """
 
 import os
@@ -25,8 +29,9 @@ def run_OBChargeModel(atoms, charge_type="eem"):
 
     try:
         import openbabel as ob
-    except:
+    except ImportError:
         print("openbabel NOT found. Install it.")
+        raise
 
     # Create an OBConversion object
     obConversion = ob.OBConversion()

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jan 14 10:23:57 2025
+Simulation box building utilities.
 
-@author: roncofaber
+Functions for creating molecular dynamics simulation boxes with solvents,
+ions, interfaces, and other components using Packmol integration.
+
+Author: Fabrice Roncoroni
+Created: 2025-01-14
 """
 
 from mdinterface.io.packmol import header, box_place, fix_place
@@ -113,7 +117,7 @@ def populate_box(volume, instructions, input_file="input_packmol.in",
                 mol = mol.to_universe()
             
             else:
-                raise "Wrong instructions"
+                raise ValueError("Wrong instructions")
             
             # write tmp pdb file and store info
             mol.atoms.write("mol_{}.pdb".format(cc))
@@ -124,12 +128,12 @@ def populate_box(volume, instructions, input_file="input_packmol.in",
         subprocess.run(['packmol < {} > packmol.log'.format(input_file)],
                        shell=True, check=True, text=True)
 
-    except:
+    except subprocess.CalledProcessError:
         print("WARNING: packmol might not have worked, check system.")
-    
+
     try:
         universe = mda.Universe(output_file)
-    except:
+    except Exception:
         universe = None
 
     # remove temp mol files and packmol files
@@ -166,17 +170,42 @@ def make_interface_slab(interface_uc, xsize, ysize, layers=1):
     
     return slab
 
-#THANKS CHATGPT (but mostly me tbh)
 def populate_with_ions(ions, nions, volume, ion_pos=False, conmodel=None):
+    """
+    Generate ion placement instructions for Packmol based on various positioning strategies.
+
+    This function implements several algorithms for placing ions in simulation boxes:
+    - Random placement with collision avoidance
+    - Concentration profile following (for modeling electrolyte interfaces)
+    - Fixed positioning strategies (center, left, random)
+
+    The collision avoidance algorithm ensures ions don't overlap by maintaining
+    minimum separation distances based on molecular radii.
+    """
+
     def place_ion(ion, volume, ion_coords, ion_radii, zpos=None, max_attempts=100):
+        """
+        Place a single ion at a non-overlapping position using Monte Carlo approach.
+
+        Uses rejection sampling to find valid positions that don't overlap with
+        existing ions, accounting for molecular radii and a safety buffer.
+        """
         ion_radius = ion.estimate_specie_radius()
+
+        # Monte Carlo placement with collision detection
         for _ in range(max_attempts):
+            # Generate random position with boundary buffer
             new_coord = ion_radius + 1 + np.random.rand(3) * (volume - 2 * (ion_radius + 1))
+
+            # Override z-position if specified (for concentration profiles)
             if zpos is not None:
                 new_coord[2] = zpos
-                
+
+            # Check for overlaps with existing ions
             if not ion_coords or np.all(np.linalg.norm(ion_coords - new_coord, axis=1) >= np.array(ion_radii) + ion_radius + 1):
-                return new_coord
+                return new_coord  # Valid position found
+
+        # Failed to place after all attempts
         print(f"Warning: Failed to place ion {ion} after {max_attempts} attempts")
         return None
 

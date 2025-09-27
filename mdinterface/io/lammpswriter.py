@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Oct 25 15:03:47 2023
+LAMMPS data file writer.
 
-@author: roncoroni
+Writer class for generating LAMMPS data files from MDAnalysis Universe objects
+with support for atoms, masses, velocities, bonds, angles, dihedrals, and impropers.
+
+Author: Fabrice Roncoroni
+Created: 2023-10-25
 """
 
 import numpy as np
@@ -276,7 +280,7 @@ class DATAWriter(base.WriterBase):
                     features[btype] = features[btype].atomgroup_intersection(
                         atoms, strict=True
                     )
-                except:
+                except Exception:
                     pass
 
             self.f.write("\n")

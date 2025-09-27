@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct 22 17:17:30 2024
+Polymer building utilities.
 
-@author: roncofaber
+Functions for creating and manipulating polymer structures including
+chain building, monomer connections, and polymer topology generation.
+
+Author: Fabrice Roncoroni
+Created: 2024-10-22
 """
 
 import numpy as np

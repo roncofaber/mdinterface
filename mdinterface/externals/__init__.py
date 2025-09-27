@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jan 15 11:40:37 2025
+External library integrations for mdinterface.
 
-@author: roncofaber
+Interfaces to external libraries including LigParGen, OpenBabel,
+and PySCF for force field generation and charge calculations.
+
+Author: Fabrice Roncoroni
+Created: 2025-01-15
 """
 
 from .ligpargen import run_ligpargen

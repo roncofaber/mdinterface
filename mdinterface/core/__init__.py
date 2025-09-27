@@ -1,7 +1,13 @@
-# core/__init__.py
-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-core: Core functionalities including related components.
+Core module for mdinterface package.
+
+Provides core functionalities including species representation, topology
+definitions, and polymer building capabilities.
+
+Author: Fabrice Roncoroni
+Created: 2024-04-19
 """
 
 from .polymer import *

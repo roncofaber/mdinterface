@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct 24 15:14:41 2023
+Simulation box builder for molecular dynamics systems.
 
-@author: roncoroni
+Main module for creating layered simulation systems with interfaces, solvents,
+and solutes for molecular dynamics simulations. Supports complex multi-component
+systems with precise control over geometry and composition.
+
+Author: Fabrice Roncoroni
+Created: 2023-10-24
 """
 
 import shutil
@@ -229,7 +234,6 @@ class SimulationBox:
 
         return xsize, ysize, slab_depth
 
-    # main driver to generate a simulation box given instructions
     def make_simulation_box(
         self,
         xysize,
@@ -245,72 +249,101 @@ class SimulationBox:
         atom_style="full",
         write_coeff=True,
     ):
+        """
+        Main driver to generate a layered simulation box from component specifications.
 
-        # define approximate cross_section
+        This method assembles a complete simulation system by stacking layers according
+        to the provided instructions. Each layer can be a solvent, interface, or vacuum.
+
+        The assembly process:
+        1. Pre-process solid interfaces to determine actual cell dimensions
+        2. Build layers sequentially from bottom to top
+        3. Handle proper spacing and cell boundary conditions
+        4. Optionally write output files in LAMMPS format
+        """
+
+        # Validate input dimensions
         assert len(xysize) == 2, "'xysize' should have length of 2 [xsize, ysize]"
         xsize, ysize = xysize
 
-        # make slabs of solid stuff to find actual cross_section
+        # Phase 1: Pre-build all solid interfaces to determine actual system dimensions
+        # This is necessary because interface slabs may have slightly different dimensions
+        # than requested due to crystallographic constraints
         slabs = []
         for layer in layering:
             layer_type = layer["type"]
+            # Fill in default parameters for each layer type
             for k, v in default_params[layer_type].items():
                 layer.setdefault(k, v)
 
+            # Build interface slabs (solid phases) to determine true cell dimensions
             if layer_type in ["interface", "enderface", "miderface"]:
+                # Get the appropriate species for this interface type
                 tslab = getattr(self, "_" + layer["type"])
+                # Create properly sized slab with specified number of layers
                 tslab = make_interface_slab(
                     tslab, xsize, ysize, layers=layer["nlayers"]
                 )
                 slabs.append(tslab)
-                layer["slab"] = tslab
+                layer["slab"] = tslab  # Store for later use in assembly
 
-        # define ACTUAL cell boundaries
+        # Phase 2: Determine final cell boundaries from all solid components
+        # The actual dimensions may differ from requested due to interface constraints
         xsize, ysize = self._define_cell_boundaries(xsize, ysize, slabs)
 
-        # build cake, layer by layer - starting from nothing
-        system = None
-        zdim = 0
+        # Phase 3: Assemble the complete system layer by layer
+        # Start with empty system and build upward in the z-direction
+        system = None  # Will hold the combined system
+        zdim = 0       # Current z-position for next layer
+        # Process each layer specification in order (bottom to top)
         for layer in layering:
-
             layer_type = layer["type"]
 
+            # Handle liquid/solution layers (solvent + ions)
             if layer_type == "solvent":
-                zsize = layer["zdim"]
-                solv_rho = layer["rho"]
-                nions = layer["nions"]
-                concentration = layer["concentration"]
-                conmodel = layer["conmodel"]
-                ion_pos = layer["ion_pos"]
+                # Extract layer parameters
+                zsize = layer["zdim"]           # Thickness of this layer
+                solv_rho = layer["rho"]         # Solvent density (g/cm³)
+                nions = layer["nions"]          # Number of ions (if specified)
+                concentration = layer["concentration"]  # Ion concentration (M)
+                conmodel = layer["conmodel"]    # Concentration profile model
+                ion_pos = layer["ion_pos"]      # Ion positioning strategy
 
-                # make solvent box
+                # Create solution box with solvent and ions using Packmol
                 solvent = make_solvent_box(
-                    self.species,
-                    self.solvent,
-                    self._solute,
-                    [xsize, ysize, zsize],
-                    solv_rho,
-                    nions,
-                    concentration,
-                    conmodel,
-                    ion_pos,
+                    self.species,    # All available species for lookups
+                    self.solvent,    # Solvent molecule species
+                    self._solute,    # List of ion/solute species
+                    [xsize, ysize, zsize],  # Box dimensions
+                    solv_rho,        # Target density
+                    nions,           # Ion counts
+                    concentration,   # Alternative to nions
+                    conmodel,        # Concentration gradient model
+                    ion_pos,         # Ion placement strategy
                 )
 
-                # add component
+                # Add this layer to the growing system with proper spacing
                 system, zdim = add_component(system, solvent, zdim, padding=padding)
 
+            # Handle solid interface layers (electrodes, surfaces, membranes)
             elif layer_type in ["interface", "enderface", "miderface"]:
+                # Convert pre-built slab to MDAnalysis Universe format
                 tslab = layer["slab"].to_universe(
-                    layered=layered, match_cell=match_cell, xydim=[xsize, ysize]
+                    layered=layered,           # Organize atoms by layers
+                    match_cell=match_cell,     # Stretch to match system cell
+                    xydim=[xsize, ysize]       # Target xy dimensions
                 )
-                # add the slab
+                # Add solid slab to system stack
                 system, zdim = add_component(system, tslab, zdim, padding=padding)
 
+            # Handle vacuum regions (empty space)
             elif layer_type == "vacuum":
+                # Simply advance z-position without adding atoms
                 zdim += layer["zdim"]
 
-        # update my system's dimensions
-        system.dimensions = [xsize, ysize, zdim] + [90, 90, 90]  # TODO not like this
+        # Set final simulation cell dimensions
+        # Note: assumes orthorhombic cell (90° angles) - could be generalized
+        system.dimensions = [xsize, ysize, zdim] + [90, 90, 90]
 
         # move of half unit along z
         if center_electrode:
@@ -348,7 +381,7 @@ class SimulationBox:
             for attribute in ["bonds", "angles", "dihedrals", "impropers"]:
                 try:
                     system.del_TopologyAttr(attribute)
-                except:
+                except Exception:
                     pass
 
         # first write data file
@@ -414,7 +447,7 @@ class SimulationBox:
 
             fout.write(
                 "{:>5}    {:>10.6f}    {:>10.6f}  #  {:<5} | {}\n".format(
-                    bond.id, kr, r0, btype, bond.resname
+                    bond.id, kr, r0, btype, bond.resname or ""
                 )
             )
 
@@ -434,7 +467,7 @@ class SimulationBox:
 
             fout.write(
                 "{:>5}    {:>10.6f}    {:>10.6f}  #  {:<8} | {}\n".format(
-                    angle.id, kr, theta0, atype, angle.resname
+                    angle.id, kr, theta0, atype, angle.resname or ""
                 )
             )
 
@@ -467,7 +500,7 @@ class SimulationBox:
 
             fout.write(
                 "{:>5}    {}  #  {:<2} | {}\n".format(
-                    improper.id, value, atype, improper.resname
+                    improper.id, value, atype, improper.resname or ""
                 )
             )
 
@@ -501,7 +534,7 @@ class SimulationBox:
         try:
             if system.atoms.charges is not None:
                 ase_system.set_initial_charges(system.atoms.charges)
-        except:
+        except Exception:
             pass
 
         return ase_system
@@ -532,15 +565,15 @@ class SimulationBox:
 
     @property
     def _species(self):
-        all_species = np.concatenate(
-            (
-                as_list(self._solvent),
-                as_list(self._solute),
-                as_list(self._interface),
-                as_list(self._enderface),
-                as_list(self._miderface),
-            )
-        ).tolist()
+        all_species = []
+        for component in [
+            self._solvent,
+            self._solute,
+            self._interface,
+            self._enderface,
+            self._miderface,
+        ]:
+            all_species.extend(as_list(component))
         return all_species
 
     def get_sorted_attribute(self, attribute):

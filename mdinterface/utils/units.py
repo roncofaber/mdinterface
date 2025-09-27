@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jul 23 09:35:05 2024
+Unit conversion utilities.
 
-@author: roncofaber
+Constants and conversion functions for working with different
+unit systems in molecular dynamics simulations.
+
+Author: Fabrice Roncoroni
+Created: 2024-07-23
 """
 
 from ase import units

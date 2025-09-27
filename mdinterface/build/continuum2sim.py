@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jan 14 10:34:26 2025
+Continuum to simulation concentration converter.
 
-@author: roncofaber
+Utilities for converting continuum concentration profiles to discrete
+ion distributions for molecular dynamics simulations.
+
+Author: Fabrice Roncoroni
+Created: 2025-01-14
 """
 
 from ase import units
