@@ -130,6 +130,7 @@ class Specie:
         
         # store int. variables
         self.cutoff = cutoff
+        self.tot_charge = tot_charge
         
         # if file provided, read it
         if lammps_data is not None:
@@ -173,6 +174,10 @@ class Specie:
     @staticmethod
     def _read_atoms(atoms, charges, chg_scaling=1.0, pbc=False):
         
+        # Check if atoms is None
+        if atoms is None:
+            raise ValueError("atoms parameter cannot be None")
+
         # initialize atoms obj
         if isinstance(atoms, str):
             try:
@@ -205,6 +210,9 @@ class Specie:
     def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers,
                         fix_missing=False):
         
+        # Store atom_types as instance attribute
+        self.atom_types = atoms
+
         # map list of inputs
         atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
         bonds_list, bond_map, bond_ids = pmap.map_bonds(as_list(bonds))
@@ -266,7 +274,11 @@ class Specie:
     
     # function to setup atom types
     def _atom_types_from_lj(self, lj):
-        
+
+        # Ensure lj is not None
+        if lj is None:
+            lj = {}
+
         # use function to retrieve IDs
         atom_type_ids, types_map = find_atom_types(self.graph, max_depth=1)
         
