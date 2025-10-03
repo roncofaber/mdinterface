@@ -25,7 +25,7 @@ class Polymer(Specie):
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
                  pbc=False, ligpargen=False, tot_charge=0, nrep=1, start_end_idxs=None,
                  target_distance=1.600, substitute=None, refine_charges=False,
-                 offset=False):
+                 offset=False, ending="H"):
         
         # initialize polymer stuff
         self._snippet_cache = {}
@@ -40,7 +40,7 @@ class Polymer(Specie):
                          chg_scaling, pbc, ligpargen, tot_charge)
         
         if refine_charges:
-            self.refine_charges(offset=offset)
+            self.refine_charges(offset=offset, ending=ending)
         
         return
     

@@ -70,15 +70,15 @@ def run_ligpargen(system, charge=None):
         ligpargen_command = f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -cgen CM1A"
     else:
         ligpargen_command = f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -c {charge} -cgen CM1A"
-
+        
     try:
         subprocess.run(ligpargen_command, shell=True, check=True,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
         print(f"An error occurred while running the command: {e}")
         # cleanup stuff
-        cleanup(folder_name, f"{random_number}")
-        os.remove(f"{random_number}.xyz")
+        # cleanup(folder_name, f"{random_number}")
+        # os.remove(f"{random_number}.xyz")
         raise
 
     system, atoms, bonds, angles, dihedrals, impropers = read_lammps_data_file(
