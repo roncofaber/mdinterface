@@ -23,7 +23,7 @@ class Polymer(Specie):
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
                  pbc=False, ligpargen=False, tot_charge=None, nrep=None,
-                 sequence=None, refine_charges=False, offset=False, ending="H"):
+                 sequence=None, refine_polymer=False, offset=False, ending="H"):
         
         # initialize polymer stuff
         self._snippet_cache = {}
@@ -31,7 +31,7 @@ class Polymer(Specie):
         # polymerize
         polymer = build_polymer(monomers, sequence=sequence, nrep=nrep)
         
-        # Initialize the parent class
+        # Initialize the parent class with polymerized monomers
         super().__init__(atoms=polymer, charges=charges, atom_types=atom_types,
                          bonds=bonds, angles=angles, dihedrals=dihedrals,
                          impropers=impropers, lj=lj, cutoff=cutoff, name=name,
@@ -39,63 +39,11 @@ class Polymer(Specie):
                          chg_scaling=chg_scaling, pbc=pbc, ligpargen=ligpargen,
                          tot_charge=tot_charge)
         
-        if refine_charges:
-            self.refine_charges(offset=offset, ending=ending)
+        if refine_polymer:
+            self.refine_polymer_topology(Nmax=12, offset=offset, ending=ending)
         
         return
     
-    def _find_rings(self, max_ring_size=8):
-        """
-        Find all rings in the molecular graph using NetworkX cycle detection.
-
-        Parameters:
-        max_ring_size (int): Maximum ring size to detect (default 8)
-
-        Returns:
-        list: List of rings, where each ring is a list of atom indices
-        """
-        import networkx as nx
-
-        rings = []
-        try:
-            # Find simple cycles (rings) in the graph
-            for cycle in nx.simple_cycles(self.graph):
-                if len(cycle) <= max_ring_size:
-                    rings.append(sorted(cycle))
-        except:
-            # Fallback: use minimum cycle basis for undirected graphs
-            try:
-                cycle_basis = nx.minimum_cycle_basis(self.graph)
-                for cycle in cycle_basis:
-                    if len(cycle) <= max_ring_size:
-                        rings.append(sorted(cycle))
-            except:
-                # If all else fails, return empty list
-                rings = []
-
-        return rings
-
-    def _get_rings_containing_atoms(self, atom_indices, max_ring_size=8):
-        """
-        Find all rings that contain any of the specified atoms.
-
-        Parameters:
-        atom_indices (list): List of atom indices to check
-        max_ring_size (int): Maximum ring size to detect
-
-        Returns:
-        list: List of rings containing any of the specified atoms
-        """
-        all_rings = self._find_rings(max_ring_size)
-        relevant_rings = []
-
-        atom_set = set(atom_indices)
-        for ring in all_rings:
-            if atom_set.intersection(set(ring)):
-                relevant_rings.append(ring)
-
-        return relevant_rings
-
     # return list of elements adjacent to a connection point
     def _get_connection_elements(self):
 

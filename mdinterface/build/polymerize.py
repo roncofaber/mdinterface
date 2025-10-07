@@ -13,6 +13,7 @@ import numpy as np
 import ase
 import ase.build
 from ase.data import atomic_numbers, covalent_radii
+from ase.calculators import lj
 
 #%%
 
@@ -107,46 +108,26 @@ def generate_spherical_points(n_samples):
     
     return np.array(points)
 
-def optimize_monomer_rotation_gradient(oligomer, monomer, x0, v1, max_iterations=50, learning_rate=0.1):
-    """
-    Optimize monomer rotation using gradient descent on overlap function.
-    """
-    best_monomer = monomer.copy()
-    best_score = calculate_overlap_score(oligomer, best_monomer)
 
-    current_monomer = monomer.copy()
+# def calculate_morse_energy(oligomer, monomer):
+    
+#     def my_nl(quantity, atoms, radius):
+#         rcut2 = 2.7
+        
+#         i1, i2, d, D = ase.neighborlist.neighbor_list('ijdD', atoms, rcut2)
+        
+#         # Step 2: Create a mask for filtering
+#         nmax = len(oligomer)
+#         mask = ~((i1 <= nmax) & (i2 <= nmax)) & ~((i1 >= nmax) & (i2 > nmax))
 
-    for iteration in range(max_iterations):
-        # Calculate gradient (torque direction)
-        gradient = calculate_overlap_gradient(oligomer, current_monomer, x0)
-        gradient_norm = np.linalg.norm(gradient)
+#         return (i1[mask], i2[mask], d[mask], D[mask])
 
-        if gradient_norm < 1e-6:  # Converged
-            break
+#     calc = ase.calculators.morse.MorsePotential(neighbor_list=my_nl, epsilon=1e-2)
+    
+#     atoms = oligomer+monomer
+#     atoms.calc = calc
 
-        # Normalize and apply small rotation in gradient direction
-        rotation_axis = gradient / gradient_norm
-        rotation_angle = learning_rate * gradient_norm
-
-        # Limit rotation angle to prevent overshooting
-        rotation_angle = min(rotation_angle, 0.2)  # Max ~11 degrees per step
-
-        test_monomer = current_monomer.copy()
-        test_monomer.rotate(rotation_axis, rotation_angle, center=x0)
-
-        test_score = calculate_overlap_score(oligomer, test_monomer)
-
-        if test_score < best_score:
-            best_score = test_score
-            best_monomer = test_monomer.copy()
-            current_monomer = test_monomer.copy()
-        else:
-            # Reduce learning rate if no improvement
-            learning_rate *= 0.8
-            if learning_rate < 1e-3:
-                break
-
-    return best_monomer
+#     return atoms.get_potential_energy()
 
 def optimize_monomer_rotation(oligomer, monomer, x0, v1, n_samples=3600):
     """
@@ -192,58 +173,10 @@ def optimize_monomer_rotation(oligomer, monomer, x0, v1, n_samples=3600):
 
     return best_monomer
 
-def optimize_monomer_rotation_mc(oligomer, monomer, x0, v1, n_samples=3600):
-    """
-    Rotate monomer around the attachment axis to minimize overlap with oligomer.
-
-    Parameters:
-    -----------
-    oligomer : ase.Atoms
-        The existing oligomer structure
-    monomer : ase.Atoms
-        The monomer to be attached (already translated to attachment position)
-    attachment_point : np.array
-        Position where attachment occurs
-    monomer_attachment_point : int
-        Index of the attachment atom in the monomer
-    n_samples : int
-        Number of rotation angles to sample (default 36 = 10° increments)
-
-    Returns:
-    --------
-    ase.Atoms : Optimally rotated monomer
-    """
-
-    best_score = float('inf')
-    best_monomer = monomer.copy()
-
-    for trial in range(n_samples):
-       
-        v_rand = generate_random_normalized_vector()
-
-        # Apply rotation around attachment point
-        test_monomer = monomer.copy()
-
-        test_monomer.rotate(v1, v_rand, center=x0)
-
-        # Calculate overlap score
-        score = calculate_overlap_score(oligomer, test_monomer)
-
-        if score < best_score:
-            best_score = score
-            best_monomer = test_monomer.copy()
-
-    return best_monomer
 
 def start_chain(monomer):
 
     monomer = monomer.copy()
-
-    # find starting index
-    mon_idx = int(np.where(monomer.arrays["polymerize"] == 1)[0])
-
-    # Find atom connected to X (the bonding atom)
-    end_idx = ase.build.connected_indices(monomer, mon_idx)[1]
 
     # remember connecting points (mark the bonding atom, not the X atom)
     is_connected = np.array(len(monomer)*[False])
@@ -296,7 +229,7 @@ def attach_to_chain(oligomer, monomer):
     # Optimize monomer rotation to minimize overlap
     v1 = monomer.get_distance(mon_idx, end_idx, vector=True)
     monomer = optimize_monomer_rotation(oligomer, monomer, x0, v1, n_samples=3600)
-    monomer = optimize_monomer_rotation_gradient(oligomer, monomer, x0, v1)
+    # monomer = optimize_monomer_rotation_gradient(oligomer, monomer, x0, v1)
 
     # remove fluff
     del oligomer[oli_idx]

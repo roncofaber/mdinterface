@@ -80,9 +80,11 @@ class Specie(object):
             atom_types = self._atom_types_from_lj(lj)
             
         # set up internal topology attributes
-        self._setup_topology(atom_types, bonds, angles, dihedrals, impropers,
-                             fix_missing=fix_missing)
+        self._setup_topology(atom_types, bonds, angles, dihedrals, impropers)
         
+        if fix_missing:
+            self._fix_missing_interactions()
+            
         # initialize topology info
         self._update_topology()
         
@@ -124,8 +126,7 @@ class Specie(object):
             
         return atoms, stype
     
-    def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers,
-                        fix_missing=False):
+    def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers):
         
         # initialize bond values
         self._old_bonds = copy.deepcopy(as_list(bonds))
@@ -158,10 +159,57 @@ class Specie(object):
         self._dids = dihedral_ids
         self._iids = improper_ids
         
-        if fix_missing:
-            self._fix_missing_interactions()
+        return
+    
+    def _update_topology(self):
+        formula = self.atoms.get_chemical_formula()
+        
+        for attributes in ["_btype", "_atype", "_dtype", "_itype", "_stype"]:
+            attr_type = []
+            for attr in self.__getattribute__(attributes):
+                attr.set_formula(formula)
+                attr.set_resname(self.resname)
+                if attr.id is None or attr.id in attr_type:
+                    idx = find_smallest_missing(attr_type, start=1)
+                    attr.set_id(idx)
+                else:
+                    idx = attr.id
+                attr_type.append(idx)
         
         return
+
+    # def add_topology(self, attribute):
+    #     # Determine the type of the attribute
+    #     attribute_type = attribute.__class__.__name__
+        
+    #     # Get the corresponding attribute list
+    #     if attribute_type == "Bond":
+    #         attribute_list = self._btype
+    #     elif attribute_type == "Angle":
+    #         attribute_list = self._atype
+    #     elif attribute_type == "Dihedral":
+    #         attribute_list = self._dtype
+    #     elif attribute_type == "Improper":
+    #         attribute_list = self._itype
+    #     elif attribute_type == "Atom":
+    #         attribute_list = self._stype
+    #     else:
+    #         raise ValueError("Invalid topology attribute type.")
+        
+    #     # Check if the attribute already exists based on symbols
+    #     attribute_symbols = attribute.symbols
+    #     for existing_attribute in attribute_list:
+    #         if existing_attribute.symbols == attribute_symbols:
+    #             print(f"{attribute_type} with symbols {attribute_symbols} already exists and will not be added again.")
+    #             return
+        
+    #     # Add the attribute to the list
+    #     attribute_list.append(attribute)
+        
+    #     # Reinitialize topology to ensure consistency
+    #     self._update_topology()
+        
+    #     return
     
     def _add_to_topology(self, bonds=[], angles=[], dihedrals=[], impropers=[]):
         
@@ -216,6 +264,9 @@ class Specie(object):
         self._aids = angle_ids
         self._dids = dihedral_ids
         self._iids = improper_ids
+        
+        # Reinitialize topology to ensure consistency
+        self._update_topology()
         
         return
     
@@ -284,56 +335,6 @@ class Specie(object):
 
         return
     
-    def _update_topology(self):
-        formula = self.atoms.get_chemical_formula()
-        
-        for attributes in ["_btype", "_atype", "_dtype", "_itype", "_stype"]:
-            attr_type = []
-            for attr in self.__getattribute__(attributes):
-                attr.set_formula(formula)
-                attr.set_resname(self.resname)
-                if attr.id is None or attr.id in attr_type:
-                    idx = find_smallest_missing(attr_type, start=1)
-                    attr.set_id(idx)
-                else:
-                    idx = attr.id
-                attr_type.append(idx)
-        
-        return
-
-    def add_topology(self, attribute):
-        # Determine the type of the attribute
-        attribute_type = attribute.__class__.__name__
-        
-        # Get the corresponding attribute list
-        if attribute_type == "Bond":
-            attribute_list = self._btype
-        elif attribute_type == "Angle":
-            attribute_list = self._atype
-        elif attribute_type == "Dihedral":
-            attribute_list = self._dtype
-        elif attribute_type == "Improper":
-            attribute_list = self._itype
-        elif attribute_type == "Atom":
-            attribute_list = self._stype
-        else:
-            raise ValueError("Invalid topology attribute type.")
-        
-        # Check if the attribute already exists based on symbols
-        attribute_symbols = attribute.symbols
-        for existing_attribute in attribute_list:
-            if existing_attribute.symbols == attribute_symbols:
-                print(f"{attribute_type} with symbols {attribute_symbols} already exists and will not be added again.")
-                return
-        
-        # Add the attribute to the list
-        attribute_list.append(attribute)
-        
-        # Reinitialize topology to ensure consistency
-        self._update_topology()
-        
-        return
-
     # covnert to mda.Universe
     def to_universe(self, charges=True, layered=False, match_cell=False, xydim=None):
         
@@ -724,4 +725,56 @@ class Specie(object):
         if update_positions:
             self.update_positions(atoms=atoms_to_simulate, prune_z=False)
         
+        return
     
+    def _find_rings(self, max_ring_size=8):
+        """
+        Find all rings in the molecular graph using NetworkX cycle detection.
+
+        Parameters:
+        max_ring_size (int): Maximum ring size to detect (default 8)
+
+        Returns:
+        list: List of rings, where each ring is a list of atom indices
+        """
+        import networkx as nx
+
+        rings = []
+        try:
+            # Find simple cycles (rings) in the graph
+            for cycle in nx.simple_cycles(self.graph):
+                if len(cycle) <= max_ring_size:
+                    rings.append(sorted(cycle))
+        except:
+            # Fallback: use minimum cycle basis for undirected graphs
+            try:
+                cycle_basis = nx.minimum_cycle_basis(self.graph)
+                for cycle in cycle_basis:
+                    if len(cycle) <= max_ring_size:
+                        rings.append(sorted(cycle))
+            except:
+                # If all else fails, return empty list
+                rings = []
+
+        return rings
+
+    def _get_rings_containing_atoms(self, atom_indices, max_ring_size=8):
+        """
+        Find all rings that contain any of the specified atoms.
+
+        Parameters:
+        atom_indices (list): List of atom indices to check
+        max_ring_size (int): Maximum ring size to detect
+
+        Returns:
+        list: List of rings containing any of the specified atoms
+        """
+        all_rings = self._find_rings(max_ring_size)
+        relevant_rings = []
+
+        atom_set = set(atom_indices)
+        for ring in all_rings:
+            if atom_set.intersection(set(ring)):
+                relevant_rings.append(ring)
+
+        return relevant_rings
