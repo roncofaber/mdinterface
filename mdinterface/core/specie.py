@@ -17,7 +17,9 @@ import mdinterface.utils.map as pmap
 from mdinterface.core.topology import Atom
 from mdinterface.io.read import read_lammps_data_file
 from mdinterface.utils.auxiliary import as_list, find_smallest_missing, round_list_to_sum
-from mdinterface.externals import run_ligpargen, run_OBChargeModel, calculate_RESP_charges
+from mdinterface.externals import run_ligpargen, run_OBChargeModel, calculate_RESP_charges,\
+    relax_structure, run_aimd
+    
 from mdinterface.utils.graphs import molecule_to_graph, find_unique_paths_of_length,\
     find_improper_idxs,find_relevant_distances, find_atom_types
 from mdinterface.utils.draw import draw_bond_markers
@@ -35,7 +37,7 @@ class Specie(object):
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
-                 pbc=False, ligpargen=False, tot_charge=0, prune_z=False):
+                 pbc=False, ligpargen=False, tot_charge=None, prune_z=False):
         
         # store int. variables
         self.cutoff = cutoff
@@ -45,9 +47,17 @@ class Specie(object):
             atoms, atom_types, bonds, angles, dihedrals, impropers = read_lammps_data_file(lammps_data)
         else:
             # read/update atoms atoms
-            atoms, atom_types = self._read_atoms(atoms, charges,
+            atoms, atom_types_tmp = self._read_atoms(atoms, charges,
                                                  chg_scaling=chg_scaling, pbc=pbc)
+            if atom_types is None:
+                atom_types = atom_types_tmp
         
+        # setup nominal charge
+        if tot_charge is None:
+            if not "nominal_charge" in atoms.arrays:
+                atoms.set_array("nominal_charge", np.array(len(atoms)*[0]))
+            tot_charge = int(np.sum(atoms.arrays["nominal_charge"]))
+                
         # run ligpargen to calculate parameters
         if ligpargen:
             atoms, atom_types, bonds, angles, dihedrals, impropers = run_ligpargen(
@@ -75,6 +85,9 @@ class Specie(object):
         
         # initialize topology info
         self._update_topology()
+        
+        # set tot charge
+        self._tot_charge = tot_charge
 
         return
     
@@ -114,6 +127,12 @@ class Specie(object):
     def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers,
                         fix_missing=False):
         
+        # initialize bond values
+        self._old_bonds = copy.deepcopy(as_list(bonds))
+        self._old_angles = copy.deepcopy(as_list(angles))
+        self._old_dihedrals = copy.deepcopy(as_list(dihedrals))
+        self._old_impropers = copy.deepcopy(as_list(impropers))
+        
         # map list of inputs
         atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
         bonds_list, bond_map, bond_ids = pmap.map_bonds(as_list(bonds))
@@ -139,38 +158,76 @@ class Specie(object):
         self._dids = dihedral_ids
         self._iids = improper_ids
         
-        if fix_missing: #ugly but seems to work
-            
-            mss_bnd = pmap.generate_missing_interactions(self, "bonds")
-            mss_ang = pmap.generate_missing_interactions(self, "angles")
-            mss_dih = pmap.generate_missing_interactions(self, "dihedrals")
-            mss_imp = pmap.generate_missing_interactions(self, "impropers")
-            
-            # map list of inputs
-            # atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
-            bonds_list, bond_map, bond_ids = pmap.map_bonds(as_list(bonds) + mss_bnd)
-            angles_list, angle_map, angle_ids = pmap.map_angles(as_list(angles) + mss_ang)
-            dihedrals_list, dihedral_map, dihedral_ids = pmap.map_dihedrals(as_list(dihedrals) + mss_dih)
-            impropers_list, improper_map, improper_ids = pmap.map_impropers(as_list(impropers) + mss_imp)
-            
-            self._btype = bonds_list
-            self._atype = angles_list
-            self._dtype = dihedrals_list
-            self._itype = impropers_list
-            self._stype = atoms_list
-            
-            self._smap = atom_map
-            self._bmap = bond_map
-            self._amap = angle_map
-            self._dmap = dihedral_map
-            self._imap = improper_map
-            
-            self._sids = atom_ids
-            self._bids = bond_ids
-            self._aids = angle_ids
-            self._dids = dihedral_ids
-            self._iids = improper_ids
-
+        if fix_missing:
+            self._fix_missing_interactions()
+        
+        return
+    
+    def _add_to_topology(self, bonds=[], angles=[], dihedrals=[], impropers=[]):
+        
+        # check for uniqueness
+        new_bonds = []
+        new_angles = []
+        new_dihedrals = []
+        new_impropers = []
+        for bond in copy.deepcopy(bonds):
+            if bond not in self._old_bonds:
+                new_bonds.append(bond)
+        
+        for angle in copy.deepcopy(angles):
+            if angle not in self._old_angles:
+                new_angles.append(angle)
+                
+        for dihedral in copy.deepcopy(dihedrals):
+            if dihedral not in self._old_dihedrals:
+                new_dihedrals.append(dihedral)
+                
+        for improper in copy.deepcopy(impropers):
+            if improper not in self._old_impropers:
+                new_impropers.append(improper)
+        
+        # add to topology
+        self._old_bonds     += new_bonds
+        self._old_angles    += new_angles
+        self._old_dihedrals += new_dihedrals
+        self._old_impropers += new_impropers
+        
+        # map list of inputs
+        # atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
+        bonds_list, bond_map, bond_ids = pmap.map_bonds(self._old_bonds)
+        angles_list, angle_map, angle_ids = pmap.map_angles(self._old_angles)
+        dihedrals_list, dihedral_map, dihedral_ids = pmap.map_dihedrals(self._old_dihedrals)
+        impropers_list, improper_map, improper_ids = pmap.map_impropers(self._old_impropers)
+        
+        self._btype = bonds_list
+        self._atype = angles_list
+        self._dtype = dihedrals_list
+        self._itype = impropers_list
+        # self._stype = atoms_list
+        
+        # self._smap = atom_map
+        self._bmap = bond_map
+        self._amap = angle_map
+        self._dmap = dihedral_map
+        self._imap = improper_map
+        
+        # self._sids = atom_ids
+        self._bids = bond_ids
+        self._aids = angle_ids
+        self._dids = dihedral_ids
+        self._iids = improper_ids
+        
+        return
+    
+    def _fix_missing_interactions(self):
+        
+        mss_bnd = pmap.generate_missing_interactions(self, "bonds")
+        mss_ang = pmap.generate_missing_interactions(self, "angles")
+        mss_dih = pmap.generate_missing_interactions(self, "dihedrals")
+        mss_imp = pmap.generate_missing_interactions(self, "impropers")
+        
+        self._add_to_topology(mss_bnd, mss_ang, mss_dih, mss_imp)
+        
         return
     
     # function to setup atom types
@@ -218,6 +275,9 @@ class Specie(object):
             atoms.translate([0,0,-zmin])
             atoms.cell[2][2] = zmax-zmin
             atoms.pbc[2] = False
+        
+        if not any(atoms.pbc):
+            atoms.set_center_of_mass([0,0,0])
         
         self._atoms = atoms
         self._graph = molecule_to_graph(atoms, cutoff_scale=cutoff)
@@ -565,11 +625,103 @@ class Specie(object):
         return charges
 
     def estimate_OPLSAA_parameters(self, charge=None):
-        
+
         if charge is None:
             charge = 0
-        
+
         system, atoms, bonds, angles, dihedrals, impropers = run_ligpargen(
             self.atoms, charge=charge)
-        
+
         return system, atoms, bonds, angles, dihedrals, impropers
+
+    def relax_structure(self, optimizer='FIRE', fmax=0.05,
+                       steps=200, update_positions=True, trajectory=None,
+                       logfile=None, **kwargs):
+        """
+        Relax the Specie structure using ASE or UMA optimization.
+
+        Parameters
+        ----------
+        method : str, default 'ase'
+            Relaxation method to use ('ase', 'uma')
+        optimizer : str, default 'BFGS'
+            Optimizer for ASE method ('BFGS', 'LBFGS', 'FIRE')
+        fmax : float, default 0.05
+            Maximum force threshold for convergence (eV/Å)
+        steps : int, default 200
+            Maximum number of optimization steps
+        update_positions : bool, default True
+            Whether to update the Specie's atomic positions after relaxation
+        trajectory : str, optional
+            Path to save optimization trajectory
+        logfile : str, optional
+            Path to save optimization log
+        **kwargs
+            Additional arguments passed to the relaxation function
+
+        Returns
+        -------
+        relaxed_atoms : ase.Atoms
+            The relaxed atomic structure
+        converged : bool
+            Whether the optimization converged
+        """
+        
+        atoms_to_relax = self.atoms
+        atoms_to_relax.info["charge"] = self._tot_charge
+        atoms_to_relax.info["spin"]   = 0 #TODO
+        
+        relaxed_atoms = relax_structure(
+            atoms_to_relax, optimizer=optimizer, fmax=fmax, steps=steps,
+            trajectory=trajectory, logfile=logfile, **kwargs)
+
+        # Update positions if requested
+        if update_positions:
+            self.update_positions(atoms=relaxed_atoms, prune_z=False)
+
+        return
+    
+    def run_aimd(self, timestep=0.5, temperature_K=300, friction=0.001,
+              steps=1000, update_positions=True, trajectory=None,
+              logfile=None, **kwargs):
+        """
+        Run AIMD for the Specie structure using ASE and FAIRChem.
+    
+        Parameters
+        ----------
+        timestep : float, default 0.1
+            Time step for the simulation in fs.
+        temperature_K : float, default 300
+            Target temperature for the Langevin dynamics in Kelvin.
+        friction : float, default 0.001
+            Frictional damping coefficient in 1/fs.
+        steps : int, default 1000
+            Number of time steps to run the AIMD.
+        update_positions : bool, default True
+            Whether to update the Specie's atomic positions after AIMD.
+        trajectory : str, optional
+            Path to save the MD trajectory.
+        logfile : str, optional
+            Path to save the MD log.
+        **kwargs
+            Additional arguments passed to the Langevin integrator.
+    
+        Returns
+        -------
+        None
+        """
+        
+        atoms_to_simulate = self.atoms
+        atoms_to_simulate.info["charge"] = self._tot_charge
+        atoms_to_simulate.info["spin"] = 0  # Update this if needed
+    
+        # Call the previously defined function to perform AIMD
+        run_aimd(atoms_to_simulate, timestep=timestep, temperature_K=temperature_K,
+                 friction=friction, steps=steps, trajectory=trajectory,
+                 logfile=logfile, **kwargs)
+    
+        # Update positions if requested
+        if update_positions:
+            self.update_positions(atoms=atoms_to_simulate, prune_z=False)
+        
+    

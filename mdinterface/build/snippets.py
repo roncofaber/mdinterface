@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Oct  6 16:03:43 2025
+
+@author: roncofaber
+"""
+
+import numpy as np
+import copy
+
+# other stuff
+import ase
+from ase.data import atomic_numbers, covalent_radii
+
+#%%
+
+# snip the polymer into a smaller molecule, return as ase.Atoms
+def make_snippet(polymer, center, Nmax, ending="H", preserve_rings=True):
+
+    # Get initial atom selection based on distance
+    ini_idxs = list(set(np.concatenate(polymer.find_relevant_distances(Nmax, centers=center))))
+
+    # Reconstruct broken rings, if any
+    if preserve_rings:
+        # Find rings that contain any atoms in our initial selection
+        relevant_rings = polymer._get_rings_containing_atoms(ini_idxs)
+
+        # Add all atoms from relevant rings to our selection
+        ring_atoms = set()
+        for ring in relevant_rings:
+            ring_atoms.update(ring)
+
+        # Merge ring atoms with distance-based selection
+        ini_idxs = list(set(ini_idxs) | ring_atoms)
+
+    # Add all nodes that are connected by one connection to those nodes (and nothing else)
+    # Iterate over the initial nodes
+    con_idxs   = set()
+    ter_idxs   = set()
+    distances  = []
+    atom_pairs = []
+    for node in ini_idxs:
+        # Get the neighbors of the current node
+        neighbors = list(polymer.graph.neighbors(node))
+        
+        # Check each neighbor to see if it connects back to the initial nodes
+        for neighbor in neighbors:
+            
+            # ignore if already in the list
+            if neighbor in ini_idxs:
+                continue
+            
+            # If it connects to exactly one node in the initial list, add it to connected_nodes
+            if polymer.graph.degree(neighbor) == 1:
+                con_idxs.add(neighbor)
+            else:
+                if neighbor not in ter_idxs:
+                    ter_idxs.add(neighbor)
+                    d1 = covalent_radii[atomic_numbers[polymer.graph.nodes[node]["element"]]]
+                    d2 = covalent_radii[atomic_numbers[ending]]
+                    distances.append(d1+d2)
+                    atom_pairs.append([node, neighbor])
+
+    # Combine the initial nodes with the newly found connected nodes
+    con_idxs = list(set(ini_idxs).union(con_idxs))
+    ter_idxs = list(ter_idxs)
+
+    snippet_idxs = np.array(con_idxs + ter_idxs)
+    
+    # create chain and termination
+    chain = polymer.atoms[con_idxs].copy()
+    term  = polymer.atoms[ter_idxs].copy()
+    term.set_chemical_symbols(len(term) * [ending])
+
+    # make snippet        
+    snippet = ase.Atoms(chain + term)
+    
+    # fix distances for ligpargen
+    for cc, (a1, a2) in enumerate(atom_pairs):
+        idx1 = int(np.where(snippet_idxs == a1)[0])
+        idx2 = int(np.where(snippet_idxs == a2)[0])
+        snippet.set_distance(idx1, idx2, distances[cc], fix=0)
+
+    return snippet, snippet_idxs
+ 
+def remap_snippet_topology(original_idxs, sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals, sn_impropers):
+    # Make deep copies of the topology objects
+    sn_bonds_out = copy.deepcopy(sn_bonds)
+    sn_angles_out = copy.deepcopy(sn_angles)
+    sn_dihedrals_out = copy.deepcopy(sn_dihedrals)
+    sn_impropers_out = copy.deepcopy(sn_impropers)
+    
+    # Prepare remapping IDs based on original IDs from snippet indices
+    remap_ids = {}
+    for cc, atype in enumerate(sn_atypes):
+        remap_ids[atype.label] = str(original_idxs[cc])
+    
+    # Update bonds
+    for bond in sn_bonds_out:
+        a1 = bond._a1
+        a2 = bond._a2
+        bond.update(a1=remap_ids[a1], a2=remap_ids[a2])
+    
+    # Update angles
+    for angle in sn_angles_out:
+        a1 = angle._a1
+        a2 = angle._a2
+        a3 = angle._a3
+        angle.update(a1=remap_ids[a1], a2=remap_ids[a2], a3=remap_ids[a3])
+    
+    # Update dihedrals
+    for dihedral in sn_dihedrals_out:
+        a1 = dihedral._a1
+        a2 = dihedral._a2
+        a3 = dihedral._a3
+        a4 = dihedral._a4
+        dihedral.update(a1=remap_ids[a1], a2=remap_ids[a2], a3=remap_ids[a3], a4=remap_ids[a4])
+    
+    # Update impropers
+    for improper in sn_impropers_out:
+        a1 = improper._a1
+        a2 = improper._a2
+        a3 = improper._a3
+        a4 = improper._a4
+        # K, d, n = improper.values  # Assuming values consist of K, d, n parameters
+        improper.update(a1=remap_ids[a1], a2=remap_ids[a2], a3=remap_ids[a3], a4=remap_ids[a4])
+        
+    return sn_bonds_out, sn_angles_out, sn_dihedrals_out, sn_impropers_out

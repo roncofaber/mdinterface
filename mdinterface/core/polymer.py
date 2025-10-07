@@ -10,57 +10,92 @@ Created on Mon Feb  3 15:00:01 2025
 from .specie import Specie
 from mdinterface.externals import run_ligpargen
 from mdinterface.build.polymerize import build_polymer
+from mdinterface.build.snippets import make_snippet, remap_snippet_topology
 
-# other stuff
-import ase
-import random
+# import random
 import numpy as np
 
 #%%
 
 class Polymer(Specie):
 
-    def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
+    def __init__(self, monomers=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
-                 pbc=False, ligpargen=False, tot_charge=0, nrep=1, start_end_idxs=None,
-                 target_distance=1.600, substitute=None, refine_charges=False,
-                 offset=False, ending="H"):
+                 pbc=False, ligpargen=False, tot_charge=None, nrep=None,
+                 sequence=None, refine_charges=False, offset=False, ending="H"):
         
         # initialize polymer stuff
         self._snippet_cache = {}
         
         # polymerize
-        polymer = build_polymer(atoms, substitute, nrep, start_end_idxs=start_end_idxs,
-                      target_distance=target_distance)
+        polymer = build_polymer(monomers, sequence=sequence, nrep=nrep)
         
         # Initialize the parent class
-        super().__init__(polymer, charges, atom_types, bonds, angles, dihedrals,
-                         impropers, lj, cutoff, name, lammps_data, fix_missing,
-                         chg_scaling, pbc, ligpargen, tot_charge)
+        super().__init__(atoms=polymer, charges=charges, atom_types=atom_types,
+                         bonds=bonds, angles=angles, dihedrals=dihedrals,
+                         impropers=impropers, lj=lj, cutoff=cutoff, name=name,
+                         lammps_data=lammps_data, fix_missing=fix_missing,
+                         chg_scaling=chg_scaling, pbc=pbc, ligpargen=ligpargen,
+                         tot_charge=tot_charge)
         
         if refine_charges:
             self.refine_charges(offset=offset, ending=ending)
         
         return
     
-    # snip the polymer into a smaller molecule, return as ase.Atoms
-    def make_snippet(self, centers, Nmax, ending="F"):
-        
-        idxs = list(set(np.concatenate(self.find_relevant_distances(Nmax, centers=centers))))
-        edxs = list(set(np.concatenate(self.find_relevant_distances(Nmax+1, centers=centers, Nmin=Nmax))) - set([centers]))
-        
-        snippet_idxs = np.array(idxs + edxs)
+    def _find_rings(self, max_ring_size=8):
+        """
+        Find all rings in the molecular graph using NetworkX cycle detection.
 
-        
-        chain = self.atoms[idxs].copy()
-        term  = self.atoms[edxs].copy()
-        
-        term.set_chemical_symbols(len(term) * [ending])
-        snippet = ase.Atoms(chain + term)
-        
-        return snippet, snippet_idxs
-    
+        Parameters:
+        max_ring_size (int): Maximum ring size to detect (default 8)
+
+        Returns:
+        list: List of rings, where each ring is a list of atom indices
+        """
+        import networkx as nx
+
+        rings = []
+        try:
+            # Find simple cycles (rings) in the graph
+            for cycle in nx.simple_cycles(self.graph):
+                if len(cycle) <= max_ring_size:
+                    rings.append(sorted(cycle))
+        except:
+            # Fallback: use minimum cycle basis for undirected graphs
+            try:
+                cycle_basis = nx.minimum_cycle_basis(self.graph)
+                for cycle in cycle_basis:
+                    if len(cycle) <= max_ring_size:
+                        rings.append(sorted(cycle))
+            except:
+                # If all else fails, return empty list
+                rings = []
+
+        return rings
+
+    def _get_rings_containing_atoms(self, atom_indices, max_ring_size=8):
+        """
+        Find all rings that contain any of the specified atoms.
+
+        Parameters:
+        atom_indices (list): List of atom indices to check
+        max_ring_size (int): Maximum ring size to detect
+
+        Returns:
+        list: List of rings containing any of the specified atoms
+        """
+        all_rings = self._find_rings(max_ring_size)
+        relevant_rings = []
+
+        atom_set = set(atom_indices)
+        for ring in all_rings:
+            if atom_set.intersection(set(ring)):
+                relevant_rings.append(ring)
+
+        return relevant_rings
+
     # return list of elements adjacent to a connection point
     def _get_connection_elements(self):
 
@@ -74,56 +109,70 @@ class Polymer(Specie):
                 poi.append(center)
         return poi
 
-    def _update_charges(self, center, Nmax, charges, ending="F"):
-        """
-        Updates the charges for the specified species.
-    
-        Parameters:
-        specie (ase.Atoms): The species object containing the atoms.
-        center (int): The center atom index.
-        Nmax (int): The maximum number of neighbors to consider.
-        charges (np.ndarray): The array of charges to be updated.
-        ending (str): The chemical symbol for the terminal atoms.
-        """
-        
+    def _update_connection(self, center, Nmax, charges, ending="H"):
+
+        # get local indexes (within dihedral from center)
         ldxs = list(set(np.concatenate(self.find_relevant_distances(3, centers=center))))
         
-        snippet, snippet_idxs = self.make_snippet(center, Nmax, ending=ending)
+        # make a lil snippet and generate its mapping to main polymer
+        snippet, snippet_idxs = make_snippet(self, center, Nmax, ending=ending)
+        mapping = [np.argwhere(snippet_idxs == ll)[0][0] for ll in ldxs]
     
         # Check if snippet already exists in cache
         snippet_hash = ''.join(snippet.get_chemical_symbols())
-        
         if snippet_hash in self._snippet_cache:
-            cached_charges = self._snippet_cache[snippet_hash]
-            mapping = [np.argwhere(snippet_idxs == ll)[0][0] for ll in ldxs]
-            charges[ldxs] = cached_charges[mapping]
-            return
-        
-        # snippet charge
-        if "nominal_charge" in snippet.arrays:
-            sn_charge = snippet.arrays["nominal_charge"].sum()
-        else:
-            sn_charge = None
             
-        # run ligpargen
-        output = run_ligpargen(snippet, charge=sn_charge)
+            cached_snippet = self._snippet_cache[snippet_hash]
+            
+            sn_atoms     = cached_snippet["sn_atoms"]
+            sn_atypes    = cached_snippet["sn_atypes"]
+            sn_bonds     = cached_snippet["sn_bonds"]
+            sn_angles    = cached_snippet["sn_angles"]
+            sn_dihedrals = cached_snippet["sn_dihedrals"]
+            sn_impropers = cached_snippet["sn_impropers"]
+            new_charges  = cached_snippet["new_charges"]
         
-        # get charges
-        new_charges = output[0].get_initial_charges()
+        # if not, ligpargen it
+        else:
+
+            # snippet charge
+            if "nominal_charge" in snippet.arrays:
+                sn_charge = snippet.arrays["nominal_charge"].sum()
+            else:
+                sn_charge = None
+                
+            # run ligpargen
+            sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals, sn_impropers =\
+                run_ligpargen(snippet, charge=sn_charge)
+            
+            # get charges
+            new_charges = sn_atoms.get_initial_charges()
+            
+            # Store the new snippet and its charges in cache
+            self._snippet_cache[snippet_hash] = {
+                "new_charges"  : new_charges,
+                "sn_atoms"     : sn_atoms,
+                "sn_atypes"    : sn_atypes,
+                "sn_bonds"     : sn_bonds,
+                "sn_angles"    : sn_angles,
+                "sn_dihedrals" : sn_dihedrals,
+                "sn_impropers" : sn_impropers,
+                }
         
-        # find mapping
-        mapping = [np.argwhere(snippet_idxs == ll)[0][0] for ll in ldxs]
+        # update topology of section
+        original_idxs = self._sids[snippet_idxs]
+        new_bonds, new_angles, new_dihedrals, new_impropers = remap_snippet_topology(
+            original_idxs, sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals, sn_impropers)
         
-        # update charges
         charges[ldxs] = new_charges[mapping]
-    
-        # Store the new snippet and its charges in cache
-        self._snippet_cache[snippet_hash] = new_charges
+        
+        self._add_to_topology(bonds=new_bonds, angles=new_angles,
+                              dihedrals=new_dihedrals, impropers=new_impropers)
         
         return
     
     # main driver that refines charges across the whole polymer
-    def refine_charges(self, Nmax=12, offset=False, ending="F"):
+    def refine_polymer_topology(self, Nmax=12, offset=False, ending="H"):
         """
         Refines the charges for the specified species.
     
@@ -142,7 +191,7 @@ class Polymer(Specie):
         
         # get charges at every point
         for center in centers:
-            self._update_charges(center, Nmax, charges, ending=ending)
+            self._update_connection(center, Nmax, charges, ending=ending)
             
         # bring back to zero
         if offset:

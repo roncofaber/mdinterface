@@ -227,9 +227,12 @@ def generate_missing_interactions(nas, interaction_type):
 
     # Create a mapping of interaction types for faster lookup
     for itype in interaction_list:
-        ctypes = tuple(nas._smap[ii] for ii in itype.symbols)
-        interaction_type_map[ctypes] = itype
-        interaction_type_map[ctypes[::-1]] = itype  # Add the reversed tuple as well
+        try:
+            ctypes = tuple(nas._smap[ii] for ii in itype.symbols)
+            interaction_type_map[ctypes] = itype
+            interaction_type_map[ctypes[::-1]] = itype  # Add the reversed tuple as well
+        except:
+            continue
 
     for mss_interaction in mss_interactions:
         found_interaction = False
