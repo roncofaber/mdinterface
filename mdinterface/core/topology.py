@@ -81,6 +81,22 @@ class Atom(Topology):
     # TODO CHANGE BACK IF DOESN'T WORK
     def __eq__(self, other):
         return self.eps == other.eps and self.sig == other.sig and self.symbol == other.symbol
+    
+    def update(self, symbol=None, label=None, eps=None, sig=None):
+        """Update atom properties based on provided values."""
+        if symbol is not None:
+            self.symbol = symbol
+        
+        if label is not None:
+            self.set_label(label)
+        
+        if eps is not None:
+            self.eps = eps
+        
+        if sig is not None:
+            self.sig = sig
+
+        return
 
     # def __eq__(self, other):
     #     return self.eps == other.eps and self.sig == other.sig and self.label == other.label
@@ -89,14 +105,11 @@ class Atom(Topology):
 
 class Bond(Topology):
     def __init__(self, a1, a2, kr=None, r0=None):
-        
         super().__init__()
-        
         self._a1 = a1
         self._a2 = a2
         self.kr = kr
         self.r0 = r0
-        return
 
     @property
     def symbols(self):
@@ -120,18 +133,31 @@ class Bond(Topology):
     def __bool__(self):
         return any([bool(val) for val in self.values])
 
+    def update(self, a1=None, a2=None, kr=None, r0=None):
+        """Update bond properties based on provided values."""
+        if a1 is not None:
+            self._a1 = a1
+        
+        if a2 is not None:
+            self._a2 = a2
+        
+        if kr is not None:
+            self.kr = kr
+        
+        if r0 is not None:
+            self.r0 = r0
+
+        return
+
 
 class Angle(Topology):
     def __init__(self, a1, a2, a3, kr=None, theta0=None):
-        
         super().__init__()
-        
         self._a1 = a1
         self._a2 = a2
         self._a3 = a3
         self.kr = kr
         self.theta0 = theta0
-        return
 
     @property
     def symbols(self):
@@ -155,17 +181,34 @@ class Angle(Topology):
     def __bool__(self):
         return any([bool(val) for val in self.values])
 
+    def update(self, a1=None, a2=None, a3=None, kr=None, theta0=None):
+        """Update angle properties based on provided values."""
+        if a1 is not None:
+            self._a1 = a1
+        
+        if a2 is not None:
+            self._a2 = a2
+        
+        if a3 is not None:
+            self._a3 = a3
+        
+        if kr is not None:
+            self.kr = kr
+        
+        if theta0 is not None:
+            self.theta0 = theta0
+
+        return
+
+
 class Dihedral(Topology):
     def __init__(self, a1, a2, a3, a4, A1=None, A2=None, A3=None, A4=None, A5=None):
-       
         super().__init__()
-       
         self._a1 = a1
         self._a2 = a2
         self._a3 = a3
         self._a4 = a4
         self._values = [A1, A2, A3, A4, A5]
-        return
 
     @property
     def symbols(self):
@@ -200,26 +243,52 @@ class Dihedral(Topology):
     def __bool__(self):
         return any([bool(val) for val in self.values])
 
+    def update(self, a1=None, a2=None, a3=None, a4=None, A1=None, A2=None, A3=None, A4=None, A5=None):
+        """Update dihedral properties based on provided values."""
+        if a1 is not None:
+            self._a1 = a1
+        
+        if a2 is not None:
+            self._a2 = a2
 
-class Improper(Topology):  # cvff improper style
+        if a3 is not None:
+            self._a3 = a3
+        
+        if a4 is not None:
+            self._a4 = a4
+        
+        if A1 is not None:
+            self._values[0] = A1
+
+        if A2 is not None:
+            self._values[1] = A2
+
+        if A3 is not None:
+            self._values[2] = A3
+
+        if A4 is not None:
+            self._values[3] = A4
+
+        if A5 is not None:
+            self._values[4] = A5
+
+        return
+
+
+class Improper(Topology):
     def __init__(self, a1, a2="x", a3="x", a4="x", K=None, d=None, n=None):
-        
         super().__init__()
-        
         self._a1 = a1
         self._a2 = a2
         self._a3 = a3
         self._a4 = a4
-        
         self._K = K
         
         assert d in [1, -1], "Wrong 'd' value"
         self._d = d
         
-        assert n in [0,1,2,3,4,5,6], "Wrong 'n' value"
+        assert n in [0, 1, 2, 3, 4, 5, 6], "Wrong 'n' value"
         self._n = n
-        
-        return
 
     @property
     def symbols(self):
@@ -241,5 +310,27 @@ class Improper(Topology):  # cvff improper style
     def __bool__(self):
         return any([bool(val) for val in self.values])
 
+    def update(self, a1=None, a2=None, a3=None, a4=None, K=None, d=None, n=None):
+        """Update improper properties based on provided values."""
+        if a1 is not None:
+            self._a1 = a1
+        
+        if a2 is not None:
+            self._a2 = a2
 
+        if a3 is not None:
+            self._a3 = a3
+        
+        if a4 is not None:
+            self._a4 = a4
+        
+        if K is not None:
+            self._K = K
 
+        if d in [1, -1]:
+            self._d = d  # Ensure valid assignment as specified during initialization
+
+        if n in [0, 1, 2, 3, 4, 5, 6]:
+            self._n = n  # Ensure valid assignment as specified during initialization
+
+        return

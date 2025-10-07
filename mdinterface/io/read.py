@@ -16,7 +16,7 @@ from mdinterface.utils.auxiliary import mass2symbol
 
 #%%
 
-def read_lammps_data_file(filename, pbc=False):
+def read_lammps_data_file(filename, pbc=False, ato_start_idx=0):
     system = ase.io.lammpsdata.read_lammps_data(filename)
     
     if not pbc:
@@ -98,7 +98,7 @@ def read_lammps_data_file(filename, pbc=False):
                 improper_coeff.append(values)
 
             elif to_read == "atoms":
-                atoidx = int(line[0]) - 1
+                atoidx = ato_start_idx + (int(line[0]) - 1)
                 atotyp = int(line[2]) - 1
                 eps, sig = pair_coeff[atotyp]
                 symbol   = atosym[atotyp]
