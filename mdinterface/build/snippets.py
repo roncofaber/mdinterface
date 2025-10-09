@@ -84,12 +84,14 @@ def make_snippet(polymer, center, Nmax, ending="H", preserve_rings=True):
 
     return snippet, snippet_idxs
  
-def remap_snippet_topology(original_idxs, sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals, sn_impropers):
-    # Make deep copies of the topology objects
-    sn_bonds_out = copy.deepcopy(sn_bonds)
-    sn_angles_out = copy.deepcopy(sn_angles)
-    sn_dihedrals_out = copy.deepcopy(sn_dihedrals)
-    sn_impropers_out = copy.deepcopy(sn_impropers)
+def remap_snippet_topology(original_idxs, sn_atoms, sn_atypes, sn_bonds,
+                           sn_angles, sn_dihedrals, sn_impropers, local_idxs):
+    
+    # Create filtered topology objects
+    sn_bonds_out     = []
+    sn_angles_out    = []
+    sn_dihedrals_out = [] 
+    sn_impropers_out = []
     
     # Prepare remapping IDs based on original IDs from snippet indices
     remap_ids = {}
@@ -97,33 +99,42 @@ def remap_snippet_topology(original_idxs, sn_atoms, sn_atypes, sn_bonds, sn_angl
         remap_ids[atype.label] = str(original_idxs[cc])
     
     # Update bonds
-    for bond in sn_bonds_out:
-        a1 = bond._a1
-        a2 = bond._a2
-        bond.update(a1=remap_ids[a1], a2=remap_ids[a2])
+    for bond in copy.deepcopy(sn_bonds):
+        a1 = remap_ids[bond._a1]
+        a2 = remap_ids[bond._a2]
+        
+        if all([ii in local_idxs for ii in [a1, a2]]):
+            bond.update(a1=a1, a2=a2)
+            sn_bonds_out.append(bond)
     
     # Update angles
-    for angle in sn_angles_out:
-        a1 = angle._a1
-        a2 = angle._a2
-        a3 = angle._a3
-        angle.update(a1=remap_ids[a1], a2=remap_ids[a2], a3=remap_ids[a3])
+    for angle in copy.deepcopy(sn_angles):
+        a1 = remap_ids[angle._a1]
+        a2 = remap_ids[angle._a2]
+        a3 = remap_ids[angle._a3]
+        if all([ii in local_idxs for ii in [a1, a2, a3]]):
+            angle.update(a1=a1, a2=a2, a3=a3)
+            sn_angles_out.append(angle)
     
     # Update dihedrals
-    for dihedral in sn_dihedrals_out:
-        a1 = dihedral._a1
-        a2 = dihedral._a2
-        a3 = dihedral._a3
-        a4 = dihedral._a4
-        dihedral.update(a1=remap_ids[a1], a2=remap_ids[a2], a3=remap_ids[a3], a4=remap_ids[a4])
+    for dihedral in copy.deepcopy(sn_dihedrals):
+        a1 = remap_ids[dihedral._a1]
+        a2 = remap_ids[dihedral._a2]
+        a3 = remap_ids[dihedral._a3]
+        a4 = remap_ids[dihedral._a4]
+        if all([ii in local_idxs for ii in [a1, a2, a3, a4]]):
+            dihedral.update(a1=a1, a2=a2, a3=a3, a4=a4)
+            sn_dihedrals_out.append(dihedral)
     
     # Update impropers
-    for improper in sn_impropers_out:
-        a1 = improper._a1
-        a2 = improper._a2
-        a3 = improper._a3
-        a4 = improper._a4
-        # K, d, n = improper.values  # Assuming values consist of K, d, n parameters
-        improper.update(a1=remap_ids[a1], a2=remap_ids[a2], a3=remap_ids[a3], a4=remap_ids[a4])
+    for improper in copy.deepcopy(sn_impropers):
+        a1 = remap_ids[improper._a1]
+        a2 = remap_ids[improper._a2]
+        a3 = remap_ids[improper._a3]
+        a4 = remap_ids[improper._a4]
+        if all([ii in local_idxs for ii in [a1, a2, a3, a4]]):
+            # K, d, n = improper.values  # Assuming values consist of K, d, n parameters
+            improper.update(a1=a1, a2=a2, a3=a3, a4=a4)
+            sn_impropers_out.append(improper)
         
     return sn_bonds_out, sn_angles_out, sn_dihedrals_out, sn_impropers_out

@@ -27,6 +27,7 @@ class Polymer(Specie):
         
         # initialize polymer stuff
         self._snippet_cache = {}
+        self._sequence = sequence
         
         # polymerize
         polymer = build_polymer(monomers, sequence=sequence, nrep=nrep)
@@ -50,16 +51,20 @@ class Polymer(Specie):
         # Get elements where there is a connection
         centers = np.argwhere(self.atoms.arrays["is_connected"]).flatten()
 
-        poi = []
+        pairs = []
         for center in centers:
-            idxs = set(self.find_relevant_distances(1, centers=center).flatten())
-            if not any([ii in poi for ii in idxs]):
-                poi.append(center)
-        return poi
+            if any(center in pp for pp in pairs):
+                continue
+            distances = self.atoms.get_distances(center, centers)
+            idx = centers[np.argsort(distances)[1]]
+            pairs.append([center, idx])
+            
+        return pairs
+    
 
     def _update_connection(self, center, Nmax, charges, ending="H"):
 
-        # get local indexes (within dihedral from center)
+        # get local indeldxsxes (within dihedral from center)
         ldxs = list(set(np.concatenate(self.find_relevant_distances(3, centers=center))))
         
         # make a lil snippet and generate its mapping to main polymer
@@ -105,12 +110,16 @@ class Polymer(Specie):
                 "sn_angles"    : sn_angles,
                 "sn_dihedrals" : sn_dihedrals,
                 "sn_impropers" : sn_impropers,
+                "snippet_idxs" : snippet_idxs,
+                "local_idxs"   : ldxs
                 }
         
         # update topology of section
         original_idxs = self._sids[snippet_idxs]
+        local_idxs = self._sids[ldxs]
         new_bonds, new_angles, new_dihedrals, new_impropers = remap_snippet_topology(
-            original_idxs, sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals, sn_impropers)
+            original_idxs, sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals,
+            sn_impropers, local_idxs)
         
         charges[ldxs] = new_charges[mapping]
         
@@ -135,7 +144,7 @@ class Polymer(Specie):
         
         # get charges and connection elements
         charges = self.charges
-        centers = self._get_connection_elements()
+        centers = np.array([int(ii[1]) for ii in self._get_connection_elements()])
         
         # get charges at every point
         for center in centers:

@@ -97,38 +97,6 @@ class SimulationBox():
                 
         return
                     
-    def _update_topology_indexes(self):
-        
-        nitems = {
-            "_btype" : [],
-            "_atype" : [],
-            "_dtype" : [],
-            "_itype" : [],
-            }
-        
-        for attribute in nitems:
-            for specie in self._species:
-                for attr in specie.__getattribute__(attribute):
-                    if attr.id not in nitems[attribute]:
-                        nitems[attribute].append(attr.id)
-                    else:
-                        idx = find_smallest_missing(nitems[attribute], start=1)
-                        attr.set_id(idx)
-                        nitems[attribute].append(attr.id)
-                        
-        #resort atom types by alph order
-        atom_types = []
-        for specie in self._species:
-            atom_types.extend([stype.extended_label for stype in specie._stype])
-        atom_types.sort()
-        
-        for specie in self._species:
-            for stype in specie._stype:
-                idx = np.argwhere(stype.extended_label == np.array(atom_types))[0][0]
-                stype.set_id(idx+1)
-        
-        return
-    
     @staticmethod
     def _get_size_from_slab(slab):
         
@@ -410,6 +378,38 @@ class SimulationBox():
         )).tolist()
         return all_species
     
+    def _update_topology_indexes(self):
+        
+        nitems = {
+            "_btype" : [],
+            "_atype" : [],
+            "_dtype" : [],
+            "_itype" : [],
+            }
+        
+        for attribute in nitems:
+            for specie in self._species:
+                for attr in specie.__getattribute__(attribute):
+                    if attr.id not in nitems[attribute]:
+                        nitems[attribute].append(attr.id)
+                    else:
+                        idx = find_smallest_missing(nitems[attribute], start=1)
+                        attr.set_id(idx)
+                        nitems[attribute].append(attr.id)
+                        
+        #resort atom types by alph order
+        atom_types = []
+        for specie in self._species:
+            atom_types.extend([stype.extended_label for stype in specie._stype])
+        atom_types.sort()
+        
+        for specie in self._species:
+            for stype in specie._stype:
+                idx = np.argwhere(stype.extended_label == np.array(atom_types))[0][0]
+                stype.set_id(idx+1)
+        
+        return
+    
     def get_sorted_attribute(self, attribute):
         
         if attribute.lower() in "bonds":
@@ -427,6 +427,7 @@ class SimulationBox():
         attributes = []
         for specie in self._species:
             for attr in specie.__getattribute__(attribute):
+                
                 indexes.append(attr.id)
                 attributes.append(attr)
                 

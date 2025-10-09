@@ -4,3 +4,4 @@ numpy
 networkx
 platformdirs
 configparser
+libarvo

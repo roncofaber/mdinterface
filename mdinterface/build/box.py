@@ -168,6 +168,7 @@ def make_interface_slab(interface_uc, xsize, ysize, layers=1):
 
 #THANKS CHATGPT (but mostly me tbh)
 def populate_with_ions(ions, nions, volume, ion_pos=False, conmodel=None):
+    
     def place_ion(ion, volume, ion_coords, ion_radii, zpos=None, max_attempts=100):
         ion_radius = ion.estimate_specie_radius()
         for _ in range(max_attempts):

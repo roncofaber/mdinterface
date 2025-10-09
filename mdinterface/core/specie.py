@@ -178,39 +178,6 @@ class Specie(object):
         
         return
 
-    # def add_topology(self, attribute):
-    #     # Determine the type of the attribute
-    #     attribute_type = attribute.__class__.__name__
-        
-    #     # Get the corresponding attribute list
-    #     if attribute_type == "Bond":
-    #         attribute_list = self._btype
-    #     elif attribute_type == "Angle":
-    #         attribute_list = self._atype
-    #     elif attribute_type == "Dihedral":
-    #         attribute_list = self._dtype
-    #     elif attribute_type == "Improper":
-    #         attribute_list = self._itype
-    #     elif attribute_type == "Atom":
-    #         attribute_list = self._stype
-    #     else:
-    #         raise ValueError("Invalid topology attribute type.")
-        
-    #     # Check if the attribute already exists based on symbols
-    #     attribute_symbols = attribute.symbols
-    #     for existing_attribute in attribute_list:
-    #         if existing_attribute.symbols == attribute_symbols:
-    #             print(f"{attribute_type} with symbols {attribute_symbols} already exists and will not be added again.")
-    #             return
-        
-    #     # Add the attribute to the list
-    #     attribute_list.append(attribute)
-        
-    #     # Reinitialize topology to ensure consistency
-    #     self._update_topology()
-        
-    #     return
-    
     def _add_to_topology(self, bonds=[], angles=[], dihedrals=[], impropers=[]):
         
         # check for uniqueness
@@ -219,19 +186,19 @@ class Specie(object):
         new_dihedrals = []
         new_impropers = []
         for bond in copy.deepcopy(bonds):
-            if bond not in self._old_bonds:
+            if not any(bond.__eq_strict__(bb) for bb in self._old_bonds):
                 new_bonds.append(bond)
         
         for angle in copy.deepcopy(angles):
-            if angle not in self._old_angles:
+            if not any(angle.__eq_strict__(aa) for aa in self._old_angles):
                 new_angles.append(angle)
                 
         for dihedral in copy.deepcopy(dihedrals):
-            if dihedral not in self._old_dihedrals:
+            if not any(dihedral.__eq_strict__(dd) for dd in self._old_dihedrals):
                 new_dihedrals.append(dihedral)
                 
         for improper in copy.deepcopy(impropers):
-            if improper not in self._old_impropers:
+            if not any(improper.__eq_strict__(ii) for ii in self._old_impropers):
                 new_impropers.append(improper)
         
         # add to topology

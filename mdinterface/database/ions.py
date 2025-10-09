@@ -197,7 +197,7 @@ class Hydronium(Specie):
 class Hydroxide(Specie):
     def __init__(self, **kwargs):
         
-        # make ion by cheating and making NH3 first
+        # make ion 
         hoh = ase.build.molecule("OH")
 
         # bond is fixed in paper #FIXME used hydronium bond with r0=1

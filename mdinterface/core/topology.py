@@ -148,6 +148,10 @@ class Bond(Topology):
             self.r0 = r0
 
         return
+    
+    def __eq_strict__(self, other):
+        return (self.kr == other.kr and self.r0 == other.r0 and
+                (self.symbols == other.symbols or self.symbols == other.symbols[::-1]))
 
 
 class Angle(Topology):
@@ -177,6 +181,10 @@ class Angle(Topology):
     def __eq__(self, other):
         return (self.kr == other.kr and self.theta0 == other.theta0 and
                 (self.elements == other.elements or self.elements == other.elements[::-1]))
+    
+    def __eq_strict__(self, other):
+        return (self.kr == other.kr and self.theta0 == other.theta0 and
+                (self.symbols == other.symbols or self.symbols == other.symbols[::-1]))
 
     def __bool__(self):
         return any([bool(val) for val in self.values])
@@ -231,6 +239,10 @@ class Dihedral(Topology):
     def __eq__(self, other):
         return (self.values == other.values and
                 (self.elements == other.elements or self.elements == other.elements[::-1]))
+    
+    def __eq_strict__(self, other):
+        return (self.values == other.values and
+                (self.symbols == other.symbols or self.symbols == other.symbols[::-1]))
 
     def write(self, fout):
         atype = "{}-{}-{}-{}".format(*self.symbols)
@@ -304,6 +316,10 @@ class Improper(Topology):
         return f"{self.__class__.__name__}({symbols}, K,d,n={values})"
 
     def __eq__(self, other):
+        return (self.values == other.values and
+                self._a1.split('_')[0] == other._a1.split('_')[0])
+    
+    def __eq_strict__(self, other):
         return (self.values == other.values and
                 self._a1.split('_')[0] == other._a1.split('_')[0])
 
