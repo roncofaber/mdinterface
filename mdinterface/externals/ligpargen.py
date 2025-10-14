@@ -39,7 +39,6 @@ def cleanup(path, check_file):
     else:
         print(f"{path} is neither a file nor a directory")
 
-# main ligpargen driver
 def run_ligpargen(system, charge=None):
     """
     Runs the ligpargen command for the given xyz file.
@@ -48,7 +47,7 @@ def run_ligpargen(system, charge=None):
     system (ase.Atoms): The atoms system to be processed.
 
     Returns:
-    ase.Atoms: The atoms object from the generated lammps file.
+    tuple: Containing system, atoms, bonds, angles, dihedrals, impropers.
     """
     
     if "BOSSdir" not in os.environ:
@@ -58,33 +57,51 @@ def run_ligpargen(system, charge=None):
         print("add 'BOSSdir = /path/to/your/boss' in [settings] in the")
         print(f"{mdint}/config.ini file.")
         
-    # write file and run ligpargen
+    # Write the XYZ file and prepare to run ligpargen
     random_number = random.randint(10000000, 99999999)
     folder_name = f"test_{random_number}"
     os.makedirs(folder_name, exist_ok=True)
     
     ase.io.write(f"{random_number}.xyz", system)
     
-    # define ligpargen command
+    # Define ligpargen command
     if charge is None:
         ligpargen_command = f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -cgen CM1A"
     else:
         ligpargen_command = f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -c {charge} -cgen CM1A"
-        
+    
+    error_log_path = os.path.join(folder_name, "error_log.txt")  # Path for the error log
+    
     try:
-        subprocess.run(ligpargen_command, shell=True, check=True,
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        # Run the command and capture both stdout and stderr
+        result = subprocess.run(ligpargen_command, shell=True, check=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Optionally log stdout for debugging
+        output = result.stdout.decode()
+        print("Command executed successfully, output captured:")
+        print(output)
+        
     except subprocess.CalledProcessError as e:
         print(f"An error occurred while running the command: {e}")
-        # cleanup stuff
-        # cleanup(folder_name, f"{random_number}")
-        # os.remove(f"{random_number}.xyz")
+        
+        # Write stderr output to the error log
+        with open(error_log_path, 'w') as error_log_file:
+            # To capture both stdout and stderr in the log file for further analysis
+            error_log_file.write("STDOUT:\n" + e.stdout.decode() + "\n")
+            error_log_file.write("STDERR:\n" + e.stderr.decode() + "\n")
+
+        # Additional cleanup code can be executed here
+        cleanup(folder_name, f"{random_number}")
+        os.remove(f"{random_number}.xyz")
+        
         raise
 
+    # Proceed to read lammps data file
     system, atoms, bonds, angles, dihedrals, impropers = read_lammps_data_file(
         f"{folder_name}/{random_number}.lammps.lmp")
     
-    # cleanup stuff
+    # Additional cleanup code can be executed here
     cleanup(folder_name, f"{random_number}")
     os.remove(f"{random_number}.xyz")
     

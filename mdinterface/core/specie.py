@@ -85,8 +85,8 @@ class Specie(object):
         if fix_missing:
             self._fix_missing_interactions()
             
-        # initialize topology info
-        self._update_topology()
+        # initialize topology indexing
+        self._update_topology_indexing()
         
         # set tot charge
         self._tot_charge = tot_charge
@@ -127,41 +127,59 @@ class Specie(object):
         return atoms, stype
     
     def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers):
+        """
+        Setup topology from scratch - this is run in the beginning
+        """
         
-        # initialize bond values
+        # define atoms
+        atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
+        
+        self._stype = atoms_list
+        self._smap = atom_map
+        self._sids = atom_ids
+        
+        # initialize topology values
         self._old_bonds = copy.deepcopy(as_list(bonds))
         self._old_angles = copy.deepcopy(as_list(angles))
         self._old_dihedrals = copy.deepcopy(as_list(dihedrals))
         self._old_impropers = copy.deepcopy(as_list(impropers))
         
         # map list of inputs
-        atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
-        bonds_list, bond_map, bond_ids = pmap.map_bonds(as_list(bonds))
-        angles_list, angle_map, angle_ids = pmap.map_angles(as_list(angles))
-        dihedrals_list, dihedral_map, dihedral_ids = pmap.map_dihedrals(as_list(dihedrals))
-        impropers_list, improper_map, improper_ids = pmap.map_impropers(as_list(impropers))
+        self._update_topology_mappings()
         
+        return
+    
+    def _update_topology_mappings(self):
+        """
+        Update topology mappings.
+        """
+        # Remap topology lists
+        bonds_list, bond_map, bond_ids = pmap.map_bonds(self._old_bonds)
+        angles_list, angle_map, angle_ids = pmap.map_angles(self._old_angles)
+        dihedrals_list, dihedral_map, dihedral_ids = pmap.map_dihedrals(self._old_dihedrals)
+        impropers_list, improper_map, improper_ids = pmap.map_impropers(self._old_impropers)
+
         self._btype = bonds_list
         self._atype = angles_list
         self._dtype = dihedrals_list
         self._itype = impropers_list
-        self._stype = atoms_list
-        
-        self._smap = atom_map
+
         self._bmap = bond_map
         self._amap = angle_map
         self._dmap = dihedral_map
         self._imap = improper_map
-        
-        self._sids = atom_ids
+
         self._bids = bond_ids
         self._aids = angle_ids
         self._dids = dihedral_ids
         self._iids = improper_ids
-        
+
+        # Update topology to ensure consistency
+        self._update_topology_indexing()
+
         return
     
-    def _update_topology(self):
+    def _update_topology_indexing(self):
         formula = self.atoms.get_chemical_formula()
         
         for attributes in ["_btype", "_atype", "_dtype", "_itype", "_stype"]:
@@ -207,36 +225,57 @@ class Specie(object):
         self._old_dihedrals += new_dihedrals
         self._old_impropers += new_impropers
         
-        # map list of inputs
-        # atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
-        bonds_list, bond_map, bond_ids = pmap.map_bonds(self._old_bonds)
-        angles_list, angle_map, angle_ids = pmap.map_angles(self._old_angles)
-        dihedrals_list, dihedral_map, dihedral_ids = pmap.map_dihedrals(self._old_dihedrals)
-        impropers_list, improper_map, improper_ids = pmap.map_impropers(self._old_impropers)
-        
-        self._btype = bonds_list
-        self._atype = angles_list
-        self._dtype = dihedrals_list
-        self._itype = impropers_list
-        # self._stype = atoms_list
-        
-        # self._smap = atom_map
-        self._bmap = bond_map
-        self._amap = angle_map
-        self._dmap = dihedral_map
-        self._imap = improper_map
-        
-        # self._sids = atom_ids
-        self._bids = bond_ids
-        self._aids = angle_ids
-        self._dids = dihedral_ids
-        self._iids = improper_ids
-        
-        # Reinitialize topology to ensure consistency
-        self._update_topology()
+        # update topology mapping
+        self._update_topology_mappings()
         
         return
     
+    def _cleanup_topology(self):
+        """
+        Remove topology interactions that reference deleted atoms.
+
+        This method should be called after atoms are deleted from the system
+        to ensure topology consistency.
+
+        Parameters:
+        deleted_atom_ids (list): List of atom IDs (from self._sids) that were deleted
+        """
+        
+        atom_ids = self._sids
+
+        # Clean bonds
+        valid_bonds = []
+        for bond in self._old_bonds:
+            if all(sim in atom_ids for sim in bond.symbols):
+                valid_bonds.append(bond)
+        self._old_bonds = valid_bonds
+
+        # Clean angles
+        valid_angles = []
+        for angle in self._old_angles:
+            if all(sim in atom_ids for sim in angle.symbols):
+                valid_angles.append(angle)
+        self._old_angles = valid_angles
+
+        # Clean dihedrals
+        valid_dihedrals = []
+        for dihedral in self._old_dihedrals:
+            if all(sim in atom_ids for sim in dihedral.symbols):
+                valid_dihedrals.append(dihedral)
+        self._old_dihedrals = valid_dihedrals
+
+        # Clean impropers
+        valid_impropers = []
+        for improper in self._old_impropers:
+            if all(sim in atom_ids for sim in improper.symbols):
+                valid_impropers.append(improper)
+        self._old_impropers = valid_impropers
+
+        # Update topology mappings
+        self._update_topology_mappings()
+
+        return
+
     def _fix_missing_interactions(self):
         
         mss_bnd = pmap.generate_missing_interactions(self, "bonds")
@@ -745,3 +784,4 @@ class Specie(object):
                 relevant_rings.append(ring)
 
         return relevant_rings
+

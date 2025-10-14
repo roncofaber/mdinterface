@@ -14,6 +14,7 @@ from mdinterface.build.snippets import make_snippet, remap_snippet_topology
 
 # import random
 import numpy as np
+import copy
 
 #%%
 
@@ -64,18 +65,20 @@ class Polymer(Specie):
 
     def _update_connection(self, center, Nmax, charges, ending="H"):
 
-        # get local indeldxsxes (within dihedral from center)
-        ldxs = list(set(np.concatenate(self.find_relevant_distances(3, centers=center))))
-        
-        # make a lil snippet and generate its mapping to main polymer
+        # make a lil snippet
         snippet, snippet_idxs = make_snippet(self, center, Nmax, ending=ending)
+        
+        # get local indexes (within dihedral from center)
+        ldxs = list(set(np.concatenate(self.find_relevant_distances(4, centers=center))))
+        
+        # find mapping between indexes
         mapping = [np.argwhere(snippet_idxs == ll)[0][0] for ll in ldxs]
     
         # Check if snippet already exists in cache
         snippet_hash = ''.join(snippet.get_chemical_symbols())
         if snippet_hash in self._snippet_cache:
             
-            cached_snippet = self._snippet_cache[snippet_hash]
+            cached_snippet = copy.deepcopy(self._snippet_cache[snippet_hash])
             
             sn_atoms     = cached_snippet["sn_atoms"]
             sn_atypes    = cached_snippet["sn_atypes"]
@@ -132,33 +135,36 @@ class Polymer(Specie):
     def refine_polymer_topology(self, Nmax=12, offset=False, ending="H"):
         """
         Refines the charges for the specified species.
-    
+
         Parameters:
         specie (ase.Atoms): The species object containing the atoms.
         Nmax (int): The maximum number of neighbors to consider.
         offset (bool): Whether to apply an offset to the charges.
-    
+
         Returns:
         np.ndarray: The refined charges.
         """
-        
+
+        # Clean topology first to remove any invalid interactions from polymerization
+        self._cleanup_topology()
+
         # get charges and connection elements
         charges = self.charges
         centers = np.array([int(ii[1]) for ii in self._get_connection_elements()])
-        
+
         # get charges at every point
         for center in centers:
             self._update_connection(center, Nmax, charges, ending=ending)
-            
+
         # bring back to zero
         if offset:
-            
+
             if "nominal_charge" in self.atoms.arrays:
                 target = self.atoms.arrays["nominal_charge"].sum()
             else:
                 target = 0
-            
+
             charges -= ((charges.sum() - target) / len(charges))
-            
+
         self.atoms.set_initial_charges(charges)
         return

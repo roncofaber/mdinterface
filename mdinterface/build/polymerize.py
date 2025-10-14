@@ -266,7 +266,7 @@ def attach_to_chain(oligomer, monomer):
         
     # perform docking
     frames = []
-    for dist in [3, 2, 1, 0]:
+    for dist in [3, 2, 1]:
         
         # get positions of docking box
         pos1 = oligomer.get_positions()[oli_idx]
