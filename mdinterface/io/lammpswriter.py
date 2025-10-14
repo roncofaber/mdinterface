@@ -269,3 +269,138 @@ class DATAWriter(base.WriterBase):
 
             if has_velocities:
                 self._write_velocities(atoms)
+
+
+def write_lammps_coefficients(system, sorted_attributes, fout=None, fname="coefficients.lammps"):
+    """
+    Write LAMMPS force field coefficients to a file.
+
+    This function writes pair, bond, angle, dihedral, and improper coefficients
+    in LAMMPS format. It's designed to be used with SimulationBox systems that
+    contain force field parameters.
+
+    Parameters:
+    -----------
+    system : MDAnalysis.Universe
+        The system containing atoms and topology for which coefficients are written
+    sorted_attributes : dict
+        Dictionary containing sorted attributes from SimulationBox.get_sorted_attribute():
+        - "atoms": sorted atom types
+        - "bonds": sorted bond types
+        - "angles": sorted angle types
+        - "dihedrals": sorted dihedral types
+        - "impropers": sorted improper types
+    fout : file object, optional
+        Open file object to write to. If None, creates new file with `fname`
+    fname : str, optional
+        Filename to create if `fout` is None. Default: "coefficients.lammps"
+
+    Returns:
+    --------
+    None
+
+    Examples:
+    ---------
+    # Basic usage with SimulationBox
+    sorted_attrs = {
+        "atoms": simbox.get_sorted_attribute("atoms"),
+        "bonds": simbox.get_sorted_attribute("bonds"),
+        "angles": simbox.get_sorted_attribute("angles"),
+        "dihedrals": simbox.get_sorted_attribute("dihedrals"),
+        "impropers": simbox.get_sorted_attribute("impropers")
+    }
+    write_lammps_coefficients(system, sorted_attrs, fname="my_coeffs.lammps")
+
+    # Writing to an existing file object
+    with open("data.lammps", "w") as f:
+        write_lammps_coefficients(system, sorted_attrs, fout=f)
+    """
+
+    remember_to_close = False
+    if fout is None:
+        fout = open(fname, "w")
+        remember_to_close = True
+
+    # Write Pair Coefficients
+    fout.write("Pair Coeffs\n\n")
+
+    idx = 1
+    atom_types = sorted_attributes.get("atoms", [])
+    for atom in atom_types:
+        if atom.extended_label not in np.unique(system.atoms.types):
+            continue
+
+        eps = atom.eps if atom.eps is not None else 0
+        sig = atom.sig if atom.sig is not None else 0
+
+        fout.write("{:>5}    {:>12.8f}    {:>12.8f}  # {}\n".format(
+            idx, eps, sig, atom.extended_label))
+        idx += 1
+
+    # Write Bond Coefficients
+    bond_types = sorted_attributes.get("bonds", [])
+    if bond_types:
+        fout.write("\n")
+        fout.write("Bond Coeffs\n\n")
+
+    for bond in bond_types:
+        if bond.id not in np.array(system.bonds.types(), dtype=int):
+            continue
+
+        kr = bond.kr if bond.kr is not None else 0
+        r0 = bond.r0 if bond.r0 is not None else 0
+
+        btype = "{}-{}".format(*bond.symbols)
+
+        fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<5} | {}\n".format(
+            bond.id, kr, r0, btype, bond.resname))
+
+    # Write Angle Coefficients
+    angle_types = sorted_attributes.get("angles", [])
+    if angle_types:
+        fout.write("\n")
+        fout.write("Angle Coeffs\n\n")
+
+    for angle in angle_types:
+        if angle.id not in np.array(system.angles.types(), dtype=int):
+            continue
+
+        kr = angle.kr if angle.kr is not None else 0
+        theta0 = angle.theta0 if angle.theta0 is not None else 0
+
+        atype = "{}-{}-{}".format(*angle.symbols)
+
+        fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<8} | {}\n".format(
+            angle.id, kr, theta0, atype, angle.resname))
+
+    # Write Dihedral Coefficients
+    dihedral_types = sorted_attributes.get("dihedrals", [])
+    if dihedral_types:
+        fout.write("\n")
+        fout.write("Dihedral Coeffs\n\n")
+
+    for dihedral in dihedral_types:
+        if dihedral.id not in np.array(system.dihedrals.types(), dtype=int):
+            continue
+
+        dihedral.write(fout)
+
+    # Write Improper Coefficients
+    improper_types = sorted_attributes.get("impropers", [])
+    if improper_types:
+        fout.write("\n")
+        fout.write("Improper Coeffs\n\n")
+
+    for improper in improper_types:
+        if improper.id not in np.array(system.impropers.types(), dtype=int):
+            continue
+
+        atype = "{}".format(*improper.symbols)
+        value = "{:>7.4f}    {:>2d}    {:>2d}".format(*improper.values)
+
+        fout.write("{:>5}    {}  #  {:<2} | {}\n".format(improper.id, value, atype, improper.resname))
+
+    fout.write("\n")
+
+    if remember_to_close:
+        fout.close()

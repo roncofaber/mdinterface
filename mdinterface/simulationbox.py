@@ -7,7 +7,7 @@ Created on Tue Oct 24 15:14:41 2023
 """
 
 from mdinterface.utils.auxiliary import label_to_element, as_list, find_smallest_missing
-from mdinterface.io.lammpswriter import DATAWriter
+from mdinterface.io.lammpswriter import DATAWriter, write_lammps_coefficients
 from mdinterface.build.box import make_interface_slab, make_solvent_box, add_component
 
 import ase
@@ -27,7 +27,8 @@ default_params = {
     "solvent": {
         "rho": None,
         "zdim": None,
-        "nions": None,
+        "nspecies": None,  # Preferred parameter name
+        "nions": None,     # Deprecated but maintained for backward compatibility
         "concentration": None,
         "conmodel": None,
         "ion_pos": None
@@ -142,8 +143,24 @@ class SimulationBox():
             if layer_type == "solvent":
                 zsize    = layer["zdim"]
                 solv_rho = layer["rho"]
-                nions    = layer["nions"]
-                concentration = layer["concentration"]
+
+                # Handle backward compatibility: nions -> nspecies
+                nspecies = layer.get("nspecies")
+                nions_legacy = layer.get("nions")
+
+                if nspecies is not None and nions_legacy is not None:
+                    raise ValueError("Cannot specify both 'nspecies' and 'nions'. Use 'nspecies' (preferred) or 'nions' (deprecated).")
+                elif nspecies is not None:
+                    nions = nspecies  # Use the preferred parameter
+                elif nions_legacy is not None:
+                    nions = nions_legacy  # Use legacy parameter for backward compatibility
+                    import warnings
+                    warnings.warn("Parameter 'nions' is deprecated. Use 'nspecies' instead.",
+                                DeprecationWarning, stacklevel=2)
+                else:
+                    nions = None
+
+                concentration = layer["concentration"] # in molar
                 conmodel = layer["conmodel"]
                 ion_pos  = layer["ion_pos"]
                 
@@ -212,109 +229,23 @@ class SimulationBox():
             with open(filename, 'r') as ffile, open(temp_file, 'w') as tfile:
                 for ln, fl in enumerate(ffile):
                     if fl.startswith("Atoms"):
-                        
-                        # write coefficients
-                        self.write_coefficients(system, fout=tfile)
+
+                        # write coefficients using refactored function
+                        sorted_attrs = {
+                            "atoms": self.get_sorted_attribute("atoms"),
+                            "bonds": self.get_sorted_attribute("bonds"),
+                            "angles": self.get_sorted_attribute("angles"),
+                            "dihedrals": self.get_sorted_attribute("dihedrals"),
+                            "impropers": self.get_sorted_attribute("impropers")
+                        }
+                        write_lammps_coefficients(system, sorted_attrs, fout=tfile)
                         
                     tfile.write(fl)
             
             shutil.move(temp_file, filename)
         
         return
-    
-    def write_coefficients(self, system, fname="tmp.coeff", fout=None):
-        
-        remember_to_close = False
-        if fout is None:
-            fout = open(fname, "w")
-            remember_to_close = True
-            
-            
-        fout.write("Pair Coeffs\n\n")
-        
-        idx = 1
-        for cc, atom in enumerate(self.get_sorted_attribute("atoms")):
 
-            if atom.extended_label not in np.unique(system.atoms.types):
-                continue
-            
-            eps = atom.eps if atom.eps is not None else 0
-            sig = atom.sig if atom.sig is not None else 0
-            
-            fout.write("{:>5}    {:>12.8f}    {:>12.8f}  # {}\n".format(
-                idx, eps, sig, atom.extended_label))
-            idx += 1
-            
-        if self.get_sorted_attribute("bonds"):
-            fout.write("\n")
-            fout.write("Bond Coeffs\n\n")
-        
-        for bond in self.get_sorted_attribute("bonds"):
-            
-            if bond.id not in np.array(system.bonds.types(), dtype=int):
-                continue
-            
-            kr = bond.kr if bond.kr is not None else 0
-            r0 = bond.r0 if bond.r0 is not None else 0
-            
-            btype = "{}-{}".format(*bond.symbols)
-        
-            fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<5} | {}\n".format(
-                bond.id, kr, r0, btype, bond.resname))
-        
-        if self.get_sorted_attribute("angles"):
-            fout.write("\n")
-            fout.write("Angle Coeffs\n\n")
-        
-        for angle in self.get_sorted_attribute("angles"):
-            
-            if angle.id not in np.array(system.angles.types(), dtype=int):
-                continue
-            
-            kr     = angle.kr if angle.kr is not None else 0
-            theta0 = angle.theta0 if angle.theta0 is not None else 0
-            
-            atype = "{}-{}-{}".format(*angle.symbols)
-        
-            fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<8} | {}\n".format(
-                angle.id, kr, theta0, atype, angle.resname))
-        
-        if self.get_sorted_attribute("dihedrals"):
-            fout.write("\n")
-            fout.write("Dihedral Coeffs\n\n")
-        
-        for dihedral in self.get_sorted_attribute("dihedrals"):
-            
-            if dihedral.id not in np.array(system.dihedrals.types(), dtype=int):
-                continue
-            
-            dihedral.write(fout)
-            # atype = "{}-{}-{}-{}".format(*dihedral.symbols)
-            # value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*dihedral.values)
-        
-            # fout.write("{:>5}    {}  #  {:<8} | {}\n".format(dihedral.id, value, atype, dihedral.resname))
-        
-        if self.get_sorted_attribute("impropers"):
-            fout.write("\n")
-            fout.write("Improper Coeffs\n\n")
-        
-        for improper in self.get_sorted_attribute("impropers"):
-            
-            if improper.id not in np.array(system.impropers.types(), dtype=int):
-                continue
-            
-            atype = "{}".format(*improper.symbols)
-            value = "{:>7.4f}    {:>2d}    {:>2d}".format(*improper.values)
-        
-            fout.write("{:>5}    {}  #  {:<2} | {}\n".format(improper.id, value, atype, improper.resname))
-        
-        fout.write("\n")
-        
-        if remember_to_close:
-            fout.close()
-        
-        return
-    
     # convert to ase.Atoms
     @staticmethod
     def to_ase(system):

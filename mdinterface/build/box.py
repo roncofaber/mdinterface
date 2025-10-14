@@ -18,13 +18,100 @@ import subprocess
 
 #%%
 
+def _validate_solvent_box_parameters(nions, concentration, conmodel, ions, solvent, density):
+    """
+    Validate parameter combinations for make_solvent_box function.
+
+    Raises appropriate errors for invalid parameter combinations.
+    """
+
+    # Basic mutual exclusivity check
+    if nions is not None and concentration is not None:
+        raise ValueError("Cannot specify both 'nions' and 'concentration'. Use one or the other.")
+
+    # If concentration model is provided, ions must be provided
+    if conmodel is not None and (ions is None or len(ions) == 0):
+        raise ValueError("When using 'conmodel', 'ions' must be provided and non-empty.")
+
+    # If nions is a list, it must match the number of ion species
+    if isinstance(nions, (list, tuple)) and ions is not None:
+        if len(nions) != len(ions):
+            raise ValueError(f"Length of 'nions' ({len(nions)}) must match number of ion species ({len(ions)}).")
+
+    # If solvent density is provided but no solvent, warn the user
+    if density is not None and solvent is None:
+        import warnings
+        warnings.warn("Density specified but no solvent provided. Density will be ignored.",
+                     UserWarning, stacklevel=3)
+
+    # If no solvent and no ions, nothing to do
+    if solvent is None and (ions is None or len(ions) == 0):
+        import warnings
+        warnings.warn("No solvent or ions specified. Empty box will be created.",
+                     UserWarning, stacklevel=3)
+
 def make_solvent_box(species, solvent, ions, volume, density, nions, concentration,
                      conmodel, ion_pos):
-    
-    # make sure info is sound
-    assert not( nions is not None and concentration is not None),\
-        "'nions' and 'concentration' cannot both be not None"
-    
+    """
+    Build a solvent box with optional ionic species.
+
+    This function creates a simulation box containing solvent molecules and ionic species
+    using PACKMOL for molecular packing. It supports various placement strategies and
+    concentration models.
+
+    Parameters:
+    -----------
+    species : list
+        List of all available species in the simulation
+    solvent : object or None
+        Solvent molecule object (e.g., Water). If None, only ions are placed.
+    ions : list or None
+        List of ionic species to add to the box
+    volume : list
+        Box dimensions [x, y, z] in Angstroms
+    density : float or None
+        Solvent density in g/cm³. Ignored if solvent is None.
+    nions : int, list, or None
+        Number of each ionic species. Can be:
+        - int: Same number for all ion types
+        - list: Different number for each ion type (must match len(ions))
+        - None: No ions added
+    concentration : float or None
+        Ionic concentration in Molar. Alternative to nions.
+        Cannot be used simultaneously with nions.
+    conmodel : dict or None
+        Advanced concentration model for spatially varying concentrations.
+        Format: {ion_index: (z_coords, concentration_profile)}
+    ion_pos : str or None
+        Ion placement strategy:
+        - "random": Random placement (default)
+        - "center": Place all ions at box center
+        - "box": Use PACKMOL box placement
+        - "left": Constrain to left half of box
+        - None: Defaults to "random"
+
+    Returns:
+    --------
+    MDAnalysis.Universe or None
+        Merged universe containing solvent and ions, or None if no components
+
+    Examples:
+    ---------
+    # Simple water box with NaCl
+    make_solvent_box(species, water, [na, cl], [20, 20, 20], 1.0, [5, 5], None, None, "random")
+
+    # Concentration-based approach
+    make_solvent_box(species, water, [na, cl], [20, 20, 20], 1.0, None, 0.1, None, "random")
+
+    # Complex polymer solution
+    make_solvent_box(species, None, [polymer, hydronium, water], [50, 50, 50], None, [10, 50, 200], None, None, "box")
+    """
+
+    # Validate parameter combinations
+    _validate_solvent_box_parameters(nions, concentration, conmodel, ions, solvent, density)
+
+    # Legacy parameter compatibility is handled in the calling function (simulationbox.py)
+
     # convert concentration to number of ions
     if concentration is not None:
         nions = int(concentration*np.prod(volume)*units.mol/((units.m/10)**3))
