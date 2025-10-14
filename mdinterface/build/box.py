@@ -6,6 +6,7 @@ Created on Tue Jan 14 10:23:57 2025
 @author: roncofaber
 """
 
+from typing import List, Optional, Union, Tuple, Dict, Any
 from mdinterface.io.packmol import header, box_place, fix_place
 from mdinterface.build.continuum2sim import discretize_concentration
 
@@ -18,7 +19,14 @@ import subprocess
 
 #%%
 
-def _validate_solvent_box_parameters(nions, concentration, conmodel, ions, solvent, density):
+def _validate_solvent_box_parameters(
+    nions: Optional[Union[int, List[int]]],
+    concentration: Optional[float],
+    conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
+    ions: Optional[List[Any]],
+    solvent: Optional[Any],
+    density: Optional[float]
+) -> None:
     """
     Validate parameter combinations for make_solvent_box function.
 
@@ -50,8 +58,17 @@ def _validate_solvent_box_parameters(nions, concentration, conmodel, ions, solve
         warnings.warn("No solvent or ions specified. Empty box will be created.",
                      UserWarning, stacklevel=3)
 
-def make_solvent_box(species, solvent, ions, volume, density, nions, concentration,
-                     conmodel, ion_pos):
+def make_solvent_box(
+    species: List[Any],
+    solvent: Optional[Any],
+    ions: Optional[List[Any]],
+    volume: List[float],
+    density: Optional[float],
+    nions: Optional[Union[int, List[int]]],
+    concentration: Optional[float],
+    conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
+    ion_pos: Optional[str]
+) -> Optional[mda.Universe]:
     """
     Build a solvent box with optional ionic species.
 
@@ -157,9 +174,12 @@ def make_solvent_box(species, solvent, ions, volume, density, nions, concentrati
     
     return solution
     
-# populate a box with solvent and ions
-def populate_box(volume, instructions, input_file="input_packmol.in",
-                 output_file="system.pdb"):
+def populate_box(
+    volume: List[float],
+    instructions: List[Tuple[Any, Union[int, List[float]], str]],
+    input_file: str = "input_packmol.in",
+    output_file: str = "system.pdb"
+) -> Optional[mda.Universe]:
 
     if not instructions:
         return None

@@ -6,12 +6,14 @@ Created on Wed Oct 25 15:03:47 2023
 @author: roncoroni
 """
 
+from typing import Dict, List, Optional, Union, TextIO, Any
 import numpy as np
 
 from MDAnalysis.lib import util, mdamath
 from MDAnalysis.core.groups import requires
 from MDAnalysis.exceptions import NoDataError
 from MDAnalysis.coordinates import base
+import MDAnalysis as mda
 
 
 btype_sections = {'bond':'Bonds', 'angle':'Angles',
@@ -271,7 +273,12 @@ class DATAWriter(base.WriterBase):
                 self._write_velocities(atoms)
 
 
-def write_lammps_coefficients(system, sorted_attributes, fout=None, fname="coefficients.lammps"):
+def write_lammps_coefficients(
+    system: mda.Universe,
+    sorted_attributes: Dict[str, List[Any]],
+    fout: Optional[TextIO] = None,
+    fname: str = "coefficients.lammps"
+) -> None:
     """
     Write LAMMPS force field coefficients to a file.
 
