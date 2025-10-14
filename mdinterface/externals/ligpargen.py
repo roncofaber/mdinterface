@@ -84,6 +84,7 @@ def run_ligpargen(system, charge=None):
         
     except subprocess.CalledProcessError as e:
         print(f"An error occurred while running the command: {e}")
+        print(e.stderr.decode())
         
         # Write stderr output to the error log
         with open(error_log_path, 'w') as error_log_file:

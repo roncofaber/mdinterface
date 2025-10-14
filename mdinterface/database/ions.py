@@ -21,7 +21,8 @@ import ase
 # Cheatham : https://pubs.acs.org/doi/10.1021/jp8001614
 # Sengupta : https://pubs.acs.org/doi/10.1021/acs.jcim.0c01390 (12-6 HFE param)
 # Dang     : https://doi.org/10.1063/1.462555, https://doi.org/10.1063/1.466363
-
+# OPLS-AA (Cl) : https://pubs.acs.org/doi/10.1021/ct900009a
+    
 ions_parameters = {
     "F": {
         "charge": -1.0,
@@ -39,7 +40,8 @@ ions_parameters = {
             "jorgensen": [0.71000, 4.0200],
             "cheatham" : [0.03559, 4.4777],
             "sengupta" : [0.63803, 4.0981],
-            "dang"     : [0.10000, 4.4500]
+            "dang"     : [0.10000, 4.4500],
+            "opls-aa"  : [0.14800, 3.7700]
         }
     },
     "Br": {
