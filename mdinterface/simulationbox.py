@@ -6,11 +6,13 @@ Created on Tue Oct 24 15:14:41 2023
 @author: roncoroni
 """
 
+from typing import List, Dict, Union, Optional, Tuple, Any
 from mdinterface.utils.auxiliary import label_to_element, as_list, find_smallest_missing
-from mdinterface.io.lammpswriter import DATAWriter
+from mdinterface.io.lammpswriter import DATAWriter, write_lammps_coefficients
 from mdinterface.build.box import make_interface_slab, make_solvent_box, add_component
 
 import ase
+import MDAnalysis as mda
 
 import numpy as np
 
@@ -26,8 +28,10 @@ default_params = {
     },
     "solvent": {
         "rho": None,
+        "nsolvent": None,  # Number of solvent molecules (alternative to rho)
         "zdim": None,
-        "nions": None,
+        "nspecies": None,  # Preferred parameter name
+        "nions": None,     # Deprecated but maintained for backward compatibility
         "concentration": None,
         "conmodel": None,
         "ion_pos": None
@@ -45,8 +49,9 @@ default_params = {
 
 class SimulationBox():
     
-    def __init__(self, solvent=None, solute=None, interface=None,
-                 enderface=None, miderface=None):
+    def __init__(self, solvent: Optional[Any] = None, solute: Optional[Union[Any, List[Any]]] = None,
+                 interface: Optional[Any] = None, enderface: Optional[Any] = None,
+                 miderface: Optional[Any] = None) -> None:
         
         # start species
         self._setup_species(solvent, solute, interface, enderface, miderface)
@@ -105,16 +110,209 @@ class SimulationBox():
         slab_depth = [0,0,1]@slab.atoms.cell@[0,0,1]
         
         return xsize, ysize, slab_depth
-    
-    # main driver to generate a simulation box given instructions
-    def make_simulation_box(self, xysize, layering, padding=1.5, to_ase=False,
-                            write_data=False, filename="data.lammps",
-                            center_electrode=False, layered=False, hijack=None,
-                            match_cell=False, atom_style="full", write_coeff=True):
+
+    def _validate_xysize(self, xysize: Union[Tuple[float, float], List[float]]) -> Tuple[float, float]:
+        """
+        Validate and normalize XY size input.
+
+        Parameters:
+        -----------
+        xysize : Union[Tuple[float, float], List[float]]
+            Cross-sectional dimensions
+
+        Returns:
+        --------
+        Tuple[float, float]
+            Validated (xsize, ysize) tuple
+
+        Raises:
+        -------
+        TypeError
+            If xysize is not a list, tuple, or array
+        ValueError
+            If xysize doesn't have exactly 2 elements or contains non-positive values
+        """
+        if not isinstance(xysize, (list, tuple, np.ndarray)):
+            raise TypeError(
+                f"xysize must be a list, tuple, or numpy array, got {type(xysize).__name__}. "
+                f"Expected format: [x_size, y_size] where both values are positive numbers."
+            )
+
+        if len(xysize) != 2:
+            raise ValueError(
+                f"xysize must have exactly 2 elements [x_size, y_size], got {len(xysize)} elements: {xysize}. "
+                f"Example: xysize=[20.0, 20.0] for a 20x20 Angstrom cross-section."
+            )
+
+        try:
+            xsize, ysize = float(xysize[0]), float(xysize[1])
+        except (ValueError, TypeError) as e:
+            raise ValueError(
+                f"xysize elements must be numeric, got {xysize}. "
+                f"Both x_size and y_size must be convertible to float. Error: {e}"
+            )
+
+        if xsize <= 0 or ysize <= 0:
+            raise ValueError(
+                f"xysize values must be positive, got x_size={xsize}, y_size={ysize}. "
+                f"Both dimensions must be greater than 0 Angstroms."
+            )
+
+        return xsize, ysize
+
+    def _validate_layering(self, layering: List[Dict[str, Any]]) -> None:
+        """
+        Validate layering configuration before processing.
+
+        Parameters:
+        -----------
+        layering : List[Dict[str, Any]]
+            List of layer dictionaries
+
+        Raises:
+        -------
+        TypeError
+            If layering is not a list or contains non-dictionary elements
+        ValueError
+            If layer configurations are invalid
+        """
+        if not isinstance(layering, list):
+            raise TypeError(
+                f"layering must be a list of layer dictionaries, got {type(layering).__name__}. "
+                f"Expected format: [{{\"type\": \"solvent\", ...}}, {{\"type\": \"interface\", ...}}]"
+            )
+
+        if not layering:
+            raise ValueError(
+                "layering cannot be empty. At least one layer must be specified. "
+                "Example: layering=[{\"type\": \"solvent\", \"zdim\": 25, \"rho\": 1.0}]"
+            )
+
+        valid_types = {"interface", "enderface", "miderface", "solvent", "vacuum"}
+
+        for i, layer in enumerate(layering):
+            if not isinstance(layer, dict):
+                raise TypeError(
+                    f"Layer {i} must be a dictionary, got {type(layer).__name__}: {layer}. "
+                    f"Each layer must have a 'type' key and appropriate parameters."
+                )
+
+            if "type" not in layer:
+                raise ValueError(
+                    f"Layer {i} missing required 'type' key: {layer}. "
+                    f"Valid types: {valid_types}"
+                )
+
+            layer_type = layer["type"]
+            if layer_type not in valid_types:
+                raise ValueError(
+                    f"Layer {i} has invalid type '{layer_type}'. "
+                    f"Valid types: {valid_types}. "
+                    f"Check spelling and ensure the layer type is supported."
+                )
+
+            # Type-specific validation
+            if layer_type == "solvent":
+                required_keys = {"zdim"}
+                missing_keys = required_keys - layer.keys()
+                if missing_keys:
+                    raise ValueError(
+                        f"Solvent layer {i} missing required keys: {missing_keys}. "
+                        f"Solvent layers must specify 'zdim' (thickness in Angstroms). "
+                        f"Example: {{\"type\": \"solvent\", \"zdim\": 25, \"rho\": 1.0}}"
+                    )
+
+                # Validate rho vs nsolvent mutual exclusivity
+                rho = layer.get("rho")
+                nsolvent = layer.get("nsolvent")
+                if rho is not None and nsolvent is not None:
+                    import warnings
+                    warnings.warn(
+                        f"Solvent layer {i}: Both 'rho' (density) and 'nsolvent' (number of molecules) are specified. "
+                        f"Using 'nsolvent' and ignoring 'rho'. "
+                        f"To avoid this warning, specify only one parameter.",
+                        UserWarning, stacklevel=3
+                    )
+                elif rho is None and nsolvent is None:
+                    raise ValueError(
+                        f"Solvent layer {i} must specify either 'rho' (density in g/cm³) or 'nsolvent' (number of molecules). "
+                        f"Examples: {{\"rho\": 1.0}} or {{\"nsolvent\": 500}}"
+                    )
+
+
+            elif layer_type in ["interface", "enderface", "miderface"]:
+                if "nlayers" in layer and not isinstance(layer["nlayers"], int):
+                    raise ValueError(
+                        f"{layer_type.capitalize()} layer {i} 'nlayers' must be an integer, "
+                        f"got {type(layer['nlayers']).__name__}: {layer['nlayers']}"
+                    )
+
+    def make_simulation_box(
+        self,
+        xysize: Union[Tuple[float, float], List[float]],
+        layering: List[Dict[str, Any]],
+        padding: float = 1.5,
+        to_ase: bool = False,
+        write_data: bool = False,
+        filename: str = "data.lammps",
+        center_electrode: bool = False,
+        layered: bool = False,
+        hijack: Optional[ase.Atoms] = None,
+        match_cell: bool = False,
+        atom_style: str = "full",
+        write_coeff: bool = True
+    ) -> Union[mda.Universe, ase.Atoms]:
+        """
+        Generate a simulation box from layered components.
+
+        This is the main driver function that assembles a complete simulation system
+        by stacking layers (interfaces, solvents, vacuum) according to the provided
+        configuration.
+
+        Parameters:
+        -----------
+        xysize : Tuple[float, float] or List[float]
+            Cross-sectional dimensions [x_size, y_size] in Angstroms
+        layering : List[Dict[str, Any]]
+            List of layer configurations. Each layer must have a 'type' key.
+            Valid types: 'interface', 'enderface', 'miderface', 'solvent', 'vacuum'
+        padding : float, default=1.5
+            Spacing between layers in Angstroms
+        to_ase : bool, default=False
+            If True, return ase.Atoms object; otherwise return MDAnalysis.Universe
+        write_data : bool, default=False
+            If True, write LAMMPS data file
+        filename : str, default="data.lammps"
+            Name of the LAMMPS data file to write
+        center_electrode : bool, default=False
+            If True, shift system by 50% along Z to center the first interface
+        layered : bool, default=False
+            Assign different molecule indexes to each interface layer for LAMMPS
+        hijack : Optional[ase.Atoms], default=None
+            Override positions with provided ase.Atoms object (use with caution)
+        match_cell : bool, default=False
+            Deform slabs to match XY dimensions (use with care)
+        atom_style : str, default="full"
+            LAMMPS atom style format ('full' or 'atomic')
+        write_coeff : bool, default=True
+            Whether to write force field coefficients in LAMMPS data file
+
+        Returns:
+        --------
+        Union[mda.Universe, ase.Atoms]
+            The assembled simulation system
+
+        Raises:
+        -------
+        TypeError
+            If xysize or layering have incorrect types
+        ValueError
+            If xysize dimensions are invalid or layering configuration is malformed
+        """
         
-        # define approximate cross_section
-        assert len(xysize) == 2, "'xysize' should have length of 2 [xsize, ysize]"
-        xsize, ysize = xysize
+        # Validate and parse input parameters
+        xsize, ysize = self._validate_xysize(xysize)
+        self._validate_layering(layering)
         
         # make slabs of solid stuff to find actual cross_section
         slabs = []
@@ -142,15 +340,32 @@ class SimulationBox():
             if layer_type == "solvent":
                 zsize    = layer["zdim"]
                 solv_rho = layer["rho"]
-                nions    = layer["nions"]
-                concentration = layer["concentration"]
+                nsolvent = layer["nsolvent"]
+
+                # Handle backward compatibility: nions -> nspecies
+                nspecies = layer.get("nspecies")
+                nions_legacy = layer.get("nions")
+
+                if nspecies is not None and nions_legacy is not None:
+                    raise ValueError("Cannot specify both 'nspecies' and 'nions'. Use 'nspecies' (preferred) or 'nions' (deprecated).")
+                elif nspecies is not None:
+                    nions = nspecies  # Use the preferred parameter
+                elif nions_legacy is not None:
+                    nions = nions_legacy  # Use legacy parameter for backward compatibility
+                    import warnings
+                    warnings.warn("Parameter 'nions' is deprecated. Use 'nspecies' instead.",
+                                DeprecationWarning, stacklevel=2)
+                else:
+                    nions = None
+
+                concentration = layer["concentration"] # in molar
                 conmodel = layer["conmodel"]
                 ion_pos  = layer["ion_pos"]
-                
+
                 # make solvent box
                 solvent = make_solvent_box(self.species, self.solvent, self._solute,
                                            [xsize, ysize, zsize], solv_rho,
-                                           nions, concentration, conmodel, ion_pos)
+                                           nions, concentration, conmodel, ion_pos, nsolvent)
 
                 # add component
                 system, zdim = add_component(system, solvent, zdim, padding=padding)
@@ -186,8 +401,8 @@ class SimulationBox():
             return self.to_ase(system)
         return system
     
-    def write_lammps_file(self, system,  write_coeff=True, filename="data.lammps",
-                          atom_style="full"):
+    def write_lammps_file(self, system: mda.Universe, write_coeff: bool = True,
+                          filename: str = "data.lammps", atom_style: str = "full") -> None:
         
         # just make sure we are not messing things up
         system = system.copy()
@@ -212,112 +427,26 @@ class SimulationBox():
             with open(filename, 'r') as ffile, open(temp_file, 'w') as tfile:
                 for ln, fl in enumerate(ffile):
                     if fl.startswith("Atoms"):
-                        
-                        # write coefficients
-                        self.write_coefficients(system, fout=tfile)
+
+                        # write coefficients using refactored function
+                        sorted_attrs = {
+                            "atoms": self.get_sorted_attribute("atoms"),
+                            "bonds": self.get_sorted_attribute("bonds"),
+                            "angles": self.get_sorted_attribute("angles"),
+                            "dihedrals": self.get_sorted_attribute("dihedrals"),
+                            "impropers": self.get_sorted_attribute("impropers")
+                        }
+                        write_lammps_coefficients(system, sorted_attrs, fout=tfile)
                         
                     tfile.write(fl)
             
             shutil.move(temp_file, filename)
         
         return
-    
-    def write_coefficients(self, system, fname="tmp.coeff", fout=None):
-        
-        remember_to_close = False
-        if fout is None:
-            fout = open(fname, "w")
-            remember_to_close = True
-            
-            
-        fout.write("Pair Coeffs\n\n")
-        
-        idx = 1
-        for cc, atom in enumerate(self.get_sorted_attribute("atoms")):
 
-            if atom.extended_label not in np.unique(system.atoms.types):
-                continue
-            
-            eps = atom.eps if atom.eps is not None else 0
-            sig = atom.sig if atom.sig is not None else 0
-            
-            fout.write("{:>5}    {:>12.8f}    {:>12.8f}  # {}\n".format(
-                idx, eps, sig, atom.extended_label))
-            idx += 1
-            
-        if self.get_sorted_attribute("bonds"):
-            fout.write("\n")
-            fout.write("Bond Coeffs\n\n")
-        
-        for bond in self.get_sorted_attribute("bonds"):
-            
-            if bond.id not in np.array(system.bonds.types(), dtype=int):
-                continue
-            
-            kr = bond.kr if bond.kr is not None else 0
-            r0 = bond.r0 if bond.r0 is not None else 0
-            
-            btype = "{}-{}".format(*bond.symbols)
-        
-            fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<5} | {}\n".format(
-                bond.id, kr, r0, btype, bond.resname))
-        
-        if self.get_sorted_attribute("angles"):
-            fout.write("\n")
-            fout.write("Angle Coeffs\n\n")
-        
-        for angle in self.get_sorted_attribute("angles"):
-            
-            if angle.id not in np.array(system.angles.types(), dtype=int):
-                continue
-            
-            kr     = angle.kr if angle.kr is not None else 0
-            theta0 = angle.theta0 if angle.theta0 is not None else 0
-            
-            atype = "{}-{}-{}".format(*angle.symbols)
-        
-            fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<8} | {}\n".format(
-                angle.id, kr, theta0, atype, angle.resname))
-        
-        if self.get_sorted_attribute("dihedrals"):
-            fout.write("\n")
-            fout.write("Dihedral Coeffs\n\n")
-        
-        for dihedral in self.get_sorted_attribute("dihedrals"):
-            
-            if dihedral.id not in np.array(system.dihedrals.types(), dtype=int):
-                continue
-            
-            dihedral.write(fout)
-            # atype = "{}-{}-{}-{}".format(*dihedral.symbols)
-            # value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*dihedral.values)
-        
-            # fout.write("{:>5}    {}  #  {:<8} | {}\n".format(dihedral.id, value, atype, dihedral.resname))
-        
-        if self.get_sorted_attribute("impropers"):
-            fout.write("\n")
-            fout.write("Improper Coeffs\n\n")
-        
-        for improper in self.get_sorted_attribute("impropers"):
-            
-            if improper.id not in np.array(system.impropers.types(), dtype=int):
-                continue
-            
-            atype = "{}".format(*improper.symbols)
-            value = "{:>7.4f}    {:>2d}    {:>2d}".format(*improper.values)
-        
-            fout.write("{:>5}    {}  #  {:<2} | {}\n".format(improper.id, value, atype, improper.resname))
-        
-        fout.write("\n")
-        
-        if remember_to_close:
-            fout.close()
-        
-        return
-    
     # convert to ase.Atoms
     @staticmethod
-    def to_ase(system):
+    def to_ase(system: Optional[mda.Universe]) -> ase.Atoms:
         
         if system is None:
             return ase.Atoms()

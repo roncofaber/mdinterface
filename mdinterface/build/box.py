@@ -6,6 +6,7 @@ Created on Tue Jan 14 10:23:57 2025
 @author: roncofaber
 """
 
+from typing import List, Optional, Union, Tuple, Dict, Any
 from mdinterface.io.packmol import header, box_place, fix_place
 from mdinterface.build.continuum2sim import discretize_concentration
 
@@ -18,13 +19,129 @@ import subprocess
 
 #%%
 
-def make_solvent_box(species, solvent, ions, volume, density, nions, concentration,
-                     conmodel, ion_pos):
-    
-    # make sure info is sound
-    assert not( nions is not None and concentration is not None),\
-        "'nions' and 'concentration' cannot both be not None"
-    
+def _validate_solvent_box_parameters(
+    nions: Optional[Union[int, List[int]]],
+    concentration: Optional[float],
+    conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
+    ions: Optional[List[Any]],
+    solvent: Optional[Any],
+    density: Optional[float],
+    nsolvent: Optional[int] = None
+) -> None:
+    """
+    Validate parameter combinations for make_solvent_box function.
+
+    Raises appropriate errors for invalid parameter combinations.
+    """
+
+    # Basic mutual exclusivity check
+    if nions is not None and concentration is not None:
+        raise ValueError("Cannot specify both 'nions' and 'concentration'. Use one or the other.")
+
+    # If concentration model is provided, ions must be provided
+    if conmodel is not None and (ions is None or len(ions) == 0):
+        raise ValueError("When using 'conmodel', 'ions' must be provided and non-empty.")
+
+    # If nions is a list, it must match the number of ion species
+    if isinstance(nions, (list, tuple)) and ions is not None:
+        if len(nions) != len(ions):
+            raise ValueError(f"Length of 'nions' ({len(nions)}) must match number of ion species ({len(ions)}).")
+
+    # Validate density vs nsolvent mutual exclusivity
+    if density is not None and nsolvent is not None:
+        import warnings
+        warnings.warn(
+            "Both 'density' and 'nsolvent' are specified. Using 'nsolvent' and ignoring 'density'.",
+            UserWarning, stacklevel=4
+        )
+
+    # If solvent density or nsolvent is provided but no solvent, warn the user
+    if (density is not None or nsolvent is not None) and solvent is None:
+        import warnings
+        warnings.warn("Density or nsolvent specified but no solvent provided. Will be ignored.",
+                     UserWarning, stacklevel=4)
+
+    # If no solvent and no ions, nothing to do
+    if solvent is None and (ions is None or len(ions) == 0):
+        import warnings
+        warnings.warn("No solvent or ions specified. Empty box will be created.",
+                     UserWarning, stacklevel=3)
+
+def make_solvent_box(
+    species: List[Any],
+    solvent: Optional[Any],
+    ions: Optional[List[Any]],
+    volume: List[float],
+    density: Optional[float],
+    nions: Optional[Union[int, List[int]]],
+    concentration: Optional[float],
+    conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
+    ion_pos: Optional[str],
+    nsolvent: Optional[int] = None
+) -> Optional[mda.Universe]:
+    """
+    Build a solvent box with optional ionic species.
+
+    This function creates a simulation box containing solvent molecules and ionic species
+    using PACKMOL for molecular packing. It supports various placement strategies and
+    concentration models.
+
+    Parameters:
+    -----------
+    species : list
+        List of all available species in the simulation
+    solvent : object or None
+        Solvent molecule object (e.g., Water). If None, only ions are placed.
+    ions : list or None
+        List of ionic species to add to the box
+    volume : list
+        Box dimensions [x, y, z] in Angstroms
+    density : float or None
+        Solvent density in g/cm³. Ignored if solvent is None or if nsolvent is specified.
+    nions : int, list, or None
+        Number of each ionic species. Can be:
+        - int: Same number for all ion types
+        - list: Different number for each ion type (must match len(ions))
+        - None: No ions added
+    concentration : float or None
+        Ionic concentration in Molar. Alternative to nions.
+        Cannot be used simultaneously with nions.
+    conmodel : dict or None
+        Advanced concentration model for spatially varying concentrations.
+        Format: {ion_index: (z_coords, concentration_profile)}
+    ion_pos : str or None
+        Ion placement strategy:
+        - "random": Random placement (default)
+        - "center": Place all ions at box center
+        - "box": Use PACKMOL box placement
+        - "left": Constrain to left half of box
+        - None: Defaults to "random"
+    nsolvent : int or None
+        Number of solvent molecules to place. If specified, takes precedence over density.
+        Cannot be used simultaneously with density.
+
+    Returns:
+    --------
+    MDAnalysis.Universe or None
+        Merged universe containing solvent and ions, or None if no components
+
+    Examples:
+    ---------
+    # Simple water box with NaCl
+    make_solvent_box(species, water, [na, cl], [20, 20, 20], 1.0, [5, 5], None, None, "random")
+
+    # Concentration-based approach
+    make_solvent_box(species, water, [na, cl], [20, 20, 20], 1.0, None, 0.1, None, "random")
+
+    # Complex polymer solution
+    make_solvent_box(species, None, [polymer, hydronium, water], [50, 50, 50], None, [10, 50, 200], None, None, "box")
+    """
+
+    # Validate parameter combinations
+    _validate_solvent_box_parameters(nions, concentration, conmodel, ions, solvent, density, nsolvent)
+
+    # Legacy parameter compatibility is handled in the calling function (simulationbox.py)
+
     # convert concentration to number of ions
     if concentration is not None:
         nions = int(concentration*np.prod(volume)*units.mol/((units.m/10)**3))
@@ -40,12 +157,18 @@ def make_solvent_box(species, solvent, ions, volume, density, nions, concentrati
     
     # add solvent
     if solvent is not None:
-        solvent_volume   = 1e-24*np.prod(volume)
-        mass = solvent.atoms.masses.sum()
+        if nsolvent is not None:
+            # Use directly specified number of solvent molecules
+            nummols = nsolvent
+        elif density is not None:
+            # Calculate number of solvent molecules from density
+            solvent_volume = 1e-24*np.prod(volume)
+            mass = solvent.atoms.masses.sum()
+            nummols = int(units.mol*density*(1.0/mass)*solvent_volume)
+        else:
+            # This should be caught by validation, but defensive programming
+            raise ValueError("Either 'density' or 'nsolvent' must be specified for solvent placement")
 
-        # number of solvent molecules
-        nummols = int(units.mol*density*(1.0/mass)*solvent_volume)
-        
         instructions.append([solvent, nummols, "box"])
 
     # generate universe file
@@ -70,9 +193,12 @@ def make_solvent_box(species, solvent, ions, volume, density, nions, concentrati
     
     return solution
     
-# populate a box with solvent and ions
-def populate_box(volume, instructions, input_file="input_packmol.in",
-                 output_file="system.pdb"):
+def populate_box(
+    volume: List[float],
+    instructions: List[Tuple[Any, Union[int, List[float]], str]],
+    input_file: str = "input_packmol.in",
+    output_file: str = "system.pdb"
+) -> Optional[mda.Universe]:
 
     if not instructions:
         return None
