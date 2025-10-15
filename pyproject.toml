@@ -49,9 +49,13 @@ resp = [
     "pyscf>=2.0.0",
     "pymbxas",
 ]
+aimd = [
+    "fairchem-core",
+]
 all = [
     "pyscf>=2.0.0",
     "pymbxas",
+    "fairchem-core",
 ]
 
 [tool.setuptools]

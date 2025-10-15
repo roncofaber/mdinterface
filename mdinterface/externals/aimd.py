@@ -12,7 +12,13 @@ from ase.md import MDLogger
 from ase.md.langevin import Langevin
 from ase.md.bussi import Bussi
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
+
+# Optional fairchem import
+try:
+    from fairchem.core import pretrained_mlip, FAIRChemCalculator
+    FAIRCHEM_AVAILABLE = True
+except ImportError:
+    FAIRCHEM_AVAILABLE = False
 
 #%%
 
@@ -32,7 +38,7 @@ def run_aimd(atoms, timestep=0.5, temperature_K=300, friction=0.1, steps=1000,
     friction : float, default 0.001
         Frictional damping coefficient in 1/fs.
     steps : int, default 1000
-        Number of time steps to rufrom ase.md.velocitydistribution import MaxwellBoltzmannDistributionn the AIMD.
+        Number of time steps to run the AIMD.
     trajectory : str, optional
         Path to save the MD trajectory.
     logfile : str, optional
@@ -42,9 +48,23 @@ def run_aimd(atoms, timestep=0.5, temperature_K=300, friction=0.1, steps=1000,
 
     Returns
     -------
-    None
+    ase.Atoms
+        The atomic structure after AIMD simulation.
+
+    Raises
+    ------
+    ImportError
+        If fairchem is not installed.
+    ValueError
+        If there's an error loading FAIRChem models.
     """
-    
+
+    if not FAIRCHEM_AVAILABLE:
+        raise ImportError(
+            "FAIRChem is required for AIMD simulations but is not installed. "
+            "Install it with: pip install fairchem-core"
+        )
+
     # Make a copy to avoid modifying the original
     aimd_atoms = atoms.copy()
 

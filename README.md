@@ -18,6 +18,7 @@ Using `mdinterface` you can:
 - Import common molecules/metals/polymers with pre-defined classical force fields parameters from the database, or automatically generate new OPLS-AA force field parameters using [LigParGen](https://github.com/Isra3l/ligpargen).
 - Generate polymer chains of any length from a starting monomer.
 - Estimate the RESP charges of molecules using the [PySCF  electronic structure code](https://github.com/pyscf/pyscf).
+- Perform Ab Initio Molecular Dynamics (AIMD) simulations using [FAIRChem](https://github.com/facebookresearch/fairchem) machine learning potentials (optional).
 - Automatically write LAMMPS data files and coefficients, so you can start making them atoms dance as soon as possible!
 - Integrate your workflow with [MDAnalysis](https://github.com/MDAnalysis/mdanalysis): create your molecules with `mdinterface` and convert them to `mda.Universe` objects with a simple interface.
 
@@ -47,9 +48,19 @@ BOSSdir = /path/to/your/boss/dir
 
 The config directory is found using [`platformdirs`](https://pypi.org/project/platformdirs/) and is OS dependent.
 
-### RESP charge analysis with PySCF
+#### RESP charge analysis with PySCF
 
 To use the RESP charge analysis feature, you need to install [PySCF](https://github.com/pyscf/pyscf) and [PyMBXAS](https://gitlab.com/roncofaber/pymbxas). To my knowledge, the RESP feature is only implemented in [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) at the moment, so follow the repo instructions on how to install it.
+
+#### AIMD simulations with FAIRChem
+
+For Ab Initio Molecular Dynamics (AIMD) simulations, you need to install [FAIRChem](https://github.com/facebookresearch/fairchem). This provides machine learning potentials for accelerated quantum mechanical simulations. Install it with:
+
+```bash
+pip install fairchem-core
+```
+
+This functionality is completely optional and the package will work without it for all other features.
 
 ## Installation
 
@@ -104,6 +115,9 @@ Install additional features as needed:
 ```bash
 # RESP charge analysis (requires additional setup)
 pip install mdinterface[resp]
+
+# AIMD simulations with FAIRChem
+pip install mdinterface[aimd]
 
 # All optional dependencies
 pip install mdinterface[all]

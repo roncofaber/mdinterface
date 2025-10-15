@@ -10,4 +10,10 @@ from .ligpargen import run_ligpargen
 from .obabel import run_OBChargeModel
 from .pyscf import calculate_RESP_charges
 from .optimization import relax_structure
-from .aimd import run_aimd
+
+# Optional fairchem-dependent imports
+try:
+    from .aimd import run_aimd
+except ImportError:
+    # Fairchem not available, aimd functionality will not be available
+    pass

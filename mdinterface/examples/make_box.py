@@ -65,7 +65,7 @@ system = simobj.make_simulation_box(
     layering, # layering info
     padding = 0.5, # pad this amount between any layer (Angstrom)
     to_ase = True, # return an ase.Atoms object, otherwishe mda.Universe
-    write_data = False, # write LAMMPS data file
+    write_data = True, # write LAMMPS data file
     filename = "data.lammps", # name of the LAMMPS data file
     center_electrode = False, # shifts everything by 50% along Z to place the first interface in the center (it's better to layer instead)
     layered = False, # assign different molecule indexes to each layer of interface/enderface type slabs for LAMMPS
