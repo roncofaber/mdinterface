@@ -25,7 +25,8 @@ def _validate_solvent_box_parameters(
     conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
     ions: Optional[List[Any]],
     solvent: Optional[Any],
-    density: Optional[float]
+    density: Optional[float],
+    nsolvent: Optional[int] = None
 ) -> None:
     """
     Validate parameter combinations for make_solvent_box function.
@@ -46,11 +47,19 @@ def _validate_solvent_box_parameters(
         if len(nions) != len(ions):
             raise ValueError(f"Length of 'nions' ({len(nions)}) must match number of ion species ({len(ions)}).")
 
-    # If solvent density is provided but no solvent, warn the user
-    if density is not None and solvent is None:
+    # Validate density vs nsolvent mutual exclusivity
+    if density is not None and nsolvent is not None:
         import warnings
-        warnings.warn("Density specified but no solvent provided. Density will be ignored.",
-                     UserWarning, stacklevel=3)
+        warnings.warn(
+            "Both 'density' and 'nsolvent' are specified. Using 'nsolvent' and ignoring 'density'.",
+            UserWarning, stacklevel=4
+        )
+
+    # If solvent density or nsolvent is provided but no solvent, warn the user
+    if (density is not None or nsolvent is not None) and solvent is None:
+        import warnings
+        warnings.warn("Density or nsolvent specified but no solvent provided. Will be ignored.",
+                     UserWarning, stacklevel=4)
 
     # If no solvent and no ions, nothing to do
     if solvent is None and (ions is None or len(ions) == 0):
@@ -67,7 +76,8 @@ def make_solvent_box(
     nions: Optional[Union[int, List[int]]],
     concentration: Optional[float],
     conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
-    ion_pos: Optional[str]
+    ion_pos: Optional[str],
+    nsolvent: Optional[int] = None
 ) -> Optional[mda.Universe]:
     """
     Build a solvent box with optional ionic species.
@@ -87,7 +97,7 @@ def make_solvent_box(
     volume : list
         Box dimensions [x, y, z] in Angstroms
     density : float or None
-        Solvent density in g/cm³. Ignored if solvent is None.
+        Solvent density in g/cm³. Ignored if solvent is None or if nsolvent is specified.
     nions : int, list, or None
         Number of each ionic species. Can be:
         - int: Same number for all ion types
@@ -106,6 +116,9 @@ def make_solvent_box(
         - "box": Use PACKMOL box placement
         - "left": Constrain to left half of box
         - None: Defaults to "random"
+    nsolvent : int or None
+        Number of solvent molecules to place. If specified, takes precedence over density.
+        Cannot be used simultaneously with density.
 
     Returns:
     --------
@@ -125,7 +138,7 @@ def make_solvent_box(
     """
 
     # Validate parameter combinations
-    _validate_solvent_box_parameters(nions, concentration, conmodel, ions, solvent, density)
+    _validate_solvent_box_parameters(nions, concentration, conmodel, ions, solvent, density, nsolvent)
 
     # Legacy parameter compatibility is handled in the calling function (simulationbox.py)
 
@@ -144,12 +157,18 @@ def make_solvent_box(
     
     # add solvent
     if solvent is not None:
-        solvent_volume   = 1e-24*np.prod(volume)
-        mass = solvent.atoms.masses.sum()
+        if nsolvent is not None:
+            # Use directly specified number of solvent molecules
+            nummols = nsolvent
+        elif density is not None:
+            # Calculate number of solvent molecules from density
+            solvent_volume = 1e-24*np.prod(volume)
+            mass = solvent.atoms.masses.sum()
+            nummols = int(units.mol*density*(1.0/mass)*solvent_volume)
+        else:
+            # This should be caught by validation, but defensive programming
+            raise ValueError("Either 'density' or 'nsolvent' must be specified for solvent placement")
 
-        # number of solvent molecules
-        nummols = int(units.mol*density*(1.0/mass)*solvent_volume)
-        
         instructions.append([solvent, nummols, "box"])
 
     # generate universe file

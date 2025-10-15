@@ -12,10 +12,10 @@ from mdinterface.database import Water
 
 #%% Set up simulation box
 
-# Solvent setup (e.g., TIP3P water model)
+# Solvent setup (e.g., TIP3P water model with Ewald correction)
 wat = Water(model="ewald")
 
-# add extra specie (e.g. ammonia) with LigParGen
+# add extra specie (e.g. ammonia) with LigParGen parameters
 amm = Specie("NH3", ligpargen=True)
 
 #%% Create a SimulationBox instance
@@ -37,18 +37,16 @@ layering = [
     # - int: same number for all ion types, e.g., nspecies: 1
     # - list: different numbers for each ion type, e.g., nspecies: [1, 2]
     # - None: no ions (solvent only)
-    {"type": "solvent", "rho": 1.0, "zdim": 25, "nspecies": 1},
+    {"type": "solvent", "rho": 1.0, "zdim": 20, "nspecies": 15},
     ]
+# water density is set to 1 g/cm3, yet it should probably be lower if you have solute
 
 # Alternative examples:
-# For concentration-based approach:
+# For concentration-based approach (in molar):
 # {"type": "solvent", "rho": 1.0, "zdim": 25, "concentration": 0.1}
 
-# For different numbers of each ion type:
-# {"type": "solvent", "rho": 1.0, "zdim": 25, "nspecies": [2, 3]}
-
-# For backward compatibility (deprecated):
-# {"type": "solvent", "rho": 1.0, "zdim": 25, "nions": 1}
+# For specifying exact number of solvent molecules:
+# {"type": "solvent", "nsolvent": 500, "zdim": 25, "nspecies": 10}
 
 #%% Build the simulation box
 

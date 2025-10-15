@@ -394,10 +394,10 @@ def write_lammps_coefficients(
 
     # Write Improper Coefficients
     improper_types = sorted_attributes.get("impropers", [])
-    if improper_types:
+    if improper_types and system.impropers.types():
         fout.write("\n")
         fout.write("Improper Coeffs\n\n")
-
+        
     for improper in improper_types:
         if improper.id not in np.array(system.impropers.types(), dtype=int):
             continue

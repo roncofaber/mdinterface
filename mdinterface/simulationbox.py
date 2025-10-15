@@ -28,6 +28,7 @@ default_params = {
     },
     "solvent": {
         "rho": None,
+        "nsolvent": None,  # Number of solvent molecules (alternative to rho)
         "zdim": None,
         "nspecies": None,  # Preferred parameter name
         "nions": None,     # Deprecated but maintained for backward compatibility
@@ -221,6 +222,23 @@ class SimulationBox():
                         f"Example: {{\"type\": \"solvent\", \"zdim\": 25, \"rho\": 1.0}}"
                     )
 
+                # Validate rho vs nsolvent mutual exclusivity
+                rho = layer.get("rho")
+                nsolvent = layer.get("nsolvent")
+                if rho is not None and nsolvent is not None:
+                    import warnings
+                    warnings.warn(
+                        f"Solvent layer {i}: Both 'rho' (density) and 'nsolvent' (number of molecules) are specified. "
+                        f"Using 'nsolvent' and ignoring 'rho'. "
+                        f"To avoid this warning, specify only one parameter.",
+                        UserWarning, stacklevel=3
+                    )
+                elif rho is None and nsolvent is None:
+                    raise ValueError(
+                        f"Solvent layer {i} must specify either 'rho' (density in g/cm³) or 'nsolvent' (number of molecules). "
+                        f"Examples: {{\"rho\": 1.0}} or {{\"nsolvent\": 500}}"
+                    )
+
 
             elif layer_type in ["interface", "enderface", "miderface"]:
                 if "nlayers" in layer and not isinstance(layer["nlayers"], int):
@@ -322,6 +340,7 @@ class SimulationBox():
             if layer_type == "solvent":
                 zsize    = layer["zdim"]
                 solv_rho = layer["rho"]
+                nsolvent = layer["nsolvent"]
 
                 # Handle backward compatibility: nions -> nspecies
                 nspecies = layer.get("nspecies")
@@ -346,7 +365,7 @@ class SimulationBox():
                 # make solvent box
                 solvent = make_solvent_box(self.species, self.solvent, self._solute,
                                            [xsize, ysize, zsize], solv_rho,
-                                           nions, concentration, conmodel, ion_pos)
+                                           nions, concentration, conmodel, ion_pos, nsolvent)
 
                 # add component
                 system, zdim = add_component(system, solvent, zdim, padding=padding)
