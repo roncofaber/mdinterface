@@ -18,6 +18,7 @@ Using `mdinterface` you can:
 - Import common molecules/metals/polymers with pre-defined classical force fields parameters from the database, or automatically generate new OPLS-AA force field parameters using [LigParGen](https://github.com/Isra3l/ligpargen).
 - Generate polymer chains of any length from a starting monomer.
 - Estimate the RESP charges of molecules using the [PySCF  electronic structure code](https://github.com/pyscf/pyscf).
+- Perform Ab Initio Molecular Dynamics (AIMD) simulations using [FAIRChem](https://github.com/facebookresearch/fairchem) machine learning potentials (optional).
 - Automatically write LAMMPS data files and coefficients, so you can start making them atoms dance as soon as possible!
 - Integrate your workflow with [MDAnalysis](https://github.com/MDAnalysis/mdanalysis): create your molecules with `mdinterface` and convert them to `mda.Universe` objects with a simple interface.
 
@@ -47,56 +48,122 @@ BOSSdir = /path/to/your/boss/dir
 
 The config directory is found using [`platformdirs`](https://pypi.org/project/platformdirs/) and is OS dependent.
 
-### RESP charge analysis with PySCF
+#### RESP charge analysis with PySCF
 
 To use the RESP charge analysis feature, you need to install [PySCF](https://github.com/pyscf/pyscf) and [PyMBXAS](https://gitlab.com/roncofaber/pymbxas). To my knowledge, the RESP feature is only implemented in [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) at the moment, so follow the repo instructions on how to install it.
 
+#### AIMD simulations with FAIRChem
+
+For Ab Initio Molecular Dynamics (AIMD) simulations, you need to install [FAIRChem](https://github.com/facebookresearch/fairchem). This provides machine learning potentials for accelerated quantum mechanical simulations. Install it with:
+
+```bash
+pip install fairchem-core
+```
+
+This functionality is completely optional and the package will work without it for all other features.
+
 ## Installation
 
-### Install using `pip`
+### System Requirements
 
-You can simply install the latest release of the package and all dependencies using:
+- **Python**: 3.8 or higher
+- **PACKMOL**: Required for molecular packing (see below)
+- **Operating System**: Linux, macOS, Windows (with some limitations on Windows)
+
+### Core Installation
+
+#### Option 1: Install from PyPI (Recommended)
+
+Install the latest stable release with all core dependencies:
 
 ```bash
 pip install mdinterface
 ```
 
-### Install directly the source code
+#### Option 2: Install from Source
 
-Alternatively you can obtain `mdinterface` directly from the repository by following these steps:
-
-Clone the repository in the desired location:
+For the latest development version or to contribute:
 
 ```bash
-git clone git@gitlab.com:roncofaber/mdinterface.git
-```
-
-Install the package:
-
-```bash
+# Clone the repository
+git clone https://gitlab.com/roncofaber/mdinterface.git
 cd mdinterface
+
+# Install in normal mode
 pip install .
+
+# Or install in development mode (for contributors)
+pip install -e .
 ```
 
-### Install a development environment
+### Installing PACKMOL
 
-If you plan of making changes, clone the package and add it to your development environment with:
+PACKMOL is required for molecular packing and must be installed separately:
 
+#### Using conda (Recommended):
 ```bash
-pip install --no-build-isolation -e .
+conda install -c conda-forge packmol
 ```
 
-### Install optional packages
+#### From source:
+Follow instructions at [https://m3g.github.io/packmol/](https://m3g.github.io/packmol/)
 
-You can install optional dependencies with the following commands:
+### Optional Dependencies
+
+Install additional features as needed:
 
 ```bash
-# install libarvo to estimate species:
-pip install mdinterface[volume] volumes
-# install pyscf and pymbxas (you still need gpu4pyscf):
+# RESP charge analysis (requires additional setup)
 pip install mdinterface[resp]
-# install all of the above options:
+
+# AIMD simulations with FAIRChem
+pip install mdinterface[aimd]
+
+# All optional dependencies
 pip install mdinterface[all]
+```
+
+### Verifying Installation
+
+Test your installation:
+
+```python
+import mdinterface
+from mdinterface import SimulationBox, Specie
+print(f"mdinterface version: {mdinterface.__version__}")
+```
+
+### Troubleshooting
+
+#### Common Issues:
+
+1. **PACKMOL not found**: Ensure PACKMOL is in your PATH or install via conda
+2. **Import errors**: Check that all dependencies are properly installed
+3. **Version conflicts**: Use a clean virtual environment
+
+#### Python Environment Setup:
+
+We recommend using a virtual environment:
+
+```bash
+# Create virtual environment
+python -m venv mdinterface-env
+source mdinterface-env/bin/activate  # On Windows: mdinterface-env\Scripts\activate
+
+# Install mdinterface
+pip install mdinterface
+```
+
+#### For conda users:
+
+```bash
+# Create conda environment
+conda create -n mdinterface python=3.10
+conda activate mdinterface
+
+# Install dependencies
+conda install -c conda-forge packmol
+pip install mdinterface
 ```
 
 ## Usage
