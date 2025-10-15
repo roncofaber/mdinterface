@@ -1,1 +1,26 @@
+# Include important files
+include README.md
+include LICENSE
 include requirements.txt
+include pyproject.toml
+
+# Include package data
+recursive-include mdinterface *.py
+recursive-include mdinterface/database *.json *.txt *.dat
+recursive-include mdinterface/examples *.py
+recursive-include mdinterface/config *.ini
+
+# Include documentation and assets if they exist
+recursive-include docs *
+include assets/*
+
+# Exclude unwanted files
+exclude *.pyc
+exclude *~
+exclude *.bak
+exclude .DS_Store
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * .git*
+recursive-exclude * .tox*
+recursive-exclude * .pytest_cache*
