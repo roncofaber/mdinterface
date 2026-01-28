@@ -16,7 +16,7 @@ from mdinterface.utils.auxiliary import mass2symbol
 
 #%%
 
-def read_lammps_data_file(filename, pbc=False, ato_start_idx=0):
+def read_lammps_data_file(filename, pbc=False, ato_start_idx=0, is_snippet=False):
     system = ase.io.lammpsdata.read_lammps_data(filename)
     
     if not pbc:
@@ -102,7 +102,13 @@ def read_lammps_data_file(filename, pbc=False, ato_start_idx=0):
                 atotyp = int(line[2]) - 1
                 eps, sig = pair_coeff[atotyp]
                 symbol   = atosym[atotyp]
-                atom = Atom(symbol, f"{symbol}_{str(atoidx).zfill(3)}", eps, sig)
+                
+                if not is_snippet:
+                    atom_name = f"{symbol}_{str(atoidx).zfill(3)}"
+                else:
+                    atom_name = f"{symbol}_{str(atoidx).zfill(3)}sn"
+                
+                atom = Atom(symbol, atom_name, eps, sig, atoid=atotyp)
                 atoms.append(atom)
 
             elif to_read == "bonds":

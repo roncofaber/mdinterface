@@ -74,7 +74,8 @@ def make_snippet(polymer, center, Nmax, ending="H", preserve_rings=True):
     term.set_chemical_symbols(len(term) * [ending])
 
     # make snippet        
-    snippet = ase.Atoms(chain + term)
+    # snippet = ase.Atoms(chain + term)
+    snippet = chain + term
     
     # fix distances for ligpargen
     for cc, (a1, a2) in enumerate(atom_pairs):

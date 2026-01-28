@@ -45,9 +45,6 @@ def relax_structure(atoms, optimizer='FIRE', fmax=0.05, steps=200,
         Whether the optimization converged
     """
 
-    # Make a copy to avoid modifying the original
-    relaxed_atoms = atoms.copy()
-
     # Select optimizer
     optimizer_dict = {
         'BFGS': BFGS,
@@ -58,23 +55,13 @@ def relax_structure(atoms, optimizer='FIRE', fmax=0.05, steps=200,
     if optimizer not in optimizer_dict:
         raise ValueError(f"Unknown optimizer: {optimizer}. Available: {list(optimizer_dict.keys())}")
     
-    try:
-        from fairchem.core import pretrained_mlip, FAIRChemCalculator
-
-        predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device="cuda")
-        calc = FAIRChemCalculator(predictor, task_name="omol")
-    except:
-        raise ValueError("No UMA and OMol stuff")
-    
-    relaxed_atoms.calc = calc
-    
     # Initialize optimizer
     opt_class = optimizer_dict[optimizer]
     
     # Create
-    dyn = opt_class(relaxed_atoms, trajectory=trajectory, logfile=logfile, **kwargs)
+    dyn = opt_class(atoms, trajectory=trajectory, logfile=logfile, **kwargs)
     
     dyn.run(fmax, steps)
 
-    return relaxed_atoms
+    return atoms
 

@@ -8,31 +8,63 @@ Created on Mon Oct 28 11:30:04 2024
 
 # not repo
 import numpy as np
+import copy
 
 # repo
 from mdinterface.core.topology import Bond, Angle, Dihedral, Improper
 from mdinterface.utils.graphs import find_unique_paths_of_length
 #%%
 
-def map_atoms(atoms):
+def map_atoms(atoms, keep_ids=False):
+    
+    atoms = copy.deepcopy(atoms)
     
     # Create an array to store the type ID of each atom
     atom_type_ids = []
     type_id = 0
     atoms_map = {}
-    atoms_list = []
     
-    for cc, atom in enumerate(atoms):
-        if atom not in atoms_list:
-            atom_type_ids.append(atom.label)
-            atoms_list.append(atom)
-            atoms_map[atom.label] = type_id
-            type_id += 1
+    atoms_list = []
+    ids_list   = []
+    
+    # split loop between new ids or try to keep it
+    
+    # assign new ids
+    if not keep_ids:
+        for cc, atom in enumerate(atoms):
+    
+            if atom not in atoms_list:
+                
+                atoms_list.append(atom)
+                
+                atom_type_ids.append(atom.label)
+                atoms_map[atom.label] = type_id
+                type_id += 1
+                
+            else:
+                idx = atoms_list.index(atom)
+                atom_type_ids.append(atom.label)
+                atoms_map[atom.label] = idx
+    else:
+        
+        # check ids are all there
+        all_ids = [atom.id for atom in atoms]
+        assert None not in all_ids
+        atoms_list = [None for _ in set(all_ids)]
             
-        else:
-            idx = atoms_list.index(atom)
-            atom_type_ids.append(atom.label)
-            atoms_map[atom.label] = idx
+        for cc, atom in enumerate(atoms):
+            
+            if atom.id not in ids_list:
+                
+                ids_list.append(atom.id)
+                
+                atom_type_ids.append(atom.label)
+                atoms_list[atom.id] = atom
+                atoms_map[atom.label] = atom.id
+                
+            else:
+                atom_type_ids.append(atom.label)
+                atoms_map[atom.label] = atom.id
     
     atom_type_ids = np.array(atom_type_ids)
     
