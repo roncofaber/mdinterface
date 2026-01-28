@@ -281,8 +281,9 @@ def make_interface_slab(interface_uc, xsize, ysize, layers=1):
     if not np.isclose(np.dot(slab.atoms.cell[1], [0,1,0]), slab.atoms.cell[1][1]):
         yrep +=1
         print("WARNING: check interface if pattern matches")
-        
-    slab.repeat((xrep, yrep, 1), make_cubic=True)
+    
+    if not (xrep, yrep, 1) == (1,1,1):
+        slab.repeat((xrep, yrep, 1), make_cubic=True)
     
     if layers > 1: # helps with indexing
         slab.repeat([1,1,layers])

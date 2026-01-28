@@ -20,11 +20,17 @@ class Water(Specie):
             charges = [-0.83, 0.415, 0.415]
             lj = {"O": [0.102, 3.188], "H": [0.0, 1.0]}
         
-        if model.lower() == "charmm":
+        elif model.lower() == "charmm":
             b1 = Bond("O", "H", kr=450, r0=0.9572)
             a1 = Angle("H", "O", "H", kr=55, theta0=104.52)
             charges = [-0.834, 0.417, 0.417]
             lj = {"O": [0.1521, 3.1507], "H": [0.0460, 0.4]}
+            
+        elif model.lower() == "spce":
+            b1 = Bond("O", "H", kr=1, r0=1.0)
+            a1 = Angle("H", "O", "H", kr=1, theta0=109.47)
+            charges = [-0.8476, 0.4238, 0.4238]
+            lj = {"O": [0.1553, 3.1660], "H": [0.0, 0.0]}
 
         super().__init__("H2O", charges=charges, bonds=b1, angles=a1, lj=lj, **kwargs)
         return

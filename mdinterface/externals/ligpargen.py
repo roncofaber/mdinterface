@@ -39,7 +39,7 @@ def cleanup(path, check_file):
     else:
         print(f"{path} is neither a file nor a directory")
 
-def run_ligpargen(system, charge=None):
+def run_ligpargen(system, charge=None, is_snippet=False):
     """
     Runs the ligpargen command for the given xyz file.
 
@@ -100,7 +100,7 @@ def run_ligpargen(system, charge=None):
 
     # Proceed to read lammps data file
     system, atoms, bonds, angles, dihedrals, impropers = read_lammps_data_file(
-        f"{folder_name}/{random_number}.lammps.lmp")
+        f"{folder_name}/{random_number}.lammps.lmp", is_snippet=is_snippet)
     
     # Additional cleanup code can be executed here
     cleanup(folder_name, f"{random_number}")

@@ -11,9 +11,9 @@ import copy
 
 class Topology(object):
     
-    def __init__(self, resname=None, formula=None):
+    def __init__(self, resname=None, formula=None, topid=None):
         
-        self._id = None
+        self.set_id(topid)
         self._formula = formula
         self._resname = resname
         
@@ -47,9 +47,10 @@ class Topology(object):
 #%%
 
 class Atom(Topology):
-    def __init__(self, symbol, label=None, eps=None, sig=None):
+    def __init__(self, symbol, label=None, eps=None, sig=None,
+                 atoid=None):
         
-        super().__init__()
+        super().__init__(topid=atoid)
         
         self.symbol  = symbol
         

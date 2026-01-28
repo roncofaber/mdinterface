@@ -50,7 +50,8 @@ class Polymer(Specie):
     def _get_connection_elements(self):
 
         # Get elements where there is a connection
-        centers = np.argwhere(self.atoms.arrays["is_connected"]).flatten()
+        centers = np.argwhere((self.atoms.arrays["is_connected"] ==1) |
+                              (self.atoms.arrays["is_connected"] ==2)).flatten()
 
         pairs = []
         for center in centers:
@@ -61,6 +62,13 @@ class Polymer(Specie):
             pairs.append([center, idx])
             
         return pairs
+    
+    def _get_start_end(self):
+        
+        str_idx = np.argwhere(self.atoms.arrays["is_connected"] == -1).flatten()
+        end_idx = np.argwhere(self.atoms.arrays["is_connected"] == -2).flatten()
+        
+        return np.concatenate([str_idx, end_idx])
     
 
     def _update_connection(self, center, Nmax, charges, ending="H"):
@@ -95,11 +103,12 @@ class Polymer(Specie):
             if "nominal_charge" in snippet.arrays:
                 sn_charge = snippet.arrays["nominal_charge"].sum()
             else:
-                sn_charge = None
+                raise ValueError("No 'nominal_charge' found in snippet!")
+                # sn_charge = None
                 
             # run ligpargen
             sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals, sn_impropers =\
-                run_ligpargen(snippet, charge=sn_charge)
+                run_ligpargen(snippet, charge=sn_charge, is_snippet=True)
             
             # get charges
             new_charges = sn_atoms.get_initial_charges()
@@ -114,12 +123,16 @@ class Polymer(Specie):
                 "sn_dihedrals" : sn_dihedrals,
                 "sn_impropers" : sn_impropers,
                 "snippet_idxs" : snippet_idxs,
-                "local_idxs"   : ldxs
+                "local_idxs"   : ldxs,
+                "snippet"      : snippet,
+                "sn_charge"    : sn_charge
                 }
         
         # update topology of section
         original_idxs = self._sids[snippet_idxs]
         local_idxs = self._sids[ldxs]
+        
+        # remap topology of local indexes
         new_bonds, new_angles, new_dihedrals, new_impropers = remap_snippet_topology(
             original_idxs, sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals,
             sn_impropers, local_idxs)
@@ -151,10 +164,14 @@ class Polymer(Specie):
         # get charges and connection elements
         charges = self.charges
         centers = np.array([int(ii[1]) for ii in self._get_connection_elements()])
-
+        
+        str_end_idxs = self._get_start_end()
+        
         # get charges at every point
         for center in centers:
             self._update_connection(center, Nmax, charges, ending=ending)
+        # for center in str_end_idxs:
+            # self._update_connection(center, Nmax, charges, ending=ending)
 
         # bring back to zero
         if offset:
@@ -162,7 +179,7 @@ class Polymer(Specie):
             if "nominal_charge" in self.atoms.arrays:
                 target = self.atoms.arrays["nominal_charge"].sum()
             else:
-                target = 0
+                raise Warning("No nominal charge found, assume it is 0.")
 
             charges -= ((charges.sum() - target) / len(charges))
 

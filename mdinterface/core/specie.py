@@ -17,6 +17,7 @@ import mdinterface.utils.map as pmap
 from mdinterface.core.topology import Atom
 from mdinterface.io.read import read_lammps_data_file
 from mdinterface.utils.auxiliary import as_list, find_smallest_missing, round_list_to_sum
+from mdinterface.utils.rings import find_rings, get_rings_containing_atoms
 from mdinterface.externals import run_ligpargen, run_OBChargeModel, calculate_RESP_charges,\
     relax_structure, run_aimd
     
@@ -37,7 +38,8 @@ class Specie(object):
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
-                 pbc=False, ligpargen=False, tot_charge=None, prune_z=False):
+                 pbc=False, ligpargen=False, tot_charge=None, prune_z=False,
+                 calc=None, keep_ids=False):
         
         # store int. variables
         self.cutoff = cutoff
@@ -80,7 +82,8 @@ class Specie(object):
             atom_types = self._atom_types_from_lj(lj)
             
         # set up internal topology attributes
-        self._setup_topology(atom_types, bonds, angles, dihedrals, impropers)
+        self._setup_topology(atom_types, bonds, angles, dihedrals, impropers,
+                             keep_ids=keep_ids)
         
         if fix_missing:
             self._fix_missing_interactions()
@@ -90,8 +93,58 @@ class Specie(object):
         
         # set tot charge
         self._tot_charge = tot_charge
-
+        
+        # add calculator if provided
+        self.assign_calculator(calc)
+        
         return
+    
+    @property
+    def atoms(self):
+        return self._atoms
+    
+    @property
+    def graph(self):
+        return self._graph
+    
+    @property
+    def bonds(self):
+        if not self._bmap: return [[], []]
+        return self._find_interactions(1, self._bmap)
+    
+    @property
+    def angles(self):
+        if not self._amap: return [[], []]
+        return self._find_interactions(2, self._amap)
+    
+    @property
+    def dihedrals(self):
+        if not self._dmap: return [[], []]
+        return self._find_interactions(3, self._dmap)
+    
+    @property
+    def impropers(self):
+        if not self._imap: return [[], []]
+        return self._find_interactions(3, self._imap, impropers=True)
+        
+    @property
+    def _sids(self):
+        return self.atoms.arrays["sids"]
+
+    @_sids.setter
+    def _sids(self, atom_ids):
+        self.atoms.arrays["sids"] = atom_ids
+            
+    def copy(self):
+        return copy.deepcopy(self)
+    
+    @property
+    def charges(self):
+        return self.atoms.get_initial_charges()
+    
+    @property
+    def calc(self):
+        return self.atoms.calc
     
     # read atoms to return ase.Atoms
     @staticmethod
@@ -126,13 +179,14 @@ class Specie(object):
             
         return atoms, stype
     
-    def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers):
+    def _setup_topology(self, atoms, bonds, angles, dihedrals, impropers,
+                        keep_ids=False):
         """
         Setup topology from scratch - this is run in the beginning
         """
         
         # define atoms
-        atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms))
+        atoms_list, atom_map, atom_ids = pmap.map_atoms(as_list(atoms), keep_ids=keep_ids)
         
         self._stype = atoms_list
         self._smap = atom_map
@@ -341,6 +395,10 @@ class Specie(object):
 
         return
     
+    def assign_calculator(self, calc=None):
+        self.atoms.calc = calc
+        return
+    
     # covnert to mda.Universe
     def to_universe(self, charges=True, layered=False, match_cell=False, xydim=None):
         
@@ -451,49 +509,6 @@ class Specie(object):
         interaction_type = np.array(interaction_type, dtype=int)
         
         return [interaction_list.tolist(), interaction_type.tolist()]
-    
-    @property
-    def atoms(self):
-        return self._atoms
-    
-    @property
-    def graph(self):
-        return self._graph
-    
-    @property
-    def bonds(self):
-        if not self._bmap: return [[], []]
-        return self._find_interactions(1, self._bmap)
-    
-    @property
-    def angles(self):
-        if not self._amap: return [[], []]
-        return self._find_interactions(2, self._amap)
-    
-    @property
-    def dihedrals(self):
-        if not self._dmap: return [[], []]
-        return self._find_interactions(3, self._dmap)
-    
-    @property
-    def impropers(self):
-        if not self._imap: return [[], []]
-        return self._find_interactions(3, self._imap, impropers=True)
-        
-    @property
-    def _sids(self):
-        return self.atoms.arrays["sids"]
-
-    @_sids.setter
-    def _sids(self, atom_ids):
-        self.atoms.arrays["sids"] = atom_ids
-            
-    def copy(self):
-        return copy.deepcopy(self)
-    
-    @property
-    def charges(self):
-        return self.atoms.get_initial_charges()
     
     def get_atom_types(self, return_index=False):
         
@@ -734,54 +749,8 @@ class Specie(object):
         return
     
     def _find_rings(self, max_ring_size=8):
-        """
-        Find all rings in the molecular graph using NetworkX cycle detection.
-
-        Parameters:
-        max_ring_size (int): Maximum ring size to detect (default 8)
-
-        Returns:
-        list: List of rings, where each ring is a list of atom indices
-        """
-        import networkx as nx
-
-        rings = []
-        try:
-            # Find simple cycles (rings) in the graph
-            for cycle in nx.simple_cycles(self.graph):
-                if len(cycle) <= max_ring_size:
-                    rings.append(sorted(cycle))
-        except:
-            # Fallback: use minimum cycle basis for undirected graphs
-            try:
-                cycle_basis = nx.minimum_cycle_basis(self.graph)
-                for cycle in cycle_basis:
-                    if len(cycle) <= max_ring_size:
-                        rings.append(sorted(cycle))
-            except:
-                # If all else fails, return empty list
-                rings = []
-
-        return rings
+        return find_rings(self.graph, max_ring_size=max_ring_size)
 
     def _get_rings_containing_atoms(self, atom_indices, max_ring_size=8):
-        """
-        Find all rings that contain any of the specified atoms.
-
-        Parameters:
-        atom_indices (list): List of atom indices to check
-        max_ring_size (int): Maximum ring size to detect
-
-        Returns:
-        list: List of rings containing any of the specified atoms
-        """
-        all_rings = self._find_rings(max_ring_size)
-        relevant_rings = []
-
-        atom_set = set(atom_indices)
-        for ring in all_rings:
-            if atom_set.intersection(set(ring)):
-                relevant_rings.append(ring)
-
-        return relevant_rings
+        return get_rings_containing_atoms(self.graph, atom_indices, max_ring_size=max_ring_size)
 

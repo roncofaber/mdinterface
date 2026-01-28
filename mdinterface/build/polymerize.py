@@ -122,50 +122,6 @@ def generate_spherical_points(n_samples):
     
     return np.array(points)
 
-# def optimize_monomer_rotation(oligomer, monomer, mon_idx, oli_idx, n_samples=3600):
-#     """
-#     Rotate monomer around the attachment axis to minimize overlap with oligomer.
-
-#     Parameters:
-#     -----------
-#     oligomer : ase.Atoms
-#         The existing oligomer structure
-#     monomer : ase.Atoms
-#         The monomer to be attached (already translated to attachment position)
-#     x0 : np.array
-#         Position where attachment occurs (the center of rotation)
-#     v1 : np.array
-#         The vector indicating the preferred rotation direction
-#     n_samples : int
-#         Number of rotation angles to sample (default is 1000)
-
-#     Returns:
-#     --------
-#     ase.Atoms : Optimally rotated monomer
-#     """
-
-#     best_score = float('inf')
-#     best_monomer = monomer.copy()
-
-#     # Generate points on the sphere
-#     spherical_points = generate_spherical_points(n_samples)
-
-#     for v_rand in spherical_points:
-#         # Copy the monomer to apply the rotation
-#         test_monomer = monomer.copy()
-
-#         # Apply rotation around attachment point
-#         test_monomer.rotate(v1, v_rand, center=x0)
-        
-#         # Calculate overlap score
-#         score, _ = calculate_overlap_and_gradient(oligomer, test_monomer, oli_idx, mon_idx, cutoff=5.0)
-
-#         if score < best_score:
-#             best_score = score
-#             best_monomer = test_monomer.copy()
-
-#     return best_monomer
-
 def optimize_monomer_rotation_gradient(oligomer, monomer, oli_idx, mon_idx,
                                         max_iterations=50, learning_rate=0.1):
     """
@@ -208,17 +164,20 @@ def start_chain(monomer):
     monomer = monomer.copy()
 
     # remember connecting points (mark the bonding atom, not the X atom)
-    is_connected = np.array(len(monomer)*[False])
+    is_connected = np.array(len(monomer)*[0])
     # is_connected[end_idx] = True
     monomer.new_array("is_connected", is_connected)
-
+    
+    mon_idx = int(np.where(monomer.arrays["polymerize"] == 1)[0])
+    monomer.arrays["is_connected"][mon_idx] = -1
+    
     # mark monomer index
     monomer_label = 0
     monomer.new_array("mon_id", np.array(len(monomer)*[monomer_label]))
 
     return monomer
 
-def attach_to_chain(oligomer, monomer):
+def attach_to_chain(oligomer, monomer, final=False):
 
     # copy to prevent changing
     oligomer = oligomer.copy()
@@ -233,11 +192,15 @@ def attach_to_chain(oligomer, monomer):
     end_idx = ase.build.connected_indices(monomer, mon_idx)[1]
 
     # remember connecting points
-    is_connected = np.array(len(monomer)*[False])
-    is_connected[end_idx] = True
+    is_connected = np.array(len(monomer)*[0])
+    is_connected[end_idx] = 1
     monomer.new_array("is_connected", is_connected)
-    oligomer.arrays["is_connected"][ini_idx] = True
-
+    oligomer.arrays["is_connected"][ini_idx] = 2
+    
+    if final:
+        fin_idx = int(np.where(monomer.arrays["polymerize"] == 2)[0])
+        monomer.arrays["is_connected"][fin_idx] = -2
+        
     # mark monomer index
     monomer_label = int(np.max(oligomer.arrays["mon_id"]+1))
     monomer.new_array("mon_id", np.array(len(monomer)*[monomer_label]))
@@ -300,6 +263,8 @@ def build_polymer(monomers, sequence=None, nrep=None):
         
         if cc == 0:
             oligomer = start_chain(monomers[seq])
+        elif cc == len(sequence) - 1:
+            oligomer = attach_to_chain(oligomer, monomers[seq], final=True)
         else:
             oligomer = attach_to_chain(oligomer, monomers[seq])
     
