@@ -6,7 +6,7 @@ Fluent builder API for assembling multi-layer simulation boxes.
 
 from typing import List, Optional, Union, Tuple, Any
 
-from mdinterface.utils.auxiliary import find_smallest_missing
+from mdinterface.utils.auxiliary import find_smallest_missing, label_to_element
 from mdinterface.io.lammpswriter import DATAWriter, write_lammps_coefficients
 from mdinterface.build.box import make_interface_slab, make_solvent_box, add_component
 
@@ -289,6 +289,43 @@ class BoxBuilder:
             shutil.move(temp_file, filename)
 
         return self
+
+    def to_ase(self) -> ase.Atoms:
+        """
+        Convert the assembled system to an ``ase.Atoms`` object.
+
+        Returns
+        -------
+        ase.Atoms
+            The simulation box as an ASE Atoms object with cell and PBC set.
+
+        Raises
+        ------
+        RuntimeError
+            If called before :meth:`build`.
+        """
+        if self._universe is None:
+            raise RuntimeError("Call build() before to_ase().")
+
+        system = self._universe
+        positions = system.atoms.positions
+        masses    = system.atoms.masses
+        labels    = system.atoms.types
+
+        symbols = [label_to_element(lab, mas) for lab, mas in zip(labels, masses)]
+        atoms = ase.Atoms(symbols=symbols, positions=positions)
+
+        if system.dimensions is not None:
+            atoms.set_cell(system.dimensions)
+            atoms.set_pbc(True)
+
+        try:
+            if system.atoms.charges is not None:
+                atoms.set_initial_charges(system.atoms.charges)
+        except Exception:
+            pass
+
+        return atoms
 
     # ------------------------------------------------------------------
     # Properties

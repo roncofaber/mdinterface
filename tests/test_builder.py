@@ -128,6 +128,10 @@ class TestLayerAccumulation:
         with pytest.raises(RuntimeError, match="build"):
             builder.write_lammps("dummy.lammps")
 
+    def test_to_ase_before_build_raises(self, builder):
+        with pytest.raises(RuntimeError, match="build"):
+            builder.to_ase()
+
 
 # ---------------------------------------------------------------------------
 # Slab suffix uniqueness
