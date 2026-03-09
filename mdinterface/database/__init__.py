@@ -10,3 +10,4 @@ from .metals import *
 from .molecules import *
 from .graphene import Graphene
 from .ions import *
+from .nobles import *

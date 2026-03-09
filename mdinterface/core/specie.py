@@ -155,7 +155,10 @@ class Specie(object):
             try:
                 atoms = ase.io.read(atoms)
             except:
-                atoms = ase.build.molecule(atoms)
+                try:
+                    atoms = ase.build.molecule(atoms)
+                except:
+                    atoms = ase.Atoms(atoms)
         elif isinstance(atoms, ase.Atoms):
             atoms = atoms.copy()
         
