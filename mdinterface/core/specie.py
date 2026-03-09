@@ -154,10 +154,10 @@ class Specie(object):
         if isinstance(atoms, str):
             try:
                 atoms = ase.io.read(atoms)
-            except:
+            except Exception:
                 try:
                     atoms = ase.build.molecule(atoms)
-                except:
+                except Exception:
                     atoms = ase.Atoms(atoms)
         elif isinstance(atoms, ase.Atoms):
             atoms = atoms.copy()
@@ -528,7 +528,7 @@ class Specie(object):
         
         try:
             from libarvo import molecular_vs
-        except:
+        except ImportError:
             raise ImportError("libarvo NOT found. Install it.")
 
         centers = self.atoms.get_positions()

@@ -22,8 +22,8 @@ def run_OBChargeModel(atoms, charge_type="eem"):
     
     try:
         import openbabel as ob
-    except:
-        print("openbabel NOT found. Install it.")
+    except ImportError:
+        raise ImportError("openbabel NOT found. Install it.")
     
     # Create an OBConversion object
     obConversion = ob.OBConversion()

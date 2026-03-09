@@ -24,14 +24,14 @@ def find_rings(graph, max_ring_size=8):
         for cycle in nx.simple_cycles(graph):
             if len(cycle) <= max_ring_size:
                 rings.append(sorted(cycle))
-    except:
+    except Exception:
         # Fallback: use minimum cycle basis for undirected graphs
         try:
             cycle_basis = nx.minimum_cycle_basis(graph)
             for cycle in cycle_basis:
                 if len(cycle) <= max_ring_size:
                     rings.append(sorted(cycle))
-        except:
+        except Exception:
             # If all else fails, return empty list
             rings = []
 

@@ -412,7 +412,7 @@ class SimulationBox():
             for attribute in ["bonds", "angles", "dihedrals", "impropers"]:
                 try:
                     system.del_TopologyAttr(attribute)
-                except:
+                except Exception:
                     pass
         
         # first write data file
@@ -467,7 +467,7 @@ class SimulationBox():
         try:
             if system.atoms.charges is not None:
                 ase_system.set_initial_charges(system.atoms.charges)
-        except:
+        except Exception:
             pass
         
         return ase_system

@@ -239,7 +239,7 @@ def populate_box(
                 mol = mol.to_universe()
             
             else:
-                raise "Wrong instructions"
+                raise ValueError("Wrong instructions")
             
             # write tmp pdb file and store info
             mol.atoms.write("mol_{}.pdb".format(cc))
@@ -250,12 +250,12 @@ def populate_box(
         subprocess.run(['packmol < {} > packmol.log'.format(input_file)],
                        shell=True, check=True, text=True)
 
-    except:
+    except subprocess.CalledProcessError:
         print("WARNING: packmol might not have worked, check system.")
-    
+
     try:
         universe = mda.Universe(output_file)
-    except:
+    except Exception:
         universe = None
 
     # remove temp mol files and packmol files

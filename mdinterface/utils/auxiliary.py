@@ -42,7 +42,7 @@ def mass2symbol(mass, possible_symbols, tolerance=0.1):
     if min_diff <= tolerance:
         return closest_symbol
     else:
-        raise "Could NOT guess atom type."
+        raise ValueError("Could NOT guess atom type.")
     
 def label_to_element(atostr, atomss):
     """
@@ -75,7 +75,7 @@ def label_to_element(atostr, atomss):
         try:
             try_atom = ase.Atom(new_label)  # Attempt to create an Atom object
             existent = True
-        except:
+        except Exception:
             existent = False
 
         if existent and np.abs(try_atom.mass - atomss) < 1:  # Check mass match

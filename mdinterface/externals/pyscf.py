@@ -21,7 +21,7 @@ def calculate_RESP_charges(specie, basis='def2-svpd', xc="b3lyp", calc_type="RKS
         from pymbxas.build.structure import ase_to_mole, mole_to_ase
         from pymbxas.build.input_pyscf import make_pyscf_calculator
         from pymbxas.md.solvers import Geometry_optimizer
-    except:
+    except ImportError:
         raise ImportError("You need to install gpu4pyscf AND pymbxas to run this.")
     
     # make pyscf mol

@@ -66,7 +66,7 @@ class Trajectory(object):
             if first_atom in common_metals:
                 electrode_atoms = first_atom
             else:
-                raise "Please suggest electrode atoms"
+                raise ValueError("Please suggest electrode atoms")
         
         # find electrode indexes
         idxs = np.array(atoms_to_indexes(self[0], electrode_atoms))

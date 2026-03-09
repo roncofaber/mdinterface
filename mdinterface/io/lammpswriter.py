@@ -248,7 +248,7 @@ class DATAWriter(base.WriterBase):
                                                         attr_name))
                     features[btype] = features[btype].atomgroup_intersection(
                                         atoms, strict=True)
-                except:
+                except AttributeError:
                     pass
 
             self.f.write('\n')

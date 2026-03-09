@@ -34,8 +34,8 @@ def make_ase_calc_pyscf(specie, **pyscfargs):
 
         # gpu4pyscf stuff
         from gpu4pyscf.tools.ase_interface import PySCF
-    except:
-        raise ValueError("No PySCF and PyMBXAS stuff")
+    except ImportError:
+        raise ImportError("No PySCF and PyMBXAS stuff")
     
     # load default values
     pyscf_arguments = get_default_config()
@@ -64,7 +64,7 @@ def make_ase_calc_uma(specie, task_name="omol", model_name="uma-s-1p1"):
 
         predictor = pretrained_mlip.get_predict_unit(model_name=model_name, device="cuda")
         calc = FAIRChemCalculator(predictor, task_name="omol")
-    except:
+    except Exception:
         raise ValueError("No UMA and OMol stuff")
     
     return calc
