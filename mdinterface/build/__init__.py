@@ -6,3 +6,4 @@ from .polymerize import (build_polymer, start_chain, attach_to_chain,
 from .box import (make_solvent_box, populate_box, make_interface_slab,
                   populate_with_ions, add_component)
 from .continuum2sim import discretize_concentration
+from .builder import BoxBuilder
