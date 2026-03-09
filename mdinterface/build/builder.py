@@ -21,6 +21,33 @@ import shutil
 logger = logging.getLogger("mdinterface.builder")
 
 
+def _configure_logger(level) -> None:
+    """
+    Attach a StreamHandler to the mdinterface loggers and set their level.
+
+    Parameters
+    ----------
+    level : bool, int, or str
+        ``True`` → INFO, ``False`` → WARNING, a :mod:`logging` integer
+        constant (e.g. ``logging.DEBUG``), or a string (``"DEBUG"``,
+        ``"INFO"``, ``"WARNING"`` …).
+    """
+    if isinstance(level, bool):
+        level = logging.INFO if level else logging.WARNING
+    elif isinstance(level, str):
+        level = getattr(logging, level.upper(), logging.INFO)
+
+    fmt = logging.Formatter("[mdinterface] %(levelname)-8s %(message)s")
+
+    for name in ("mdinterface.builder", "mdinterface.box"):
+        lg = logging.getLogger(name)
+        if not any(isinstance(h, logging.StreamHandler) for h in lg.handlers):
+            handler = logging.StreamHandler()
+            handler.setFormatter(fmt)
+            lg.addHandler(handler)
+        lg.setLevel(level)
+
+
 class BoxBuilder:
     """
     Fluent builder for assembling layered simulation boxes.
@@ -39,7 +66,13 @@ class BoxBuilder:
     >>> simbox.write_lammps("data.lammps")
     """
 
-    def __init__(self, xysize: Union[List[float], Tuple[float, float]]) -> None:
+    def __init__(
+        self,
+        xysize: Union[List[float], Tuple[float, float]],
+        verbose: Union[None, bool, int, str] = None,
+    ) -> None:
+        if verbose is not None:
+            _configure_logger(verbose)
         xsize, ysize = self._validate_xysize(xysize)
         self._xsize = xsize
         self._ysize = ysize
@@ -225,9 +258,15 @@ class BoxBuilder:
                 if tslab is not None:
                     xi = np.dot([1, 0, 0], tslab.atoms.cell @ [1, 0, 0])
                     yi = np.dot([0, 1, 0], tslab.atoms.cell @ [0, 1, 0])
+                    zi = np.dot([0, 0, 1], tslab.atoms.cell @ [0, 0, 1])
                     slab_dims.append((xi, yi))
                     xsize = max(xsize, xi)
                     ysize = max(ysize, yi)
+                    logger.debug(
+                        "  Slab fitted: %s → %.3f × %.3f × %.3f Å, %d atoms",
+                        getattr(layer["species"], "resname", "?"),
+                        xi, yi, zi, len(tslab.atoms),
+                    )
 
         if slab_dims:
             logger.info("Cell size after slab fitting: x=%.3f Å, y=%.3f Å", xsize, ysize)
@@ -253,6 +292,8 @@ class BoxBuilder:
                     layered=layered, match_cell=match_cell, xydim=[xsize, ysize]
                 )
                 system, zdim = add_component(system, slab_u, zdim, padding=padding)
+                logger.debug("  → %d atoms, running zdim=%.3f Å",
+                             len(slab_u.atoms), zdim)
 
             elif ltype == "solvent":
                 dilate   = layer["dilate"]
@@ -261,9 +302,11 @@ class BoxBuilder:
 
                 if dilate != 1.0:
                     logger.info(
-                        "  Dilation active (×%.2f): packing into zdim=%.1f Å "
-                        "at density=%.3f g/cm³",
-                        dilate, eff_zdim, eff_rho if eff_rho is not None else float("nan"),
+                        "  Dilation ×%.2f: packing into %.1f Å at %.3f g/cm³"
+                        " (target zdim=%.1f Å)",
+                        dilate, eff_zdim,
+                        eff_rho if eff_rho is not None else float("nan"),
+                        layer["zdim"],
                     )
 
                 ions_list = layer["ions"] if layer["ions"] else None
@@ -280,13 +323,20 @@ class BoxBuilder:
                     layer["nsolvent"],
                     layer["packmol_tolerance"],
                 )
+                if solv_box is not None:
+                    logger.debug("  Solvent box: %d atoms placed", len(solv_box.atoms))
+                else:
+                    logger.warning("  Solvent box is empty — check PACKMOL output")
                 system, zdim = add_component(system, solv_box, zdim, padding=padding)
+                logger.debug("  → running zdim=%.3f Å", zdim)
 
             elif ltype == "vacuum":
                 zdim += layer["zdim"]
+                logger.debug("  → running zdim=%.3f Å", zdim)
 
         system.dimensions = [xsize, ysize, zdim] + [90, 90, 90]
-        logger.info("Assembly complete: zdim=%.3f Å", zdim)
+        logger.info("Assembly complete: %d atoms, zdim=%.3f Å",
+                    len(system.atoms), zdim)
 
         if center:
             system.atoms.translate([0, 0, zdim / 2])
@@ -333,6 +383,8 @@ class BoxBuilder:
         if self._universe is None:
             raise RuntimeError("Call build() before write_lammps().")
 
+        logger.info("Writing LAMMPS data file: %s (atom_style=%s, write_coeff=%s)",
+                    filename, atom_style, write_coeff)
         system = self._universe.copy()
 
         if not write_coeff:
@@ -361,7 +413,11 @@ class BoxBuilder:
                     tfile.write(fl)
             shutil.move(temp_file, filename)
 
-        logger.info("LAMMPS data file written: %s", filename)
+        try:
+            nbonds = len(system.atoms.bonds)
+        except Exception:
+            nbonds = 0
+        logger.info("Written: %d atoms, %d bonds → %s", len(system.atoms), nbonds, filename)
         return self
 
     def to_ase(self) -> ase.Atoms:
@@ -477,6 +533,7 @@ class BoxBuilder:
                 self._all_species.append(sp)
 
     def _update_topology_indexes(self) -> None:
+        logger.debug("Updating topology indexes for %d species", len(self._all_species))
         nitems: dict = {
             "_btype": [],
             "_atype": [],
@@ -503,6 +560,13 @@ class BoxBuilder:
             for stype in specie._stype:
                 idx = np.argwhere(stype.extended_label == np.array(atom_types))[0][0]
                 stype.set_id(idx + 1)
+
+        logger.debug(
+            "Topology: %d atom type(s), %d bond type(s), "
+            "%d angle type(s), %d dihedral type(s), %d improper type(s)",
+            len(atom_types), len(nitems["_btype"]),
+            len(nitems["_atype"]), len(nitems["_dtype"]), len(nitems["_itype"]),
+        )
 
     def get_sorted_attribute(self, attribute: str) -> list:
         attr_map = {

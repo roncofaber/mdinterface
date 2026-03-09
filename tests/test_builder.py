@@ -6,6 +6,7 @@ import pytest
 import numpy as np
 
 from mdinterface import BoxBuilder
+from mdinterface.build.builder import _configure_logger
 from mdinterface.database import Water, Ion
 
 
@@ -264,3 +265,64 @@ class TestLogging:
         with caplog.at_level(logging.DEBUG, logger="mdinterface.builder"):
             b.add_vacuum(zdim=5)
         assert any("vacuum" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# verbose parameter and _configure_logger
+# ---------------------------------------------------------------------------
+
+class TestVerbose:
+
+    def _clean_handlers(self):
+        """Remove StreamHandlers added by previous tests."""
+        for name in ("mdinterface.builder", "mdinterface.box"):
+            lg = logging.getLogger(name)
+            lg.handlers = [h for h in lg.handlers
+                           if not isinstance(h, logging.StreamHandler)]
+
+    def test_verbose_true_sets_info(self):
+        self._clean_handlers()
+        _configure_logger(True)
+        assert logging.getLogger("mdinterface.builder").level == logging.INFO
+
+    def test_verbose_false_sets_warning(self):
+        self._clean_handlers()
+        _configure_logger(False)
+        assert logging.getLogger("mdinterface.builder").level == logging.WARNING
+
+    def test_verbose_string_debug(self):
+        self._clean_handlers()
+        _configure_logger("DEBUG")
+        assert logging.getLogger("mdinterface.builder").level == logging.DEBUG
+
+    def test_verbose_int_level(self):
+        self._clean_handlers()
+        _configure_logger(logging.WARNING)
+        assert logging.getLogger("mdinterface.builder").level == logging.WARNING
+
+    def test_verbose_in_constructor(self):
+        self._clean_handlers()
+        b = BoxBuilder(xysize=[20, 20], verbose="DEBUG")
+        assert logging.getLogger("mdinterface.builder").level == logging.DEBUG
+        assert b is not None
+
+    def test_verbose_none_does_not_add_handler(self):
+        self._clean_handlers()
+        n_before = len(logging.getLogger("mdinterface.builder").handlers)
+        BoxBuilder(xysize=[20, 20], verbose=None)
+        n_after = len(logging.getLogger("mdinterface.builder").handlers)
+        assert n_after == n_before
+
+    def test_configure_logger_adds_handler(self):
+        self._clean_handlers()
+        _configure_logger(True)
+        handlers = logging.getLogger("mdinterface.builder").handlers
+        assert any(isinstance(h, logging.StreamHandler) for h in handlers)
+
+    def test_configure_logger_not_duplicated(self):
+        self._clean_handlers()
+        _configure_logger(True)
+        _configure_logger(True)
+        handlers = [h for h in logging.getLogger("mdinterface.builder").handlers
+                    if isinstance(h, logging.StreamHandler)]
+        assert len(handlers) == 1

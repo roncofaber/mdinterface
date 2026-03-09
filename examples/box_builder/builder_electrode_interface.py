@@ -23,7 +23,10 @@ gold = Metal111("Au")
 
 #%% Set up simulation box
 
-simbox = BoxBuilder(xysize=[15, 15])
+simbox = BoxBuilder(
+    xysize=[15, 15],
+    verbose=True,   # True → INFO, "DEBUG" → DEBUG, False/None → silent
+)
 
 #%% Add layers  (bottom → top)
 

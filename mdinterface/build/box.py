@@ -10,6 +10,7 @@ from typing import List, Optional, Union, Tuple, Dict, Any
 from mdinterface.io.packmol import header, box_place, fix_place
 from mdinterface.build.continuum2sim import discretize_concentration
 
+import logging
 import MDAnalysis as mda
 from ase import units
 
@@ -18,6 +19,8 @@ import numpy as np
 import subprocess
 
 #%%
+
+logger = logging.getLogger("mdinterface.box")
 
 def _validate_solvent_box_parameters(
     nions: Optional[Union[int, List[int]]],
@@ -248,16 +251,21 @@ def populate_box(
             tmp_files.append("mol_{}.pdb".format(cc))
             
     # run packmol
+    logger.info("Running PACKMOL (tolerance=%.1f Å, %d instruction(s))",
+                tolerance, len(instructions))
     try:
         with open(input_file, 'r') as stdin_f, open('packmol.log', 'w') as stdout_f:
             subprocess.run(['packmol'], stdin=stdin_f, stdout=stdout_f, check=True)
+        logger.debug("PACKMOL finished successfully")
 
     except subprocess.CalledProcessError:
-        print("WARNING: packmol might not have worked, check system.")
+        logger.warning("PACKMOL may not have converged — check packmol.log")
 
     try:
         universe = mda.Universe(output_file)
+        logger.debug("PACKMOL output loaded: %d atoms", len(universe.atoms))
     except Exception:
+        logger.warning("Could not load PACKMOL output file '%s'", output_file)
         universe = None
 
     # remove temp mol files and packmol files
