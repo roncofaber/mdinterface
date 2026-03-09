@@ -12,7 +12,9 @@ from mdinterface import BoxBuilder
 from mdinterface.database import Water
 from mdinterface.core.specie import Specie
 
-#%% Define species
+# ---------------------------------------------------------------------------
+# 1. Define species
+# ---------------------------------------------------------------------------
 
 # Solvent: TIP3P water (Ewald model)
 water = Water(model="ewald")
@@ -20,9 +22,11 @@ water = Water(model="ewald")
 # Solute: ammonia with LigParGen parameters
 amm = Specie("NH3", ligpargen=True)
 
-#%% Build with BoxBuilder
+# ---------------------------------------------------------------------------
+# 2. Assemble layers
+# ---------------------------------------------------------------------------
 
-system = (
+builder = (
     BoxBuilder(xysize=[20, 20])
         .add_solvent(
             water,
@@ -31,9 +35,23 @@ system = (
             zdim=20,       # 20 Å thick region
             density=1.0,   # water density in g/cm³
         )
-        .build(padding=0.5)
-        .write_lammps("data.lammps", atom_style="full", write_coeff=True)
 )
 
-# The MDAnalysis Universe is available if you need it for further processing
-universe = system.universe
+# ---------------------------------------------------------------------------
+# 3. Build
+# ---------------------------------------------------------------------------
+
+builder.build(padding=0.5)
+
+# ---------------------------------------------------------------------------
+# 4. Output
+# ---------------------------------------------------------------------------
+
+# Write LAMMPS data file (with force-field coefficients)
+builder.write_lammps("data.lammps", atom_style="full", write_coeff=True)
+
+# Convert to ASE Atoms (e.g. for visualisation or further manipulation)
+atoms = builder.to_ase()
+
+# Access the raw MDAnalysis Universe if needed
+universe = builder.universe
