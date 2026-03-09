@@ -379,7 +379,7 @@ class SimulationBox():
                 zdim += layer["zdim"]
             
         # update my system's dimensions        
-        system.dimensions = [xsize, ysize, zdim] + [90, 90, 90] #TODO not like this
+        system.dimensions = [xsize, ysize, zdim] + [90, 90, 90]  # Assumes orthogonal cell geometry
         
         # move of half unit along z
         if center_electrode:

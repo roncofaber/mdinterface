@@ -202,7 +202,7 @@ class Hydroxide(Specie):
         # make ion 
         hoh = ase.build.molecule("OH")
 
-        # bond is fixed in paper #FIXME used hydronium bond with r0=1
+        # Bond parameters adapted from hydronium (Netz ref.), with r0 rounded to 1.000 Å
         b1 = Bond("O", "H", kr=1085.9565/2, r0=1.000)
         
         charges = [-1.000, 0.000]

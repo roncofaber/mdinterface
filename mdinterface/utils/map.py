@@ -12,7 +12,7 @@ import copy
 
 # repo
 from mdinterface.core.topology import Bond, Angle, Dihedral, Improper
-from mdinterface.utils.graphs import find_unique_paths_of_length
+from mdinterface.utils.graphs import find_unique_paths_of_length, find_improper_idxs
 #%%
 
 def map_atoms(atoms, keep_ids=False):
@@ -218,18 +218,18 @@ def find_missing_dihedrals(nas):
 
 def find_missing_impropers(nas):
     tmp_impropers, _ = nas.impropers
-    all_impropers = find_unique_paths_of_length(nas.graph, 3)  # Assuming path length 3 for impropers
 
-    # Convert tmp_impropers to a set of tuples for efficient membership checking
-    tmp_impropers_set = set(tuple(improper) for improper in tmp_impropers)
-    tmp_impropers_set.update(tuple(reversed(improper)) for improper in tmp_impropers)
+    # Impropers are star-shaped: one central atom bonded to exactly 3 neighbors.
+    # Use find_improper_idxs (degree-3 nodes) instead of linear paths.
+    all_impropers = find_improper_idxs(nas.graph)
+
+    # Match by frozenset since improper atom ordering is not directional
+    tmp_impropers_set = set(frozenset(imp) for imp in tmp_impropers)
 
     missing_impropers = []
     for tmp_improper in all_impropers:
-        tmp_improper_tuple = tuple(tmp_improper)
-        tmp_improper_tuple_rev = tuple(reversed(tmp_improper_tuple))
-        if tmp_improper_tuple not in tmp_impropers_set and tmp_improper_tuple_rev not in tmp_impropers_set:
-            missing_impropers.append(tuple(nas._sids[ii] for ii in tmp_improper_tuple))
+        if frozenset(tmp_improper) not in tmp_impropers_set:
+            missing_impropers.append(tuple(nas._sids[ii] for ii in tmp_improper))
 
     return missing_impropers
 

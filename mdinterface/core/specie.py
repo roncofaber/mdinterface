@@ -476,7 +476,7 @@ class Specie(object):
         
         atoms = self.atoms.repeat(rep)
         
-        if make_cubic: #TODO: this can be dangerous if the cell
+        if make_cubic:  # Note: assumes orthogonal cell; off-diagonal components are discarded
             
             xsize = [1,0,0]@atoms.cell@[1,0,0]
             ysize = [0,1,0]@atoms.cell@[0,1,0]
@@ -579,7 +579,7 @@ class Specie(object):
         missing_bonds = pmap.find_missing_bonds(self)
         missing_angles = pmap.find_missing_angles(self)
         missing_dihedrals = pmap.find_missing_dihedrals(self)
-        missing_impropers = []#pmap.find_missing_impropers(self) #TODO change
+        missing_impropers = pmap.find_missing_impropers(self)
         
         suggestions = {
             "bonds": missing_bonds,
@@ -669,15 +669,13 @@ class Specie(object):
 
     def relax_structure(self, optimizer='FIRE', fmax=0.05,
                        steps=200, update_positions=True, trajectory=None,
-                       logfile=None, **kwargs):
+                       logfile=None, charge=None, spin=0, **kwargs):
         """
         Relax the Specie structure using ASE or UMA optimization.
 
         Parameters
         ----------
-        method : str, default 'ase'
-            Relaxation method to use ('ase', 'uma')
-        optimizer : str, default 'BFGS'
+        optimizer : str, default 'FIRE'
             Optimizer for ASE method ('BFGS', 'LBFGS', 'FIRE')
         fmax : float, default 0.05
             Maximum force threshold for convergence (eV/Å)
@@ -689,6 +687,10 @@ class Specie(object):
             Path to save optimization trajectory
         logfile : str, optional
             Path to save optimization log
+        charge : int or None, default None
+            Total charge of the system. Defaults to the stored tot_charge.
+        spin : int, default 0
+            Total spin multiplicity (2S). Use >0 for open-shell systems.
         **kwargs
             Additional arguments passed to the relaxation function
 
@@ -699,10 +701,13 @@ class Specie(object):
         converged : bool
             Whether the optimization converged
         """
-        
+
+        if charge is None:
+            charge = self._tot_charge
+
         atoms_to_relax = self.atoms
-        atoms_to_relax.info["charge"] = self._tot_charge
-        atoms_to_relax.info["spin"]   = 0 #TODO
+        atoms_to_relax.info["charge"] = charge
+        atoms_to_relax.info["spin"]   = spin
         
         relaxed_atoms = relax_structure(
             atoms_to_relax, optimizer=optimizer, fmax=fmax, steps=steps,

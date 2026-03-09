@@ -205,7 +205,7 @@ def attach_to_chain(oligomer, monomer, final=False):
     monomer_label = int(np.max(oligomer.arrays["mon_id"]+1))
     monomer.new_array("mon_id", np.array(len(monomer)*[monomer_label]))
     
-    # Find bond distance #TODO here we can change the distance if needed
+    # Bond distance estimated from covalent radii of the two bonding atoms
     d1 = covalent_radii[atomic_numbers[oligomer.get_chemical_symbols()[ini_idx]]]
     d2 = covalent_radii[atomic_numbers[monomer.get_chemical_symbols()[end_idx]]]
     target_distance = (d1 + d2)/2

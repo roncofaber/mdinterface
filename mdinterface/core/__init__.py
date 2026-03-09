@@ -4,6 +4,6 @@
 core: Core functionalities including related components.
 """
 
-from .specie import *
-from .topology import *
-from .polymer import *
+from .specie import Specie
+from .topology import Topology, Atom, Bond, Angle, Dihedral, Improper
+from .polymer import Polymer

@@ -113,7 +113,7 @@ def find_atom_types(graph, max_depth=1):
 
     return atom_type_ids, {v: k for k, v in atom_types.items()}
 
-# similar to find atoms types but works for whole graph. Keep an eye on this #TODO
+# Similar to find_atom_types but classifies atoms by their full graph neighbourhood
 def find_equivalent_atoms(graph):
 
     def get_distance_groups(graph, start_node):
