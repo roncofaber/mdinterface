@@ -247,8 +247,8 @@ def populate_box(
             
     # run packmol
     try:
-        subprocess.run(['packmol < {} > packmol.log'.format(input_file)],
-                       shell=True, check=True, text=True)
+        with open(input_file, 'r') as stdin_f, open('packmol.log', 'w') as stdout_f:
+            subprocess.run(['packmol'], stdin=stdin_f, stdout=stdout_f, check=True)
 
     except subprocess.CalledProcessError:
         print("WARNING: packmol might not have worked, check system.")

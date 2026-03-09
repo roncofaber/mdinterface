@@ -9,9 +9,9 @@ Created on Mon Feb  3 15:34:20 2025
 # not repo
 import numpy as np
 import os
+import tempfile
 import ase
 import ase.io
-import random
 
 #%%
 
@@ -32,15 +32,14 @@ def run_OBChargeModel(atoms, charge_type="eem"):
     # Create an OBMol object
     mol = ob.OBMol()
 
-    # Write and read the XYZ file
-    # Generate a random 8-digit integer
-    random_number = random.randint(10000000, 99999999)
-    
-    # Convert to obabel format
-    filename = f"tmp_{random_number}.xyz"
-    ase.io.write(filename, atoms)
-    obConversion.ReadFile(mol, filename)
-    os.remove(filename)
+    # Write and read the XYZ file using a secure temp file
+    with tempfile.NamedTemporaryFile(suffix=".xyz", delete=False) as tmp:
+        filename = tmp.name
+    try:
+        ase.io.write(filename, atoms)
+        obConversion.ReadFile(mol, filename)
+    finally:
+        os.remove(filename)
 
     ob_charge_model = ob.OBChargeModel.FindType(charge_type)
     ob_charge_model.ComputeCharges(mol)

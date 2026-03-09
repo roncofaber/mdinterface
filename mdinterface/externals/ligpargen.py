@@ -13,7 +13,7 @@ from mdinterface.io.read import read_lammps_data_file
 import os
 import ase
 import ase.io
-import random
+import tempfile
 import shutil
 import subprocess
 
@@ -58,23 +58,23 @@ def run_ligpargen(system, charge=None, is_snippet=False):
         print(f"{mdint}/config.ini file.")
         
     # Write the XYZ file and prepare to run ligpargen
-    random_number = random.randint(10000000, 99999999)
-    folder_name = f"test_{random_number}"
-    os.makedirs(folder_name, exist_ok=True)
-    
-    ase.io.write(f"{random_number}.xyz", system)
-    
-    # Define ligpargen command
-    if charge is None:
-        ligpargen_command = f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -cgen CM1A"
-    else:
-        ligpargen_command = f"ligpargen -i {random_number}.xyz -p {folder_name} -debug -o 0 -c {charge} -cgen CM1A"
-    
+    folder_name = tempfile.mkdtemp(prefix="ligpargen_")
+    mol_name = os.path.basename(folder_name)
+    xyz_file = f"{mol_name}.xyz"
+
+    ase.io.write(xyz_file, system)
+
+    # Define ligpargen command as a list to avoid shell injection
+    ligpargen_command = ['ligpargen', '-i', xyz_file, '-p', folder_name,
+                         '-debug', '-o', '0', '-cgen', 'CM1A']
+    if charge is not None:
+        ligpargen_command.extend(['-c', str(charge)])
+
     error_log_path = os.path.join(folder_name, "error_log.txt")  # Path for the error log
-    
+
     try:
         # Run the command and capture both stdout and stderr
-        result = subprocess.run(ligpargen_command, shell=True, check=True,
+        result = subprocess.run(ligpargen_command, check=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         # Optionally log stdout for debugging
@@ -93,17 +93,17 @@ def run_ligpargen(system, charge=None, is_snippet=False):
             error_log_file.write("STDERR:\n" + e.stderr.decode() + "\n")
 
         # Additional cleanup code can be executed here
-        cleanup(folder_name, f"{random_number}")
-        os.remove(f"{random_number}.xyz")
+        cleanup(folder_name, mol_name)
+        os.remove(xyz_file)
         
         raise
 
     # Proceed to read lammps data file
     system, atoms, bonds, angles, dihedrals, impropers = read_lammps_data_file(
-        f"{folder_name}/{random_number}.lammps.lmp", is_snippet=is_snippet)
-    
+        f"{folder_name}/{mol_name}.lammps.lmp", is_snippet=is_snippet)
+
     # Additional cleanup code can be executed here
-    cleanup(folder_name, f"{random_number}")
-    os.remove(f"{random_number}.xyz")
+    cleanup(folder_name, mol_name)
+    os.remove(xyz_file)
     
     return system, atoms, bonds, angles, dihedrals, impropers
