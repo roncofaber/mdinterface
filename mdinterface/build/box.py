@@ -77,7 +77,8 @@ def make_solvent_box(
     concentration: Optional[float],
     conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
     ion_pos: Optional[str],
-    nsolvent: Optional[int] = None
+    nsolvent: Optional[int] = None,
+    tolerance: float = 2.0
 ) -> Optional[mda.Universe]:
     """
     Build a solvent box with optional ionic species.
@@ -172,7 +173,7 @@ def make_solvent_box(
         instructions.append([solvent, nummols, "box"])
 
     # generate universe file
-    universe = populate_box(volume, instructions)
+    universe = populate_box(volume, instructions, tolerance=tolerance)
     
     if universe is None:
         return None
@@ -197,7 +198,8 @@ def populate_box(
     volume: List[float],
     instructions: List[Tuple[Any, Union[int, List[float]], str]],
     input_file: str = "input_packmol.in",
-    output_file: str = "system.pdb"
+    output_file: str = "system.pdb",
+    tolerance: float = 2.0
 ) -> Optional[mda.Universe]:
 
     if not instructions:
@@ -212,7 +214,7 @@ def populate_box(
     tmp_files = ["packmol.log", "input_packmol.in", "system.pdb"]
     with open(input_file, "w") as fout:
         
-        fout.write(header.format(output_file, np.random.randint(100000)))
+        fout.write(header.format(tolerance, output_file, np.random.randint(100000)))
         
         for cc, instruction in enumerate(instructions):
             

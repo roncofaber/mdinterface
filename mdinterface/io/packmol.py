@@ -8,7 +8,7 @@ Created on Wed Nov 22 13:57:02 2023
 
 
 header = """\
-tolerance 2.0
+tolerance {}
 output    {}
 nloop     100
 seed      {}
