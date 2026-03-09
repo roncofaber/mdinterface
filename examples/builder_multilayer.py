@@ -21,9 +21,7 @@ Author: roncofaber
 from mdinterface import BoxBuilder
 from mdinterface.database import Water, Ion, Metal111
 
-# ---------------------------------------------------------------------------
-# 1. Define species
-# ---------------------------------------------------------------------------
+#%% Define species
 
 water = Water(model="ewald")
 
@@ -35,35 +33,35 @@ f  = Ion("F",  ffield="Dang")
 gold     = Metal111("Au")
 platinum = Metal111("Pt")
 
-# ---------------------------------------------------------------------------
-# 2. Assemble layers  (bottom → top)
-# ---------------------------------------------------------------------------
+#%% Set up simulation box
 
-builder = (
-    BoxBuilder(xysize=[20, 20])
-        .add_slab(gold,     nlayers=3)                                  # bottom electrode
-        .add_solvent(water, ions=[na, cl], nions=[4, 4], zdim=20, density=1.0)  # NaCl region
-        .add_slab(platinum, nlayers=2)                                  # middle electrode
-        .add_solvent(water, ions=[k,  f],  nions=[4, 4], zdim=20, density=1.0)  # KF region
-        .add_slab(platinum, nlayers=2)                                  # top electrode
-        .add_vacuum(zdim=10)                                            # gap at periodic boundary
-)
+simbox = BoxBuilder(xysize=[20, 20])
 
-# ---------------------------------------------------------------------------
-# 3. Build
-# ---------------------------------------------------------------------------
+#%% Add layers  (bottom → top)
 
-builder.build(padding=0.5)
+simbox.add_slab(gold, nlayers=3)                                        # bottom electrode
 
-# ---------------------------------------------------------------------------
-# 4. Output
-# ---------------------------------------------------------------------------
+simbox.add_solvent(water, ions=[na, cl], nions=[4, 4], zdim=20, density=1.0)  # NaCl region
+
+simbox.add_slab(platinum, nlayers=2)                                    # middle electrode
+
+simbox.add_solvent(water, ions=[k, f], nions=[4, 4], zdim=20, density=1.0)   # KF region
+
+simbox.add_slab(platinum, nlayers=2)                                    # top electrode
+
+simbox.add_vacuum(zdim=10)                                              # gap at periodic boundary
+
+#%% Build
+
+simbox.build(padding=0.5)
+
+#%% Output
 
 # Write LAMMPS data file (with force-field coefficients)
-builder.write_lammps("data_multilayer.lammps", atom_style="full", write_coeff=True)
+simbox.write_lammps("data_multilayer.lammps", atom_style="full", write_coeff=True)
 
 # Convert to ASE Atoms (e.g. for visualisation or further manipulation)
-atoms = builder.to_ase()
+atoms = simbox.to_ase()
 
 # Access the raw MDAnalysis Universe if needed
-universe = builder.universe
+universe = simbox.universe
