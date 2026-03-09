@@ -36,7 +36,7 @@ import matplotlib.pyplot as plt
 class Specie(object):
     
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
-                 angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
+                 angles=None, dihedrals=None, impropers=None, lj=None, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
                  pbc=False, ligpargen=False, tot_charge=None, prune_z=False,
                  calc=None, keep_ids=False):
@@ -79,7 +79,7 @@ class Specie(object):
         
         # read atom_types from LJ
         if atom_types is None:
-            atom_types = self._atom_types_from_lj(lj)
+            atom_types = self._atom_types_from_lj(lj if lj is not None else {})
             
         # set up internal topology attributes
         self._setup_topology(atom_types, bonds, angles, dihedrals, impropers,
@@ -253,8 +253,16 @@ class Specie(object):
         
         return
 
-    def _add_to_topology(self, bonds=[], angles=[], dihedrals=[], impropers=[]):
-        
+    def _add_to_topology(self, bonds=None, angles=None, dihedrals=None, impropers=None):
+        if bonds is None:
+            bonds = []
+        if angles is None:
+            angles = []
+        if dihedrals is None:
+            dihedrals = []
+        if impropers is None:
+            impropers = []
+
         # check for uniqueness
         new_bonds = []
         new_angles = []

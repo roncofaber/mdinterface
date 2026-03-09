@@ -159,15 +159,18 @@ class Trajectory(object):
         return (z_bins[:-1] + z_bins[1:])/2, density
     
     # get 2D density
-    def get_2D_density(self, axes=None, nbins=[100, 100], symbols="all", mass=None,
+    def get_2D_density(self, axes=None, nbins=None, symbols="all", mass=None,
                        molar=None, charge=None, return_mean=True,
                        zmin=None, zmax=None, background=None, zrange=None):
         
         if axes is None: # if none, assume it's for the non z-axis (xy)
             axes = [ii for ii in [0, 1, 2] if ii != self._zaxis]
-        
+
+        if nbins is None:
+            nbins = [100, 100]
+
         zaxis = [ii for ii in [0, 1, 2] if ii not in axes]
-        
+
         if len(as_list(nbins)) == 1:
             nbins = 2*as_list(nbins)
         
