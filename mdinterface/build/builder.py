@@ -264,7 +264,7 @@ class BoxBuilder:
                     xsize = max(xsize, xi)
                     ysize = max(ysize, yi)
                     logger.debug(
-                        "  Slab fitted: %s → %.3f × %.3f × %.3f Å, %d atoms",
+                        "  Slab fitted: %s -> %.3f x %.3f x %.3f A, %d atoms",
                         getattr(layer["species"], "resname", "?"),
                         xi, yi, zi, len(tslab.atoms),
                     )
@@ -293,8 +293,8 @@ class BoxBuilder:
                     layered=layered, match_cell=match_cell, xydim=[xsize, ysize]
                 )
                 system, zdim = add_component(system, slab_u, zdim, padding=padding)
-                logger.debug("  → %d atoms, running zdim=%.3f Å",
-                             len(slab_u.atoms), zdim)
+                logger.info("  -> %d atoms, zdim -> %.3f A",
+                            len(slab_u.atoms), zdim)
 
             elif ltype == "solvent":
                 dilate   = layer["dilate"]
@@ -303,8 +303,8 @@ class BoxBuilder:
 
                 if dilate != 1.0:
                     logger.info(
-                        "  Dilation ×%.2f: packing into %.1f Å at %.3f g/cm³"
-                        " (target zdim=%.1f Å)",
+                        "  Dilation x%.2f: packing into %.1f A at %.3f g/cm3"
+                        " (target zdim=%.1f A)",
                         dilate, eff_zdim,
                         eff_rho if eff_rho is not None else float("nan"),
                         layer["zdim"],
@@ -325,29 +325,29 @@ class BoxBuilder:
                     layer["packmol_tolerance"],
                 )
                 if solv_box is not None:
-                    logger.debug("  Solvent box: %d atoms placed", len(solv_box.atoms))
+                    logger.info("  -> %d atoms, zdim -> %.3f A",
+                                len(solv_box.atoms), zdim + eff_zdim)
                 else:
-                    logger.warning("  Solvent box is empty — check PACKMOL output")
+                    logger.warning("  Solvent box is empty - check packmol.log")
                 system, zdim = add_component(system, solv_box, zdim, padding=padding)
-                logger.debug("  → running zdim=%.3f Å", zdim)
 
             elif ltype == "vacuum":
                 zdim += layer["zdim"]
-                logger.debug("  → running zdim=%.3f Å", zdim)
+                logger.info("  -> zdim -> %.3f A", zdim)
 
         system.dimensions = [xsize, ysize, zdim] + [90, 90, 90]
-        logger.info("Assembly complete: %d atoms, zdim=%.3f Å",
+        logger.info("Assembly complete: %d atoms, zdim=%.3f A",
                     len(system.atoms), zdim)
 
         if center:
             system.atoms.translate([0, 0, zdim / 2])
             _ = system.atoms.wrap()
-            logger.debug("System shifted by half-box along Z (center=True)")
+            logger.info("  -> system shifted by half-box along Z")
 
         if hijack is not None:
             system.dimensions = hijack.get_cell_lengths_and_angles()
             system.atoms.positions = hijack.get_positions()
-            logger.info("Positions and cell overridden by hijack ase.Atoms")
+            logger.info("  -> positions and cell overridden by hijack ase.Atoms")
 
         self._universe = system
         self._xsize = xsize
@@ -418,7 +418,7 @@ class BoxBuilder:
             nbonds = len(system.atoms.bonds)
         except Exception:
             nbonds = 0
-        logger.info("Written: %d atoms, %d bonds → %s", len(system.atoms), nbonds, filename)
+        logger.info("Written: %d atoms, %d bonds -> %s", len(system.atoms), nbonds, filename)
         return self
 
     def to_ase(self) -> ase.Atoms:

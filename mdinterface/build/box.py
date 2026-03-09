@@ -251,21 +251,21 @@ def populate_box(
             tmp_files.append("mol_{}.pdb".format(cc))
             
     # run packmol
-    logger.info("Running PACKMOL (tolerance=%.1f Å, %d instruction(s))",
+    logger.info("  Running PACKMOL (tolerance=%.1f A, %d molecule type(s))",
                 tolerance, len(instructions))
     try:
         with open(input_file, 'r') as stdin_f, open('packmol.log', 'w') as stdout_f:
             subprocess.run(['packmol'], stdin=stdin_f, stdout=stdout_f, check=True)
-        logger.debug("PACKMOL finished successfully")
+        logger.debug("    PACKMOL converged")
 
     except subprocess.CalledProcessError:
-        logger.warning("PACKMOL may not have converged — check packmol.log")
+        logger.warning("  PACKMOL may not have converged - check packmol.log")
 
     try:
         universe = mda.Universe(output_file)
-        logger.debug("PACKMOL output loaded: %d atoms", len(universe.atoms))
+        logger.debug("    PACKMOL output: %d atoms", len(universe.atoms))
     except Exception:
-        logger.warning("Could not load PACKMOL output file '%s'", output_file)
+        logger.warning("  Could not load PACKMOL output file '%s'", output_file)
         universe = None
 
     # remove temp mol files and packmol files
