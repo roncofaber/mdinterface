@@ -46,6 +46,7 @@ def _configure_logger(level) -> None:
             handler.setFormatter(fmt)
             lg.addHandler(handler)
         lg.setLevel(level)
+        lg.propagate = False  # prevent double-printing via the root logger
 
 
 class BoxBuilder:
