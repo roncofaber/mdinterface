@@ -114,9 +114,9 @@ class TestLayerAccumulation:
         assert len(solv) == 1
         assert solv[0]["zdim"] == 30
 
-    def test_solvent_ions_stored(self, builder, water, na, cl):
-        builder.add_solvent(water, ions=[na, cl], nions=[3, 3], zdim=25, density=1.0)
-        assert len(builder._layers[0]["ions"]) == 2
+    def test_solvent_solute_stored(self, builder, water, na, cl):
+        builder.add_solvent(water, solute=[na, cl], nsolute=[3, 3], zdim=25, density=1.0)
+        assert len(builder._layers[0]["solute"]) == 2
 
     def test_multiple_solvent_layers(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0)
@@ -132,8 +132,8 @@ class TestLayerAccumulation:
         builder.add_solvent(water, zdim=20, density=1.0)
         assert len(builder._all_species) == 1
 
-    def test_ions_registered(self, builder, water, na, cl):
-        builder.add_solvent(water, ions=[na, cl], nions=[2, 2], zdim=20, density=1.0)
+    def test_solute_registered(self, builder, water, na, cl):
+        builder.add_solvent(water, solute=[na, cl], nsolute=[2, 2], zdim=20, density=1.0)
         assert len(builder._all_species) == 3  # water + na + cl
 
     def test_same_species_not_duplicated(self, builder, water):
@@ -152,23 +152,23 @@ class TestLayerAccumulation:
 
 
 # ---------------------------------------------------------------------------
-# Ion-only solvent layer (solvent=None)
+# Solute-only solvent layer (solvent=None)
 # ---------------------------------------------------------------------------
 
-class TestIonOnlyLayer:
+class TestSoluteOnlyLayer:
 
-    def test_ion_only_layer_accepted(self, builder, na, cl):
-        builder.add_solvent(None, ions=[na, cl], nions=[3, 3], zdim=20)
+    def test_solute_only_layer_accepted(self, builder, na, cl):
+        builder.add_solvent(None, solute=[na, cl], nsolute=[3, 3], zdim=20)
         solv = builder._layers[0]
         assert solv["solvent"] == []
-        assert len(solv["ions"]) == 2
+        assert len(solv["solute"]) == 2
 
-    def test_ion_only_ions_registered(self, builder, na, cl):
-        builder.add_solvent(None, ions=[na, cl], nions=[2, 2], zdim=20)
+    def test_solute_only_registered(self, builder, na, cl):
+        builder.add_solvent(None, solute=[na, cl], nsolute=[2, 2], zdim=20)
         assert len(builder._all_species) == 2  # na + cl, no solvent
 
-    def test_ion_only_returns_self(self, builder, na):
-        assert builder.add_solvent(None, ions=[na], nions=5, zdim=15) is builder
+    def test_solute_only_returns_self(self, builder, na):
+        assert builder.add_solvent(None, solute=[na], nsolute=5, zdim=15) is builder
 
 
 # ---------------------------------------------------------------------------

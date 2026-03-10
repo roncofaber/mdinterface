@@ -41,11 +41,11 @@ simbox = BoxBuilder(xysize=[20, 20])
 
 simbox.add_slab(gold, nlayers=3)                                        # bottom electrode
 
-simbox.add_solvent(water, ions=[na, cl], nions=[4, 4], zdim=20, density=1.0)  # NaCl region
+simbox.add_solvent(water, solute=[na, cl], nsolute=[4, 4], zdim=20, density=1.0)  # NaCl region
 
 simbox.add_slab(platinum, nlayers=2)                                    # middle electrode
 
-simbox.add_solvent(water, ions=[k, f], nions=[4, 4], zdim=20, density=1.0)   # KF region
+simbox.add_solvent(water, solute=[k, f], nsolute=[4, 4], zdim=20, density=1.0)   # KF region
 
 simbox.add_slab(platinum, nlayers=2)                                    # top electrode
 

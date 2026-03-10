@@ -97,7 +97,7 @@ gold  = Metal111("Au")
 simbox = BoxBuilder(xysize=[15, 15], verbose=True)
 
 simbox.add_slab(gold, nlayers=3)
-simbox.add_solvent(water, ions=[na, cl], nions=[5, 5], zdim=25, density=1.0)
+simbox.add_solvent(water, solute=[na, cl], nsolute=[5, 5], zdim=25, density=1.0)
 simbox.add_slab(gold, nlayers=3)
 simbox.add_vacuum(zdim=5)
 
@@ -118,8 +118,8 @@ simbox.add_solvent(
     ratio=[3, 1],      # 3 water : 1 methanol by mole
     density=0.95,
     zdim=30,
-    ions=[na, cl],
-    nions=[5, 5],
+    solute=[na, cl],
+    nsolute=[5, 5],
 )
 simbox.build(padding=0.5)
 simbox.write_lammps("data_mixture.lammps", atom_style="full", write_coeff=True)

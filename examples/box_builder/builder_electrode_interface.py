@@ -34,8 +34,8 @@ simbox.add_slab(gold, nlayers=1)
 
 simbox.add_solvent(
     water,
-    ions=[na, cl],
-    nions=[5, 5],           # 5 Na⁺ and 5 Cl⁻
+    solute=[na, cl],
+    nsolute=[5, 5],           # 5 Na⁺ and 5 Cl⁻
     zdim=25,
     density=1.0,
     # dilate=1.25,          # for concentrated systems: packs into a box 25%

@@ -46,8 +46,8 @@ simbox.add_solvent(
     ratio=[3, 1],           # molar mixing ratio (water : methanol)
     density=0.95,           # mixture density in g/cm³
     zdim=30,                # region thickness in Å
-    ions=[na, cl],
-    nions=[5, 5],           # 5 Na+ and 5 Cl-
+    solute=[na, cl],
+    nsolute=[5, 5],           # 5 Na+ and 5 Cl-
 )
 
 # --- Mode B: ratio + fixed total count ---
@@ -57,8 +57,8 @@ simbox.add_solvent(
 #     ratio=[3, 1],
 #     nsolvent=200,          # 150 water + 50 methanol (split proportionally)
 #     zdim=30,
-#     ions=[na, cl],
-#     nions=[5, 5],
+#     solute=[na, cl],
+#     nsolute=[5, 5],
 # )
 
 # --- Mode C: explicit per-species counts ---
@@ -67,8 +67,8 @@ simbox.add_solvent(
 #     [water, methanol],
 #     nsolvent=[150, 50],    # exactly 150 water and 50 methanol
 #     zdim=30,
-#     ions=[na, cl],
-#     nions=[5, 5],
+#     solute=[na, cl],
+#     nsolute=[5, 5],
 # )
 
 #%% Build

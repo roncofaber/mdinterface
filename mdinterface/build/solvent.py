@@ -28,10 +28,10 @@ logger = logging.getLogger("mdinterface.box")
 # ---------------------------------------------------------------------------
 
 def _validate_solvent_box_parameters(
-    nions: Optional[Union[int, List[int]]],
+    nsolute: Optional[Union[int, List[int]]],
     concentration: Optional[float],
     conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
-    ions: Optional[List[Any]],
+    solute: Optional[List[Any]],
     solvents: List[Any],
     density: Optional[float],
     nsolvent=None,
@@ -39,15 +39,15 @@ def _validate_solvent_box_parameters(
 ) -> None:
     """Validate parameter combinations for make_solvent_box."""
 
-    if nions is not None and concentration is not None:
-        raise ValueError("Cannot specify both 'nions' and 'concentration'. Use one or the other.")
+    if nsolute is not None and concentration is not None:
+        raise ValueError("Cannot specify both 'nsolute' and 'concentration'. Use one or the other.")
 
-    if conmodel is not None and (ions is None or len(ions) == 0):
-        raise ValueError("When using 'conmodel', 'ions' must be provided and non-empty.")
+    if conmodel is not None and (solute is None or len(solute) == 0):
+        raise ValueError("When using 'conmodel', 'solute' must be provided and non-empty.")
 
-    if isinstance(nions, (list, tuple)) and ions is not None:
-        if len(nions) != len(ions):
-            raise ValueError(f"Length of 'nions' ({len(nions)}) must match number of ion species ({len(ions)}).")
+    if isinstance(nsolute, (list, tuple)) and solute is not None:
+        if len(nsolute) != len(solute):
+            raise ValueError(f"Length of 'nsolute' ({len(nsolute)}) must match number of solute species ({len(solute)}).")
 
     if ratio is not None:
         if len(ratio) != len(solvents):
@@ -74,76 +74,76 @@ def _validate_solvent_box_parameters(
         warnings.warn("Density or nsolvent specified but no solvent provided. Will be ignored.",
                       UserWarning, stacklevel=4)
 
-    if not solvents and (ions is None or len(ions) == 0):
-        warnings.warn("No solvent or ions specified. Empty box will be created.",
+    if not solvents and (solute is None or len(solute) == 0):
+        warnings.warn("No solvent or solute specified. Empty box will be created.",
                       UserWarning, stacklevel=3)
 
 
 # ---------------------------------------------------------------------------
-# Ion placement
+# Solute placement
 # ---------------------------------------------------------------------------
 
-def populate_with_ions(ions, nions, volume, ion_pos=False, conmodel=None):
+def populate_solutes(solute, nsolute, volume, solute_pos=False, conmodel=None):
 
-    def place_ion(ion, volume, ion_coords, ion_radii, zpos=None, max_attempts=100):
-        ion_radius = ion.estimate_specie_radius()
+    def place_sp(sp, volume, coords, radii, zpos=None, max_attempts=100):
+        radius = sp.estimate_specie_radius()
         for _ in range(max_attempts):
-            new_coord = ion_radius + 1 + np.random.rand(3) * (volume - 2 * (ion_radius + 1))
+            new_coord = radius + 1 + np.random.rand(3) * (volume - 2 * (radius + 1))
             if zpos is not None:
                 new_coord[2] = zpos
-            if not ion_coords or np.all(np.linalg.norm(ion_coords - new_coord, axis=1) >= np.array(ion_radii) + ion_radius + 1):
+            if not coords or np.all(np.linalg.norm(coords - new_coord, axis=1) >= np.array(radii) + radius + 1):
                 return new_coord
-        print(f"Warning: Failed to place ion {ion} after {max_attempts} attempts")
+        print(f"Warning: Failed to place {sp} after {max_attempts} attempts")
         return None
 
-    def place_ions_conmodel(ions, conmodel, volume, max_attempts=100):
+    def place_conmodel(solute, conmodel, volume, max_attempts=100):
         instructions = []
-        ion_coords = []
-        ion_radii = []
-        for cc, ion in enumerate(ions):
+        coords = []
+        radii = []
+        for cc, sp in enumerate(solute):
             z_coords, conc_profile = conmodel[cc]
-            z_positions = discretize_concentration(ion, conc_profile, z_coords, volume)
+            z_positions = discretize_concentration(sp, conc_profile, z_coords, volume)
             for zpos in z_positions:
-                new_coord = place_ion(ion, volume, ion_coords, ion_radii, zpos=zpos,
-                                      max_attempts=max_attempts)
+                new_coord = place_sp(sp, volume, coords, radii, zpos=zpos,
+                                     max_attempts=max_attempts)
                 if new_coord is not None:
-                    ion_coords.append(new_coord)
-                    ion_radii.append(ion.estimate_specie_radius())
-                    instructions.append((ion.to_universe(), new_coord, "fixed"))
+                    coords.append(new_coord)
+                    radii.append(sp.estimate_specie_radius())
+                    instructions.append((sp.to_universe(), new_coord, "fixed"))
         return instructions
 
-    def place_ions_random(ions, nions, volume, to_center, max_attempts=100):
+    def place_random(solute, nsolute, volume, to_center, max_attempts=100):
         instructions = []
-        ion_coords = []
-        ion_radii = []
-        for cc, ion in enumerate(ions):
-            nrep = nions if isinstance(nions, int) else nions[cc]
+        coords = []
+        radii = []
+        for cc, sp in enumerate(solute):
+            nrep = nsolute if isinstance(nsolute, int) else nsolute[cc]
             for _ in range(nrep):
-                new_coord = volume / 2 if to_center else place_ion(ion, volume,
-                                                                    ion_coords,
-                                                                    ion_radii,
-                                                                    max_attempts=max_attempts)
+                new_coord = volume / 2 if to_center else place_sp(sp, volume, coords,
+                                                                   radii,
+                                                                   max_attempts=max_attempts)
                 if new_coord is not None:
-                    ion_coords.append(new_coord)
-                    ion_radii.append(ion.estimate_specie_radius())
-                    instructions.append((ion.to_universe(), new_coord, "fixed"))
+                    coords.append(new_coord)
+                    radii.append(sp.estimate_specie_radius())
+                    instructions.append((sp.to_universe(), new_coord, "fixed"))
         return instructions
 
     max_attempts = 100
     volume = np.array(volume)
 
     if conmodel is not None:
-        assert len(conmodel) == len(ions), "Need one profile per specie"
-        return place_ions_conmodel(ions, conmodel, volume, max_attempts=max_attempts)
+        assert len(conmodel) == len(solute), "Need one profile per solute species"
+        return place_conmodel(solute, conmodel, volume, max_attempts=max_attempts)
 
-    if ion_pos == "box":
-        return [(ion.to_universe(), nions if isinstance(nions, int) else nions[cc], "box") for cc, ion in enumerate(ions)]
+    if solute_pos == "box":
+        return [(sp.to_universe(), nsolute if isinstance(nsolute, int) else nsolute[cc], "box")
+                for cc, sp in enumerate(solute)]
 
-    to_center = ion_pos == "center"
-    if ion_pos == "left":
+    to_center = solute_pos == "center"
+    if solute_pos == "left":
         volume[2] /= 2
 
-    return place_ions_random(ions, nions, volume, to_center, max_attempts=max_attempts)
+    return place_random(solute, nsolute, volume, to_center, max_attempts=max_attempts)
 
 
 # ---------------------------------------------------------------------------
@@ -153,19 +153,19 @@ def populate_with_ions(ions, nions, volume, ion_pos=False, conmodel=None):
 def make_solvent_box(
     species: List[Any],
     solvent: Optional[Any],
-    ions: Optional[List[Any]],
+    solute: Optional[List[Any]],
     volume: List[float],
     density: Optional[float],
-    nions: Optional[Union[int, List[int]]],
+    nsolute: Optional[Union[int, List[int]]],
     concentration: Optional[float],
     conmodel: Optional[Dict[int, Tuple[List[float], List[float]]]],
-    ion_pos: Optional[str],
+    solute_pos: Optional[str],
     nsolvent=None,
     tolerance: float = 2.0,
     ratio: Optional[List[float]] = None,
 ) -> Optional[mda.Universe]:
     """
-    Build a solvent box with optional ionic species.
+    Build a solvent box with optional dissolved species.
 
     Parameters
     ----------
@@ -173,20 +173,20 @@ def make_solvent_box(
         All registered species (used for topology look-up after PACKMOL).
     solvent : Specie, list of Specie, or None
         Solvent molecule(s). Pass a list for mixed-solvent boxes.
-    ions : list or None
-        Ionic species to dissolve.
+    solute : list of Specie or None
+        Species to dissolve (ions, neutral molecules, …).
     volume : list of float
         Box dimensions [x, y, z] in Å.
     density : float or None
         Solvent density in g/cm³.  Ignored when *nsolvent* is given.
-    nions : int, list, or None
-        Number of each ionic species.
+    nsolute : int, list, or None
+        Number of each solute species.
     concentration : float or None
-        Ionic concentration in Molar (alternative to *nions*).
+        Solute concentration in Molar (alternative to *nsolute*).
     conmodel : dict or None
         Spatially varying concentration model.
-    ion_pos : str or None
-        Ion placement strategy: ``"box"``, ``"center"``, ``"left"``, or
+    solute_pos : str or None
+        Solute placement strategy: ``"box"``, ``"center"``, ``"left"``, or
         ``None`` for random fixed placement.
     nsolvent : int, list, or None
         Number of solvent molecules.  List length must match *solvent* list.
@@ -209,20 +209,20 @@ def make_solvent_box(
     else:
         solvents = [solvent]
 
-    _validate_solvent_box_parameters(nions, concentration, conmodel, ions,
+    _validate_solvent_box_parameters(nsolute, concentration, conmodel, solute,
                                      solvents, density, nsolvent, ratio)
 
-    # convert concentration to number of ions
+    # convert concentration to number of solute molecules
     if concentration is not None:
-        nions = int(concentration * np.prod(volume) * units.mol / ((units.m / 10) ** 3))
+        nsolute = int(concentration * np.prod(volume) * units.mol / ((units.m / 10) ** 3))
 
     instructions = []
 
-    # ions
-    if (conmodel is not None) or (nions is not None and ions is not None):
-        ion_instr = populate_with_ions(ions, nions, volume, ion_pos=ion_pos,
-                                       conmodel=conmodel)
-        instructions.extend(ion_instr)
+    # solute
+    if (conmodel is not None) or (nsolute is not None and solute is not None):
+        solute_instr = populate_solutes(solute, nsolute, volume, solute_pos=solute_pos,
+                                        conmodel=conmodel)
+        instructions.extend(solute_instr)
 
     # solvents
     if solvents:

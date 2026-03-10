@@ -28,8 +28,8 @@ simbox = BoxBuilder(xysize=[20, 20])
 
 simbox.add_solvent(
     water,
-    ions=[amm],
-    nions=15,      # 15 ammonia molecules
+    solute=[amm],
+    nsolute=15,      # 15 ammonia molecules
     zdim=20,       # 20 Å thick region
     density=1.0,   # water density in g/cm³
 )

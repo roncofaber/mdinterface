@@ -61,7 +61,7 @@ class BoxBuilder:
     -------
     >>> simbox = BoxBuilder(xysize=[15, 15])
     >>> simbox.add_slab(gold, nlayers=3)
-    >>> simbox.add_solvent(water, ions=[na, cl], nions=[5, 5], zdim=25, density=1.0)
+    >>> simbox.add_solvent(water, solute=[na, cl], nsolute=[5, 5], zdim=25, density=1.0)
     >>> simbox.add_slab(gold, nlayers=3)
     >>> simbox.add_vacuum(zdim=5)
     >>> simbox.build()
@@ -112,42 +112,42 @@ class BoxBuilder:
     def add_solvent(
         self,
         solvent: Optional[Any] = None,
-        ions: Optional[List[Any]] = None,
-        nions: Optional[Union[int, List[int]]] = None,
+        solute: Optional[List[Any]] = None,
+        nsolute: Optional[Union[int, List[int]]] = None,
         zdim: Optional[float] = None,
         density: Optional[float] = None,
         nsolvent: Optional[Union[int, List[int]]] = None,
         concentration: Optional[float] = None,
         conmodel: Optional[dict] = None,
-        ion_pos: Optional[str] = None,
+        solute_pos: Optional[str] = None,
         dilate: float = 1.0,
         packmol_tolerance: float = 2.0,
         ratio: Optional[List[float]] = None,
     ) -> "BoxBuilder":
         """
-        Add a solvent (liquid) layer, optionally with dissolved ions.
+        Add a solvent (liquid) layer, optionally with dissolved species.
 
         Parameters
         ----------
-        solvent : Specie or None
-            Solvent molecule species. Pass ``None`` for an ion-only region.
-        ions : list of Specie, optional
-            Ionic species to dissolve.
-        nions : int or list of int, optional
-            Number of each ionic species (alternative to *concentration*).
+        solvent : Specie or list of Specie or None
+            Solvent molecule(s). Pass ``None`` for a solute-only region.
+        solute : list of Specie, optional
+            Species to dissolve (ions, neutral molecules, …).
+        nsolute : int or list of int, optional
+            Number of each solute species (alternative to *concentration*).
         zdim : float
             Thickness of this region in Angstroms.
         density : float, optional
             Solvent density in g/cm³ (alternative to *nsolvent*).
-        nsolvent : int, optional
+        nsolvent : int or list of int, optional
             Explicit number of solvent molecules (alternative to *density*).
         concentration : float, optional
-            Ionic concentration in Molar (alternative to *nions*).
+            Solute concentration in Molar (alternative to *nsolute*).
         conmodel : dict, optional
             Spatially varying concentration model.
-        ion_pos : str, optional
-            Ion placement strategy passed to PACKMOL
-            (``"random"``, ``"center"`` …).
+        solute_pos : str, optional
+            Solute placement strategy passed to PACKMOL
+            (``"box"``, ``"center"``, ``"left"``, or ``None`` for random).
         dilate : float, optional
             Dilation factor > 1 for concentrated systems. PACKMOL will pack
             into a box ``dilate`` times taller at ``density / dilate``,
@@ -175,29 +175,29 @@ class BoxBuilder:
         else:
             solv_copies = [solvent.copy()]
 
-        ions_copies = [ion.copy() for ion in (ions or [])]
-        self._register(*solv_copies, *ions_copies)
+        solute_copies = [sp.copy() for sp in (solute or [])]
+        self._register(*solv_copies, *solute_copies)
 
         self._layers.append({
             "type":               "solvent",
             "solvent":            solv_copies,
-            "ions":               ions_copies,
-            "nions":              nions,
+            "solute":             solute_copies,
+            "nsolute":            nsolute,
             "zdim":               zdim,
             "density":            density,
             "nsolvent":           nsolvent,
             "concentration":      concentration,
             "conmodel":           conmodel,
-            "ion_pos":            ion_pos,
+            "solute_pos":         solute_pos,
             "dilate":             dilate,
             "packmol_tolerance":  packmol_tolerance,
             "ratio":              ratio,
         })
         logger.debug(
             "Layer added — solvent: solvent=%s, zdim=%.1f Å, density=%s, "
-            "nions=%s, dilate=%.2f, tolerance=%.1f",
+            "nsolute=%s, dilate=%.2f, tolerance=%.1f",
             [getattr(s, "resname", "?") for s in solv_copies], zdim, density,
-            nions, dilate, packmol_tolerance,
+            nsolute, dilate, packmol_tolerance,
         )
         return self
 
@@ -558,13 +558,13 @@ class BoxBuilder:
         return make_solvent_box(
             species=all_sp_univs,
             solvent=layer["solvent"] or None,
-            ions=layer["ions"] or None,
+            solute=layer["solute"] or None,
             volume=[xsize, ysize, eff_zdim],
             density=eff_rho,
-            nions=layer["nions"],
+            nsolute=layer["nsolute"],
             concentration=layer["concentration"],
             conmodel=layer["conmodel"],
-            ion_pos=layer["ion_pos"],
+            solute_pos=layer["solute_pos"],
             nsolvent=layer["nsolvent"],
             tolerance=layer["packmol_tolerance"],
             ratio=layer["ratio"],
