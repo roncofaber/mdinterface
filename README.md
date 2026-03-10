@@ -7,26 +7,26 @@
 
 [![PyPI version](https://badge.fury.io/py/mdinterface.svg?icon=si%3Apython)](https://pypi.org/project/mdinterface/) [![GitHub version](https://badge.fury.io/gh/roncofaber%2Fmdinterface.svg?icon=si%3Agithub)](https://github.com/roncofaber/mdinterface)
 
-`mdinterface` is a Python package designed to build systems for Molecular Dynamics (MD) simulations. Initially developed to construct electrolyte/electrode solid-liquid interfaces, it is also well-suited for generating MD boxes of liquids, electrolyte systems, and polymer networks.
+`mdinterface` is a Python package for building systems for Molecular Dynamics (MD) simulations. Initially developed for electrolyte/electrode solid-liquid interfaces, it is equally suited for pure solvent boxes, mixed-solvent electrolytes, and polymer networks.
 
 ## Features
 
-Using `mdinterface` you can:
-
-- Create layered simulation boxes with solvents, solutes, and interface slabs.
-- Populate your system with ions and solvents using PACKMOL, and provide the starting concentration profile of the species to get the MD where you want it to be, but faster.
-- Import common molecules/metals/polymers with pre-defined classical force fields parameters from the database, or automatically generate new OPLS-AA force field parameters using [LigParGen](https://github.com/Isra3l/ligpargen).
-- Generate polymer chains of any length from a starting monomer.
-- Estimate the RESP charges of molecules using the [PySCF  electronic structure code](https://github.com/pyscf/pyscf).
-- Perform Ab Initio Molecular Dynamics (AIMD) simulations using [FAIRChem](https://github.com/facebookresearch/fairchem) machine learning potentials (optional).
-- Automatically write LAMMPS data files and coefficients, so you can start making them atoms dance as soon as possible!
-- Integrate your workflow with [MDAnalysis](https://github.com/MDAnalysis/mdanalysis): create your molecules with `mdinterface` and convert them to `mda.Universe` objects with a simple interface.
+- **Fluent `BoxBuilder` API** — stack slabs, solvent regions, and vacuum gaps layer by layer; call `.build()` when done.
+- **Multi-solvent support** — mix solvents by molar ratio + density, ratio + total count, or explicit per-species molecule counts.
+- **Ion placement** — dissolve ions by count, molar concentration, or a spatially-varying concentration profile.
+- **PACKMOL integration** — handles molecular packing automatically; tolerance and dilation are tunable per layer.
+- **Force-field database** — pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with [LigParGen](https://github.com/Isra3l/ligpargen).
+- **Polymer builder** — generate chains of arbitrary length from a monomer `Specie`.
+- **RESP charges** — estimate partial charges with [PySCF](https://github.com/pyscf/pyscf) / [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) (optional).
+- **AIMD with FAIRChem** — run ML-potential dynamics via [FAIRChem](https://github.com/facebookresearch/fairchem) (optional).
+- **LAMMPS output** — writes data files and force-field coefficient blocks ready to run.
+- **MDAnalysis integration** — every object converts to `mda.Universe` with a single call.
 
 ## Requirements
 
-Check the file [requirements.txt](requirements.txt) to see which packages are needed. Installing the package using `pip` should already take care of all mandatory dependencies.
+Check [requirements.txt](requirements.txt) for mandatory dependencies. `pip install mdinterface` handles them automatically.
 
-Additionally, you need the `packmol` utility installed to generate MD boxes. You can follow the instructions at [https://m3g.github.io/packmol/](https://m3g.github.io/packmol/) to install it. Alternatively, you can install it using `conda`:
+You also need `packmol` installed and on your `PATH`:
 
 ```bash
 conda install -c conda-forge packmol
@@ -34,155 +34,115 @@ conda install -c conda-forge packmol
 
 ### Optional packages
 
-#### Automatic OPLS-AA force field generator with LigParGen
+#### LigParGen (automatic OPLS-AA parameters)
 
-If you want to use LigParGen, please follow the instructions on their [GitHub](https://github.com/Isra3l/ligpargen). If you are having trouble installing, you can try my own [fork](https://github.com/roncofaber/ligpargen) of the original repo. To make sure that BOSS is recognized by the package, specify the environment variable `BOSSdir`.
+Follow the instructions on the [LigParGen GitHub](https://github.com/Isra3l/ligpargen) (or try [this fork](https://github.com/roncofaber/ligpargen) if you hit installation issues). Point `mdinterface` to your BOSS directory via `config.ini`:
 
-You can do this manually every time, or just add the path to the `config.ini` file to your config directory:
-
-```bash
-# config.ini
+```ini
+# ~/.config/mdinterface/config.ini  (path is OS-dependent)
 [settings]
-BOSSdir = /path/to/your/boss/dir
+BOSSdir = /path/to/boss
 ```
 
-The config directory is found using [`platformdirs`](https://pypi.org/project/platformdirs/) and is OS dependent.
+#### RESP charges with PySCF
 
-#### RESP charge analysis with PySCF
+Install [PySCF](https://github.com/pyscf/pyscf) and [PyMBXAS](https://gitlab.com/roncofaber/pymbxas). RESP fitting currently requires [gpu4pyscf](https://github.com/pyscf/gpu4pyscf).
 
-To use the RESP charge analysis feature, you need to install [PySCF](https://github.com/pyscf/pyscf) and [PyMBXAS](https://gitlab.com/roncofaber/pymbxas). To my knowledge, the RESP feature is only implemented in [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) at the moment, so follow the repo instructions on how to install it.
-
-#### AIMD simulations with FAIRChem
-
-For Ab Initio Molecular Dynamics (AIMD) simulations, you need to install [FAIRChem](https://github.com/facebookresearch/fairchem). This provides machine learning potentials for accelerated quantum mechanical simulations. Install it with:
+#### AIMD with FAIRChem
 
 ```bash
 pip install fairchem-core
 ```
 
-This functionality is completely optional and the package will work without it for all other features.
-
 ## Installation
 
-### System Requirements
-
-- **Python**: 3.8 or higher
-- **PACKMOL**: Required for molecular packing (see below)
-- **Operating System**: Linux, macOS, Windows (with some limitations on Windows)
-
-### Core Installation
-
-#### Option 1: Install from PyPI (Recommended)
-
-Install the latest stable release with all core dependencies:
+- **Python** 3.8+
+- **PACKMOL** (see above)
 
 ```bash
+# Stable release
 pip install mdinterface
-```
 
-#### Option 2: Install from Source
-
-For the latest development version or to contribute:
-
-```bash
-# Clone the repository
-git clone https://gitlab.com/roncofaber/mdinterface.git
+# Development version
+git clone https://github.com/roncofaber/mdinterface.git
 cd mdinterface
-
-# Install in normal mode
-pip install .
-
-# Or install in development mode (for contributors)
 pip install -e .
 ```
 
-### Installing PACKMOL
-
-PACKMOL is required for molecular packing and must be installed separately:
-
-#### Using conda (Recommended):
-```bash
-conda install -c conda-forge packmol
-```
-
-#### From source:
-Follow instructions at [https://m3g.github.io/packmol/](https://m3g.github.io/packmol/)
-
-### Optional Dependencies
-
-Install additional features as needed:
+Optional extras:
 
 ```bash
-# RESP charge analysis (requires additional setup)
-pip install mdinterface[resp]
-
-# AIMD simulations with FAIRChem
-pip install mdinterface[aimd]
-
-# All optional dependencies
-pip install mdinterface[all]
+pip install mdinterface[resp]   # RESP charge analysis
+pip install mdinterface[aimd]   # FAIRChem AIMD
+pip install mdinterface[all]    # everything
 ```
 
-### Verifying Installation
+## Quick start
 
-Test your installation:
+### Define species
 
 ```python
-import mdinterface
-from mdinterface import SimulationBox, Specie
-print(f"mdinterface version: {mdinterface.__version__}")
+from mdinterface import BoxBuilder
+from mdinterface.database import Water, Ion, Metal111
+
+water = Water(model="ewald")
+na    = Ion("Na", ffield="Cheatham")
+cl    = Ion("Cl", ffield="Cheatham")
+gold  = Metal111("Au")
 ```
 
-### Troubleshooting
-
-#### Common Issues:
-
-1. **PACKMOL not found**: Ensure PACKMOL is in your PATH or install via conda
-2. **Import errors**: Check that all dependencies are properly installed
-3. **Version conflicts**: Use a clean virtual environment
-
-#### Python Environment Setup:
-
-We recommend using a virtual environment:
-
-```bash
-# Create virtual environment
-python -m venv mdinterface-env
-source mdinterface-env/bin/activate  # On Windows: mdinterface-env\Scripts\activate
-
-# Install mdinterface
-pip install mdinterface
-```
-
-#### For conda users:
-
-```bash
-# Create conda environment
-conda create -n mdinterface python=3.10
-conda activate mdinterface
-
-# Install dependencies
-conda install -c conda-forge packmol
-pip install mdinterface
-```
-
-## Usage
-
-Creating a new Specie (with its topology attributes) is as simple as doing:
+### Build a gold / NaCl electrolyte / gold sandwich
 
 ```python
-#%% Make a specie, and use LigParGen to estimate FF parameters
-my_specie = Specie("CH3ONO", ligpargen=True) # molecule is in ASE database
+simbox = BoxBuilder(xysize=[15, 15], verbose=True)
 
-# make a specie from any ASE readable file
-my_specie = Specie("methylnitrite.xyz", ligpargen=True)
+simbox.add_slab(gold, nlayers=3)
+simbox.add_solvent(water, ions=[na, cl], nions=[5, 5], zdim=25, density=1.0)
+simbox.add_slab(gold, nlayers=3)
+simbox.add_vacuum(zdim=5)
 
-# convert specie to mdanalysis universe (and all the attributes!)
-my_specie.to_universe()
-
+simbox.build(padding=0.5)
+simbox.write_lammps("data.lammps", atom_style="full", write_coeff=True)
 ```
 
-Please, check the files in [examples](mdinterface/examples/) to learn how to use the package. Including setting up simulation boxes, creating polymers, perform RESP analysis and much more!
+### Mixed-solvent box (water + methanol)
+
+```python
+from mdinterface.core.specie import Specie
+
+methanol = Specie("CH3OH", ligpargen=True)
+
+simbox = BoxBuilder(xysize=[25, 25])
+simbox.add_solvent(
+    [water, methanol],
+    ratio=[3, 1],      # 3 water : 1 methanol by mole
+    density=0.95,
+    zdim=30,
+    ions=[na, cl],
+    nions=[5, 5],
+)
+simbox.build(padding=0.5)
+simbox.write_lammps("data_mixture.lammps", atom_style="full", write_coeff=True)
+```
+
+### Convert to ASE or MDAnalysis
+
+```python
+atoms    = simbox.to_ase()       # ase.Atoms with cell and PBC
+universe = simbox.universe       # mda.Universe
+```
+
+See the [examples/box_builder/](examples/box_builder/) directory for more complete scripts:
+
+| Script | What it shows |
+|--------|--------------|
+| `builder_electrode_interface.py` | Au / NaCl electrolyte / Au sandwich |
+| `builder_solvent_box.py` | Pure solvent + dissolved species |
+| `builder_multisolvent_box.py` | Mixed-solvent box with ratio/density/count modes |
+| `builder_multilayer.py` | Five-layer multi-slab system |
+| `builder_sandwich_from_traj.py` | Load a relaxed structure via `hijack` |
+
+The legacy `SimulationBox` API is still available and unchanged; see [examples/simulation_box/](examples/simulation_box/).
 
 ## Roadmap
 
