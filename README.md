@@ -11,16 +11,16 @@
 
 ## Features
 
-- **Fluent `BoxBuilder` API** — stack slabs, solvent regions, and vacuum gaps layer by layer; call `.build()` when done.
-- **Multi-solvent support** — mix solvents by molar ratio + density, ratio + total count, or explicit per-species molecule counts.
-- **Ion placement** — dissolve ions by count, molar concentration, or a spatially-varying concentration profile.
-- **PACKMOL integration** — handles molecular packing automatically; tolerance and dilation are tunable per layer.
-- **Force-field database** — pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with [LigParGen](https://github.com/Isra3l/ligpargen).
-- **Polymer builder** — generate chains of arbitrary length from a monomer `Specie`.
-- **RESP charges** — estimate partial charges with [PySCF](https://github.com/pyscf/pyscf) / [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) (optional).
-- **AIMD with FAIRChem** — run ML-potential dynamics via [FAIRChem](https://github.com/facebookresearch/fairchem) (optional).
-- **LAMMPS output** — writes data files and force-field coefficient blocks ready to run.
-- **MDAnalysis integration** — every object converts to `mda.Universe` with a single call.
+- **Fluent `BoxBuilder` API** -- stack slabs, solvent regions, and vacuum gaps layer by layer; call `.build()` when done.
+- **Multi-solvent support** -- mix solvents by molar ratio + density, ratio + total count, or explicit per-species molecule counts.
+- **Ion placement** -- dissolve ions by count, molar concentration, or a spatially-varying concentration profile.
+- **PACKMOL integration** -- handles molecular packing automatically; tolerance and dilation are tunable per layer.
+- **Force-field database** -- pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with [LigParGen](https://github.com/Isra3l/ligpargen).
+- **Polymer builder** -- generate chains of arbitrary length from a monomer `Specie`.
+- **RESP charges** -- estimate partial charges with [PySCF](https://github.com/pyscf/pyscf) / [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) (optional).
+- **AIMD with FAIRChem** -- run ML-potential dynamics via [FAIRChem](https://github.com/facebookresearch/fairchem) (optional).
+- **LAMMPS output** -- writes data files and force-field coefficient blocks ready to run.
+- **MDAnalysis integration** -- every object converts to `mda.Universe` with a single call.
 
 ## Requirements
 
