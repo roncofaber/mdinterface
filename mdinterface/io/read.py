@@ -6,11 +6,15 @@ Created on Thu Oct 24 18:33:06 2024
 @author: roncofaber
 """
 
+import collections
+from io import StringIO
+
 import numpy as np
 
 import ase
 import ase.visualize
 import ase.io.lammpsdata
+import ase.io.lammpsrun
 from mdinterface.core.topology import Atom, Bond, Angle, Dihedral, Improper
 from mdinterface.utils.auxiliary import mass2symbol
 
@@ -143,3 +147,63 @@ def read_lammps_data_file(filename, pbc=False, ato_start_idx=0, is_snippet=False
 
     system.new_array("stype", np.array(atoms))
     return system, atoms, bonds, angles, dihedrals, impropers
+
+
+# ---------------------------------------------------------------------------
+# LAMMPS dump frame reader
+# ---------------------------------------------------------------------------
+
+def _iter_lammps_dump_frames(filename):
+    """Yield raw text chunks, one per frame, from a LAMMPS dump file."""
+    with open(filename) as fh:
+        lines = []
+        for line in fh:
+            if line.startswith("ITEM: TIMESTEP") and lines:
+                yield "".join(lines)
+                lines = []
+            lines.append(line)
+        if lines:
+            yield "".join(lines)
+
+
+def read_lammps_nth_frame(filename, frame=-1):
+    """
+    Read a single frame from a LAMMPS dump file without loading the full trajectory.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the LAMMPS dump file.
+    frame : int
+        Frame index. ``0`` = first frame, ``-1`` = last frame (default),
+        ``-2`` = second-to-last, etc.
+        For non-negative indices the file is read only up to that frame,
+        making this efficient even for large trajectories.
+
+    Returns
+    -------
+    ase.Atoms
+        The requested frame as an ASE Atoms object with cell and PBC set.
+
+    Raises
+    ------
+    IndexError
+        If the requested frame index is out of range.
+    """
+    if frame >= 0:
+        for ii, chunk in enumerate(_iter_lammps_dump_frames(filename)):
+            if ii == frame:
+                return ase.io.lammpsrun.read_lammps_dump_text(StringIO(chunk))
+        raise IndexError(
+            f"Dump file '{filename}' has fewer than {frame + 1} frame(s)."
+        )
+    else:
+        # Negative index: keep a rolling buffer of the last abs(frame) chunks.
+        buf = collections.deque(maxlen=-frame)
+        for chunk in _iter_lammps_dump_frames(filename):
+            buf.append(chunk)
+        if len(buf) < -frame:
+            raise IndexError(
+                f"Dump file '{filename}' has fewer than {-frame} frame(s)."
+            )
+        return ase.io.lammpsrun.read_lammps_dump_text(StringIO(buf[0]))

@@ -160,7 +160,7 @@ class TestIonOnlyLayer:
     def test_ion_only_layer_accepted(self, builder, na, cl):
         builder.add_solvent(None, ions=[na, cl], nions=[3, 3], zdim=20)
         solv = builder._layers[0]
-        assert solv["solvent"] is None
+        assert solv["solvent"] == []
         assert len(solv["ions"]) == 2
 
     def test_ion_only_ions_registered(self, builder, na, cl):
@@ -215,6 +215,70 @@ class TestPackmolTolerance:
     def test_tolerance_negative_raises(self, builder, water):
         with pytest.raises(ValueError, match="packmol_tolerance"):
             builder.add_solvent(water, zdim=20, density=1.0, packmol_tolerance=-0.5)
+
+
+# ---------------------------------------------------------------------------
+# Multi-solvent support
+# ---------------------------------------------------------------------------
+
+class TestMultiSolvent:
+
+    def test_solvent_list_stored(self, builder, water, na):
+        """A list of solvents is stored as a list, not wrapped in another list."""
+        builder.add_solvent([water, na], zdim=20, nsolvent=[10, 5])
+        solv = builder._layers[0]
+        assert isinstance(solv["solvent"], list)
+        assert len(solv["solvent"]) == 2
+
+    def test_single_solvent_stored_as_list(self, builder, water):
+        """A single Specie is normalised to a 1-element list."""
+        builder.add_solvent(water, zdim=20, density=1.0)
+        solv = builder._layers[0]
+        assert isinstance(solv["solvent"], list)
+        assert len(solv["solvent"]) == 1
+
+    def test_ratio_stored(self, builder, water, na):
+        builder.add_solvent([water, na], zdim=20, ratio=[3, 1], density=1.0)
+        assert builder._layers[0]["ratio"] == [3, 1]
+
+    def test_ratio_none_by_default(self, builder, water):
+        builder.add_solvent(water, zdim=20, density=1.0)
+        assert builder._layers[0]["ratio"] is None
+
+    def test_nsolvent_list_stored(self, builder, water, na):
+        builder.add_solvent([water, na], zdim=20, nsolvent=[50, 10])
+        assert builder._layers[0]["nsolvent"] == [50, 10]
+
+    def test_multi_solvent_registers_all(self, builder, water, na, cl):
+        builder.add_solvent([water, na, cl], zdim=20, nsolvent=[100, 5, 5])
+        assert len(builder._all_species) == 3
+
+
+# ---------------------------------------------------------------------------
+# match_cell resolution
+# ---------------------------------------------------------------------------
+
+class TestMatchCell:
+
+    def test_false_gives_no_ref_no_match(self, builder):
+        cell_ref, do_match = builder._resolve_match_cell(False)
+        assert cell_ref is None
+        assert do_match is False
+
+    def test_true_gives_no_ref_with_match(self, builder):
+        cell_ref, do_match = builder._resolve_match_cell(True)
+        assert cell_ref is None
+        assert do_match is True
+
+    def test_species_gives_ref_and_match(self, builder, water):
+        cell_ref, do_match = builder._resolve_match_cell(water)
+        assert cell_ref is water
+        assert do_match is True
+
+    def test_species_ref_is_exact_object(self, builder, na, cl):
+        cell_ref, _ = builder._resolve_match_cell(na)
+        assert cell_ref is na
+        assert cell_ref is not cl
 
 
 # ---------------------------------------------------------------------------

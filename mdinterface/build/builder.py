@@ -9,7 +9,8 @@ from typing import List, Optional, Union, Tuple, Any
 
 from mdinterface.utils.auxiliary import find_smallest_missing, label_to_element
 from mdinterface.io.lammpswriter import DATAWriter, write_lammps_coefficients
-from mdinterface.build.box import make_interface_slab, make_solvent_box, add_component
+from mdinterface.build.box import make_interface_slab, add_component
+from mdinterface.build.solvent import make_solvent_box
 
 import ase
 import MDAnalysis as mda
@@ -115,12 +116,13 @@ class BoxBuilder:
         nions: Optional[Union[int, List[int]]] = None,
         zdim: Optional[float] = None,
         density: Optional[float] = None,
-        nsolvent: Optional[int] = None,
+        nsolvent: Optional[Union[int, List[int]]] = None,
         concentration: Optional[float] = None,
         conmodel: Optional[dict] = None,
         ion_pos: Optional[str] = None,
         dilate: float = 1.0,
         packmol_tolerance: float = 2.0,
+        ratio: Optional[List[float]] = None,
     ) -> "BoxBuilder":
         """
         Add a solvent (liquid) layer, optionally with dissolved ions.
@@ -165,13 +167,20 @@ class BoxBuilder:
         if packmol_tolerance <= 0:
             raise ValueError(f"'packmol_tolerance' must be positive, got {packmol_tolerance}")
 
-        solv_copy = solvent.copy() if solvent is not None else None
+        # Normalise solvent to a list; copy each species.
+        if solvent is None:
+            solv_copies = []
+        elif isinstance(solvent, (list, tuple)):
+            solv_copies = [s.copy() for s in solvent]
+        else:
+            solv_copies = [solvent.copy()]
+
         ions_copies = [ion.copy() for ion in (ions or [])]
-        self._register(*([solv_copy] if solv_copy else []), *ions_copies)
+        self._register(*solv_copies, *ions_copies)
 
         self._layers.append({
             "type":               "solvent",
-            "solvent":            solv_copy,
+            "solvent":            solv_copies,
             "ions":               ions_copies,
             "nions":              nions,
             "zdim":               zdim,
@@ -182,12 +191,13 @@ class BoxBuilder:
             "ion_pos":            ion_pos,
             "dilate":             dilate,
             "packmol_tolerance":  packmol_tolerance,
+            "ratio":              ratio,
         })
         logger.debug(
             "Layer added — solvent: solvent=%s, zdim=%.1f Å, density=%s, "
             "nions=%s, dilate=%.2f, tolerance=%.1f",
-            getattr(solv_copy, "resname", "None"), zdim, density, nions,
-            dilate, packmol_tolerance,
+            [getattr(s, "resname", "?") for s in solv_copies], zdim, density,
+            nions, dilate, packmol_tolerance,
         )
         return self
 
@@ -213,7 +223,7 @@ class BoxBuilder:
         padding: float = 1.5,
         center: bool = False,
         layered: bool = False,
-        match_cell: bool = False,
+        match_cell: Union[bool, Any] = False,
         hijack: Optional[ase.Atoms] = None,
     ) -> "BoxBuilder":
         """
@@ -227,8 +237,15 @@ class BoxBuilder:
             If True, shift the whole system by half-box along Z after assembly.
         layered : bool
             Assign distinct molecule indices to each slab layer for LAMMPS.
-        match_cell : bool
-            Deform slabs to exactly match XY cell dimensions.
+        match_cell : bool or Specie
+            Controls XY cell matching:
+
+            - ``False`` — no scaling (default).
+            - ``True`` — scale all slabs to the largest fitted XY cell.
+            - *Specie* — lock XY to that species' cell and stretch all other
+              slabs to match. The reference species is left unscaled. Useful
+              when a polymer or pre-relaxed slab should define the cell and
+              electrodes should conform to it.
         hijack : ase.Atoms, optional
             After assembly, override both positions and cell dimensions with
             this external ``ase.Atoms`` object. Useful when you have a
@@ -239,101 +256,18 @@ class BoxBuilder:
         BoxBuilder
             Returns *self* so you can chain output methods.
         """
-        n_layers = len(self._layers)
-        logger.info("Starting build: %d layers, padding=%.2f Å", n_layers, padding)
+        logger.info("Starting build: %d layers, padding=%.2f Å",
+                    len(self._layers), padding)
 
         self._update_topology_indexes()
 
-        xsize, ysize = self._xsize, self._ysize
+        xsize, ysize, cell_ref, do_match = self._resolve_xy(match_cell)
+        xsize, ysize = self._fit_slabs(xsize, ysize, cell_ref)
 
-        # ------------------------------------------------------------------
-        # First pass: build slab supercells and determine actual cell XY.
-        # ------------------------------------------------------------------
-        slab_dims = []   # (xi, yi) for each slab, in order
-        for layer in self._layers:
-            if layer["type"] == "slab":
-                tslab = make_interface_slab(
-                    layer["species"], xsize, ysize, layers=layer["nlayers"]
-                )
-                layer["_slab"] = tslab
-                if tslab is not None:
-                    xi = np.dot([1, 0, 0], tslab.atoms.cell @ [1, 0, 0])
-                    yi = np.dot([0, 1, 0], tslab.atoms.cell @ [0, 1, 0])
-                    zi = np.dot([0, 0, 1], tslab.atoms.cell @ [0, 0, 1])
-                    slab_dims.append((xi, yi))
-                    xsize = max(xsize, xi)
-                    ysize = max(ysize, yi)
-                    logger.debug(
-                        "  Slab fitted: %s -> %.3f x %.3f x %.3f A, %d atoms",
-                        getattr(layer["species"], "resname", "?"),
-                        xi, yi, zi, len(tslab.atoms),
-                    )
-
-        if slab_dims:
-            logger.info("Cell size after slab fitting: x=%.3f Å, y=%.3f Å", xsize, ysize)
-            self._check_xy_mismatch(slab_dims, xsize, ysize)
-
-        # ------------------------------------------------------------------
-        # All species as universes for PACKMOL residue-name lookup.
-        # ------------------------------------------------------------------
         all_sp_univs = [sp.to_universe() for sp in self._all_species]
-
-        # ------------------------------------------------------------------
-        # Second pass: stack layers.
-        # ------------------------------------------------------------------
-        system = None
-        zdim = 0.0
-
-        for ii, layer in enumerate(self._layers):
-            ltype = layer["type"]
-            logger.info("Stacking layer %d/%d: %s", ii + 1, n_layers, ltype)
-
-            if ltype == "slab":
-                slab_u = layer["_slab"].to_universe(
-                    layered=layered, match_cell=match_cell, xydim=[xsize, ysize]
-                )
-                system, zdim = add_component(system, slab_u, zdim, padding=padding)
-                logger.info("  -> %d atoms, zdim -> %.3f A",
-                            len(slab_u.atoms), zdim)
-
-            elif ltype == "solvent":
-                dilate   = layer["dilate"]
-                eff_zdim = layer["zdim"] * dilate
-                eff_rho  = layer["density"] / dilate if layer["density"] is not None else None
-
-                if dilate != 1.0:
-                    logger.info(
-                        "  Dilation x%.2f: packing into %.1f A at %.3f g/cm3"
-                        " (target zdim=%.1f A)",
-                        dilate, eff_zdim,
-                        eff_rho if eff_rho is not None else float("nan"),
-                        layer["zdim"],
-                    )
-
-                ions_list = layer["ions"] if layer["ions"] else None
-                solv_box = make_solvent_box(
-                    all_sp_univs,
-                    layer["solvent"].to_universe() if layer["solvent"] else None,
-                    ions_list,
-                    [xsize, ysize, eff_zdim],
-                    eff_rho,
-                    layer["nions"],
-                    layer["concentration"],
-                    layer["conmodel"],
-                    layer["ion_pos"],
-                    layer["nsolvent"],
-                    layer["packmol_tolerance"],
-                )
-                if solv_box is not None:
-                    logger.info("  -> %d atoms, zdim -> %.3f A",
-                                len(solv_box.atoms), zdim + eff_zdim)
-                else:
-                    logger.warning("  Solvent box is empty - check packmol.log")
-                system, zdim = add_component(system, solv_box, zdim, padding=padding)
-
-            elif ltype == "vacuum":
-                zdim += layer["zdim"]
-                logger.info("  -> zdim -> %.3f A", zdim)
+        system, zdim = self._stack_layers(
+            xsize, ysize, all_sp_univs, padding, layered, do_match
+        )
 
         system.dimensions = [xsize, ysize, zdim] + [90, 90, 90]
         logger.info("Assembly complete: %d atoms, zdim=%.3f A",
@@ -470,6 +404,188 @@ class BoxBuilder:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _resolve_xy(self, match_cell):
+        """
+        Determine the starting XY cell dimensions and match-cell settings.
+
+        Returns
+        -------
+        xsize, ysize : float
+            Starting XY dimensions in Å.
+        cell_ref : Specie or None
+            Reference species that locks the XY cell, or ``None``.
+        do_match : bool
+            Whether slab conversion should apply XY scaling.
+        """
+        cell_ref, do_match = self._resolve_match_cell(match_cell)
+
+        if cell_ref is not None:
+            # Pre-fit through make_interface_slab to get *tiled* dimensions.
+            # For a polymer (xrep=yrep=1) this is a no-op; for a crystalline
+            # slab it tiles to xysize and returns the correct fitted cell.
+            ref_fitted = make_interface_slab(cell_ref, self._xsize, self._ysize)
+            if ref_fitted is not None:
+                xsize = np.dot([1, 0, 0], ref_fitted.atoms.cell @ [1, 0, 0])
+                ysize = np.dot([0, 1, 0], ref_fitted.atoms.cell @ [0, 1, 0])
+            else:
+                xsize = cell_ref.atoms.get_cell()[0][0]
+                ysize = cell_ref.atoms.get_cell()[1][1]
+            logger.info(
+                "Cell reference locked to %s (fitted): x=%.3f Å, y=%.3f Å",
+                getattr(cell_ref, "resname", "?"), xsize, ysize,
+            )
+        else:
+            xsize, ysize = self._xsize, self._ysize
+
+        return xsize, ysize, cell_ref, do_match
+
+    def _fit_slabs(self, xsize: float, ysize: float, cell_ref) -> Tuple[float, float]:
+        """
+        First pass: tile every slab layer and finalise the XY cell size.
+
+        Tiled slabs are cached in ``layer["_slab"]``.  When no *cell_ref* is
+        set, *xsize*/*ysize* grow to accommodate the largest slab footprint.
+
+        Returns
+        -------
+        xsize, ysize : float
+            Final XY dimensions in Å.
+        """
+        slab_dims = []
+        for layer in self._layers:
+            if layer["type"] != "slab":
+                continue
+            tslab = make_interface_slab(
+                layer["species"], xsize, ysize, layers=layer["nlayers"]
+            )
+            layer["_slab"] = tslab
+            if tslab is None:
+                continue
+            xi = np.dot([1, 0, 0], tslab.atoms.cell @ [1, 0, 0])
+            yi = np.dot([0, 1, 0], tslab.atoms.cell @ [0, 1, 0])
+            zi = np.dot([0, 0, 1], tslab.atoms.cell @ [0, 0, 1])
+            slab_dims.append((xi, yi))
+            if cell_ref is None:
+                xsize = max(xsize, xi)
+                ysize = max(ysize, yi)
+            logger.debug(
+                "  Slab fitted: %s -> %.3f x %.3f x %.3f A, %d atoms",
+                getattr(layer["species"], "resname", "?"),
+                xi, yi, zi, len(tslab.atoms),
+            )
+
+        if slab_dims:
+            logger.info("Cell size after slab fitting: x=%.3f Å, y=%.3f Å", xsize, ysize)
+            self._check_xy_mismatch(slab_dims, xsize, ysize)
+
+        return xsize, ysize
+
+    def _stack_layers(
+        self,
+        xsize: float,
+        ysize: float,
+        all_sp_univs: list,
+        padding: float,
+        layered: bool,
+        do_match: bool,
+    ) -> Tuple[mda.Universe, float]:
+        """
+        Second pass: assemble all layers into a single Universe.
+
+        Returns
+        -------
+        system : mda.Universe
+        zdim : float
+            Total Z height in Å (excluding final cell padding).
+        """
+        system = None
+        zdim = 0.0
+        n_layers = len(self._layers)
+
+        for ii, layer in enumerate(self._layers):
+            ltype = layer["type"]
+            logger.info("Stacking layer %d/%d: %s", ii + 1, n_layers, ltype)
+
+            if ltype == "slab":
+                slab_u = layer["_slab"].to_universe(
+                    layered=layered, match_cell=do_match, xydim=[xsize, ysize]
+                )
+                system, zdim = add_component(system, slab_u, zdim, padding=padding)
+                logger.info("  -> %d atoms, zdim -> %.3f A", len(slab_u.atoms), zdim)
+
+            elif ltype == "solvent":
+                solv_box = self._build_solvent_layer(layer, xsize, ysize, all_sp_univs)
+                if solv_box is not None:
+                    logger.info("  -> %d atoms, zdim -> %.3f A",
+                                len(solv_box.atoms),
+                                zdim + layer["zdim"] * layer["dilate"])
+                else:
+                    logger.warning("  Solvent box is empty - check packmol.log")
+                system, zdim = add_component(system, solv_box, zdim, padding=padding)
+
+            elif ltype == "vacuum":
+                zdim += layer["zdim"]
+                logger.info("  -> zdim -> %.3f A", zdim)
+
+        return system, zdim
+
+    def _build_solvent_layer(
+        self,
+        layer: dict,
+        xsize: float,
+        ysize: float,
+        all_sp_univs: list,
+    ) -> Optional[mda.Universe]:
+        """
+        Build one solvent layer via PACKMOL.
+
+        Applies dilation if requested and delegates to :func:`make_solvent_box`.
+        """
+        dilate   = layer["dilate"]
+        eff_zdim = layer["zdim"] * dilate
+        eff_rho  = layer["density"] / dilate if layer["density"] is not None else None
+
+        if dilate != 1.0:
+            logger.info(
+                "  Dilation x%.2f: packing into %.1f A at %.3f g/cm3"
+                " (target zdim=%.1f A)",
+                dilate, eff_zdim,
+                eff_rho if eff_rho is not None else float("nan"),
+                layer["zdim"],
+            )
+
+        return make_solvent_box(
+            species=all_sp_univs,
+            solvent=layer["solvent"] or None,
+            ions=layer["ions"] or None,
+            volume=[xsize, ysize, eff_zdim],
+            density=eff_rho,
+            nions=layer["nions"],
+            concentration=layer["concentration"],
+            conmodel=layer["conmodel"],
+            ion_pos=layer["ion_pos"],
+            nsolvent=layer["nsolvent"],
+            tolerance=layer["packmol_tolerance"],
+            ratio=layer["ratio"],
+        )
+
+    @staticmethod
+    def _resolve_match_cell(match_cell):
+        """
+        Parse the *match_cell* parameter used in :meth:`build`.
+
+        Returns
+        -------
+        cell_ref : Specie or None
+            The reference species whose XY cell locks *xsize/ysize*, or
+            ``None`` when a plain bool was supplied.
+        do_match : bool
+            Whether ``to_universe`` should apply XY scaling.
+        """
+        if match_cell is False or match_cell is True:
+            return None, bool(match_cell)
+        return match_cell, True
 
     @staticmethod
     def _validate_xysize(

@@ -9,7 +9,8 @@ Created on Tue Oct 24 15:14:41 2023
 from typing import List, Dict, Union, Optional, Tuple, Any
 from mdinterface.utils.auxiliary import label_to_element, as_list, find_smallest_missing
 from mdinterface.io.lammpswriter import DATAWriter, write_lammps_coefficients
-from mdinterface.build.box import make_interface_slab, make_solvent_box, add_component
+from mdinterface.build.box import make_interface_slab, add_component
+from mdinterface.build.solvent import make_solvent_box
 
 import ase
 import MDAnalysis as mda
