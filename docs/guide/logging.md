@@ -40,11 +40,11 @@ simbox = SimCell(xysize=[15, 15], verbose=2)      # DEBUG
 All messages are prefixed with `[mdi]` and a compact 4-character level name:
 
 ```
-[mdi] INFO | ══╤ Build ════════════════════════════════
+[mdi] INFO | ===  Build  ================================
 [mdi] INFO |
-[mdi] INFO | ──┬ Layer [1/3] ──────────────────────────
-[mdi] INFO |   ├> Au (111):  14.421 x 14.421 x 6.657 Å,  480 atoms
-[mdi] INFO |   └─> total z: 6.66 Å  (+6.66 Å)
+[mdi] INFO | --  Layer [1/3]  --------------------------
+[mdi] INFO |   >> Au (111):  14.421 x 14.421 x 6.657 Å,  480 atoms
+[mdi] INFO |   >> layer z: +6.66 Å  |  total z: 6.66 Å
 ```
 
 ## Integration with existing logging config

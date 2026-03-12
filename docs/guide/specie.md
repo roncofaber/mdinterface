@@ -45,6 +45,8 @@ methanol = Specie("CH3OH", ligpargen=True)
 
 This requires a working LigParGen installation and the `BOSSdir` configured in `config.ini` (see [Installation](../installation.md)).
 
+**Large molecules (>200 atoms):** LigParGen's input limit is 200 atoms. When `ligpargen=True` and the molecule exceeds this limit, `mdinterface` automatically splits it into segments along clean backbone bonds, runs LigParGen independently on each segment, and then refines the parameters at every junction using a local snippet — all transparently. No extra configuration is needed.
+
 ## Polymers
 
 `Polymer` extends `Specie` to build linear chains from one or more monomer units — including co-polymers with arbitrary sequences. See the dedicated [Polymer guide](polymer.md) for the full workflow.
