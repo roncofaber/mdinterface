@@ -749,6 +749,33 @@ class Specie(object):
         from mdinterface.io.gromacswriter import write_gromacs_itp
         write_gromacs_itp(self, filename=filename)
 
+    def refine_large_topology(self, Nmax=12, ending="H", offset=False):
+        """
+        Assign OPLS-AA parameters to this species via LigParGen using a
+        segment-and-junction strategy for molecules with more than 200 atoms.
+
+        The molecule is split into segments of <= 200 atoms along clean C--C
+        single bonds (avoiding rings, heteroatoms, and their neighbours).
+        Each segment is capped and passed to LigParGen individually; a local
+        snippet centred on each cut bond then corrects the junction region.
+
+        Requires ``nominal_charge`` to be set on ``self.atoms`` (integer
+        formal charge per atom, same convention as :class:`~mdinterface.core.polymer.Polymer`).
+
+        Parameters
+        ----------
+        Nmax : int
+            Neighbourhood radius (in bonds) for junction snippet creation.
+        ending : str
+            Capping element for dangling bonds. Default ``"H"``.
+        offset : bool
+            Redistribute residual charge error uniformly to match
+            ``nominal_charge.sum()``.
+        """
+        from mdinterface.externals.ligpargen import refine_large_specie_topology
+        refine_large_specie_topology(self, Nmax=Nmax, ending=ending,
+                                     offset=offset)
+
     def write_gro(self, filename=None):
         """
         Write a GROMACS structure (.gro) file for this species.

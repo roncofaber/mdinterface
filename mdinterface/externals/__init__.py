@@ -9,7 +9,7 @@ relaxation), and FAIRChem (AIMD).  Missing optional dependencies are handled
 gracefully at import time.
 """
 
-from .ligpargen import run_ligpargen
+from .ligpargen import run_ligpargen, refine_large_specie_topology
 from .obabel import run_OBChargeModel
 from .pyscf import calculate_RESP_charges
 from .optimization import relax_structure
