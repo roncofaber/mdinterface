@@ -11,8 +11,6 @@
 
 ## Features
 
-> **No force-field knowledge required.** If you only need atomic positions — for AIMD, ML-MD, or any non-LAMMPS workflow — you can ignore all force-field parameters entirely and just use `to_ase()` or `.universe` on the assembled box.
-
 - **Layer-by-layer `SimCell` builder**: add slabs, solvent regions, and vacuum gaps one step at a time; call `.build()` when done.
 - **ASE & MDAnalysis integration**: the assembled box converts to `ase.Atoms` or `mda.Universe` with a single call, ready for any downstream tool.
 - **Multi-solvent support**: mix solvents by molar ratio + density, ratio + total count, or explicit per-species molecule counts.
