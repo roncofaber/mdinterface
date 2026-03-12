@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jan 15 11:40:58 2025
+Pre-parameterised small-molecule species: water models and diatomic gases.
 
-@author: roncofaber
+Water models available: SPC/E (``"ewald"``), CHARMM TIP3P (``"charmm"``),
+and SPC/E (``"spce"``).  Diatomic species (O2, H2, N2) use parameters from
+Lim et al., J. Chem. Theory Comput. 2021, 17, 821.
 """
 
 from mdinterface.core.specie import Specie
@@ -12,6 +14,30 @@ from mdinterface.core.topology import Atom, Bond, Angle, Dihedral, Improper
 #%%
 # solvent https://docs.lammps.org/Howto_tip3p.html (Ewald model)
 class Water(Specie):
+    """
+    Water molecule with pre-parameterised force-field parameters.
+
+    Parameters
+    ----------
+    model : str, default ``"ewald"``
+        Water model to use:
+
+        - ``"ewald"``  -- SPC/E with Ewald-compatible charges
+          (q_O=-0.83, q_H=0.415)
+        - ``"charmm"`` -- CHARMM TIP3P
+          (q_O=-0.834, q_H=0.417)
+        - ``"spce"``   -- SPC/E
+          (q_O=-0.8476, q_H=0.4238)
+    **kwargs
+        Forwarded to :class:`~mdinterface.core.specie.Specie`.
+
+    Examples
+    --------
+    ::
+
+        from mdinterface.database import Water
+        water = Water(model="ewald")
+    """
     def __init__(self, model="ewald", **kwargs):
         
         if model.lower() == "ewald":

@@ -21,7 +21,7 @@ from mdinterface.build.continuum2sim import discretize_concentration
 
 import logging
 
-logger = logging.getLogger("mdinterface.box")
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Validation
@@ -80,70 +80,124 @@ def _validate_solvent_box_parameters(
 
 
 # ---------------------------------------------------------------------------
-# Solute placement
+# Solute placement — internal helpers
 # ---------------------------------------------------------------------------
 
-def populate_solutes(solute, nsolute, volume, solute_pos=False, conmodel=None):
+def _place_sp(sp, volume, coords, radii, zpos=None, max_attempts=100):
+    """Try to find a non-overlapping random position for one molecule."""
+    radius = sp.estimate_specie_radius()
+    for _ in range(max_attempts):
+        new_coord = radius + 1 + np.random.rand(3) * (volume - 2 * (radius + 1))
+        if zpos is not None:
+            new_coord[2] = zpos
+        if not coords or np.all(
+            np.linalg.norm(np.array(coords) - new_coord, axis=1)
+            >= np.array(radii) + radius + 1
+        ):
+            return new_coord
+    logger.warning("Failed to place %s after %d attempts", sp, max_attempts)
+    return None
 
-    def place_sp(sp, volume, coords, radii, zpos=None, max_attempts=100):
-        radius = sp.estimate_specie_radius()
-        for _ in range(max_attempts):
-            new_coord = radius + 1 + np.random.rand(3) * (volume - 2 * (radius + 1))
-            if zpos is not None:
-                new_coord[2] = zpos
-            if not coords or np.all(np.linalg.norm(coords - new_coord, axis=1) >= np.array(radii) + radius + 1):
-                return new_coord
-        print(f"Warning: Failed to place {sp} after {max_attempts} attempts")
-        return None
 
-    def place_conmodel(solute, conmodel, volume, max_attempts=100):
-        instructions = []
-        coords = []
-        radii = []
-        for cc, sp in enumerate(solute):
-            z_coords, conc_profile = conmodel[cc]
-            z_positions = discretize_concentration(sp, conc_profile, z_coords, volume)
-            for zpos in z_positions:
-                new_coord = place_sp(sp, volume, coords, radii, zpos=zpos,
-                                     max_attempts=max_attempts)
-                if new_coord is not None:
-                    coords.append(new_coord)
-                    radii.append(sp.estimate_specie_radius())
-                    instructions.append((sp.to_universe(), new_coord, "fixed"))
-        return instructions
+def _place_conmodel(solute, conmodel, volume):
+    """Fixed-coordinate placement from a spatial concentration profile."""
+    coords = []
+    radii = []
+    instructions = []
+    for cc, sp in enumerate(solute):
+        z_coords, conc_profile = conmodel[cc]
+        z_positions = discretize_concentration(sp, conc_profile, z_coords, volume)
+        for zpos in z_positions:
+            new_coord = _place_sp(sp, volume, coords, radii, zpos=zpos)
+            if new_coord is not None:
+                coords.append(new_coord)
+                radii.append(sp.estimate_specie_radius())
+                instructions.append((sp.to_universe(), new_coord, "fixed"))
+    return instructions
 
-    def place_random(solute, nsolute, volume, to_center, max_attempts=100):
-        instructions = []
-        coords = []
-        radii = []
-        for cc, sp in enumerate(solute):
-            nrep = nsolute if isinstance(nsolute, int) else nsolute[cc]
-            for _ in range(nrep):
-                new_coord = volume / 2 if to_center else place_sp(sp, volume, coords,
-                                                                   radii,
-                                                                   max_attempts=max_attempts)
-                if new_coord is not None:
-                    coords.append(new_coord)
-                    radii.append(sp.estimate_specie_radius())
-                    instructions.append((sp.to_universe(), new_coord, "fixed"))
-        return instructions
 
-    max_attempts = 100
+# ---------------------------------------------------------------------------
+# Solute placement — public API
+# ---------------------------------------------------------------------------
+
+def populate_solutes(solute, nsolute, volume, solute_pos=None, conmodel=None):
+    """
+    Build PACKMOL/fixed-coord placement instructions for solute molecules.
+
+    Parameters
+    ----------
+    solute : list of Specie
+        Solute species.
+    nsolute : int or list of int
+        Number of molecules per species.
+    volume : list of float
+        Box dimensions [x, y, z] in Å.
+    solute_pos : str or None
+        Placement mode:
+
+        - ``None`` / ``"packmol"`` — PACKMOL random placement in the full box
+          (default).
+        - ``"left"``   — PACKMOL random placement in the left half (z ≤ z/2).
+        - ``"right"``  — PACKMOL random placement in the right half (z ≥ z/2).
+        - ``"center"`` — each molecule fixed at the box centre.
+        - ``"box"``    — deprecated alias for ``"packmol"``.
+
+    conmodel : dict or None
+        Spatially varying concentration model; takes precedence over
+        *solute_pos* when provided.
+    """
+    import warnings
+
     volume = np.array(volume)
+    # Padded PACKMOL bounding box [xmin, ymin, zmin, xmax, ymax, zmax]
+    box = [1.0, 1.0, 1.0, volume[0] - 1.0, volume[1] - 1.0, volume[2] - 1.0]
 
+    # conmodel takes precedence — fixed z-coordinate per molecule
     if conmodel is not None:
         assert len(conmodel) == len(solute), "Need one profile per solute species"
-        return place_conmodel(solute, conmodel, volume, max_attempts=max_attempts)
+        return _place_conmodel(solute, conmodel, volume)
 
+    # center — fixed at box centre (one fixed instruction per molecule)
+    if solute_pos == "center":
+        coord = list(volume / 2)
+        return [
+            (sp.to_universe(), coord, "fixed")
+            for cc, sp in enumerate(solute)
+            for _ in range(nsolute if isinstance(nsolute, int) else nsolute[cc])
+        ]
+
+    # deprecated alias
     if solute_pos == "box":
-        return [(sp.to_universe(), nsolute if isinstance(nsolute, int) else nsolute[cc], "box")
-                for cc, sp in enumerate(solute)]
+        warnings.warn(
+            "solute_pos='box' is deprecated; use solute_pos='packmol'.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        solute_pos = "packmol"
 
-    to_center = solute_pos == "center"
-    if solute_pos == "left":
-        volume[2] /= 2
+    # PACKMOL-based placement: full box, left half, or right half
+    if solute_pos in (None, "packmol"):
+        bounds = box
+    elif solute_pos == "left":
+        bounds = [box[0], box[1], box[2], box[3], box[4], volume[2] / 2]
+    elif solute_pos == "right":
+        bounds = [box[0], box[1], volume[2] / 2, box[3], box[4], box[5]]
+    else:
+        raise ValueError(
+            f"Unknown solute_pos {solute_pos!r}. "
+            "Choose from: None, 'packmol', 'left', 'right', 'center'."
+        )
 
-    return place_random(solute, nsolute, volume, to_center, max_attempts=max_attempts)
+    logger.debug("  ├> solute placement: %s", solute_pos or "packmol (full box)")
+    return [
+        (
+            sp.to_universe(),
+            nsolute if isinstance(nsolute, int) else nsolute[cc],
+            "box",
+            bounds,
+        )
+        for cc, sp in enumerate(solute)
+    ]
 
 
 # ---------------------------------------------------------------------------

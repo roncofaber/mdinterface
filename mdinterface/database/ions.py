@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jan 15 11:47:01 2025
+Ion force-field parameter database and Ion/special-ion Specie classes.
 
-@author: roncofaber
+Parameters are stored as ``{epsilon (kcal/mol), sigma (Å)}`` and are
+available for several common force fields:
+
+- Aqvist   : J. Phys. Chem. B 2008 (https://pubs.acs.org/doi/10.1021/jp8001614)
+- Jorgensen: J. Chem. Theory Comput. 2006 (https://pubs.acs.org/doi/10.1021/ct600252r)
+- Cheatham : J. Phys. Chem. B 2008 (https://pubs.acs.org/doi/10.1021/jp8001614)
+- Sengupta : J. Chem. Inf. Model. 2021 (https://pubs.acs.org/doi/10.1021/acs.jcim.0c01390)
+- Dang     : J. Chem. Phys. 1992/1994
+- OPLS-AA  : J. Chem. Theory Comput. 2009 (https://pubs.acs.org/doi/10.1021/ct900009a)
 """
 
 import numpy as np
@@ -109,6 +117,30 @@ ions_parameters = {
 }
 
 def lookup_parameters(element, ffield):
+    """
+    Retrieve charge and LJ parameters for an ion from the database.
+
+    Parameters
+    ----------
+    element : str
+        Ion element symbol (e.g. ``"Na"``, ``"Cl"``).
+    ffield : str
+        Force-field name (case-insensitive): ``"Jorgensen"``, ``"Cheatham"``,
+        ``"Aqvist"``, ``"Sengupta"``, ``"Dang"``, ``"OPLS-AA"``.
+        ``"merz"`` is accepted as an alias for ``"sengupta"``.
+
+    Returns
+    -------
+    charge : float
+        Formal charge in elementary charge units.
+    lj : list of float
+        ``[epsilon (kcal/mol), sigma (Å)]`` Lennard-Jones parameters.
+
+    Raises
+    ------
+    ValueError
+        If *element* or *ffield* is not found in the database.
+    """
     try:
         if ffield.lower() == "merz":
             ffield = "sengupta"
@@ -121,13 +153,28 @@ def lookup_parameters(element, ffield):
 # metal parameters from literature
 class Ion(Specie):
     """
-    Class representing an ion with specific parameters.
-    
-    Args:
-        element (str): The chemical symbol of the ion.
-        ffield (str): The force field to use for parameters (default is "Jorgensen").
-        chg_scaling (float): Scaling factor for the charge (default is 0.8).
-        **kwargs: Additional keyword arguments to pass to the Specie superclass.
+    Monatomic ion Specie with tabulated force-field parameters.
+
+    Parameters
+    ----------
+    element : str
+        Ion element symbol (e.g. ``"Na"``, ``"Cl"``, ``"K"``).
+    ffield : str, default ``"Jorgensen"``
+        Force-field name.  See :func:`lookup_parameters` for available options.
+    chg_scaling : float, default 1.0
+        Multiplicative scale factor applied to the formal charge.  Use values
+        less than 1 (e.g. 0.8) to mimic electronic polarisability in
+        non-polarisable force fields.
+    **kwargs
+        Forwarded to :class:`~mdinterface.core.specie.Specie`.
+
+    Examples
+    --------
+    ::
+
+        from mdinterface.database import Ion
+        na = Ion("Na", ffield="Cheatham")
+        cl = Ion("Cl", ffield="Cheatham")
     """
     
     def __init__(self, element, ffield="Jorgensen", chg_scaling=1.0, **kwargs):
@@ -139,8 +186,18 @@ class Ion(Specie):
         return
 
 
-#perchlorate https://pubs.acs.org/doi/full/10.1021/jp801280s
 class Perchlorate(Specie):
+    """
+    Perchlorate anion (ClO4-) with OPLS-style parameters.
+
+    Parameters from Lopes et al., J. Phys. Chem. B 2008.
+    (https://pubs.acs.org/doi/full/10.1021/jp801280s)
+
+    Parameters
+    ----------
+    **kwargs
+        Forwarded to :class:`~mdinterface.core.specie.Specie`.
+    """
     def __init__(self, **kwargs):
         
         # Bond length
@@ -175,6 +232,17 @@ class Perchlorate(Specie):
     # std:  https://pubs.acs.org/doi/pdf/10.1021/jp036842c
     # netz: https://refubium.fu-berlin.de/bitstream/handle/fub188/15473/1.4942771.pdf
 class Hydronium(Specie):
+    """
+    Hydronium cation (H3O+) with force-field parameters.
+
+    Standard parameters from Kusaka et al., J. Phys. Chem. B 2003;
+    Netz set from Schlaich et al., J. Chem. Phys. 2016.
+
+    Parameters
+    ----------
+    **kwargs
+        Forwarded to :class:`~mdinterface.core.specie.Specie`.
+    """
     def __init__(self, **kwargs):
         
         # make ion by cheating and making NH3 first
@@ -197,6 +265,16 @@ class Hydronium(Specie):
 # hydroxide parameters:
     # netz: https://refubium.fu-berlin.de/bitstream/handle/fub188/15473/1.4942771.pdf
 class Hydroxide(Specie):
+    """
+    Hydroxide anion (OH-) with force-field parameters.
+
+    Parameters from Schlaich et al. (Netz group), J. Chem. Phys. 2016.
+
+    Parameters
+    ----------
+    **kwargs
+        Forwarded to :class:`~mdinterface.core.specie.Specie`.
+    """
     def __init__(self, **kwargs):
         
         # make ion 

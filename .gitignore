@@ -1,7 +1,9 @@
 # custom files
 *.pkl
+*.traj
 *.png
 !assets/mdinterface.png
+!docs/assets/mdinterface.png
 
 ## AUTO GENERATED
 # Byte-compiled / optimized / DLL files

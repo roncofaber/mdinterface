@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 12 14:04:43 2024
+General-purpose helper functions used throughout the mdinterface package.
 
-@author: roncofaber
+Includes element/mass lookup utilities, list manipulation helpers, and
+miscellaneous numerical routines that do not belong to a single module.
 """
 
 import re

@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Fluent builder API for assembling multi-layer simulation boxes.
+SimCell: layer-by-layer builder for assembling multi-layer MD simulation boxes.
+
+Add slabs, solvent regions, and vacuum gaps one step at a time, then call
+:meth:`SimCell.build` to pack and assemble the full system.
 """
 
 import logging
+from collections import Counter
 from typing import List, Optional, Union, Tuple, Any
 
 from mdinterface.utils.auxiliary import find_smallest_missing, label_to_element
@@ -17,40 +21,46 @@ import MDAnalysis as mda
 import numpy as np
 import shutil
 
+from mdinterface.utils.logger import set_verbosity, log_banner, log_header, log_subheader
+
+def _get_mdi_version() -> str:
+    """Return the mdinterface version, read at call time to avoid stale metadata."""
+    import sys
+    mdi = sys.modules.get("mdinterface")
+    return getattr(mdi, "__version__", "unknown")
+
 #%%
 
-logger = logging.getLogger("mdinterface.builder")
+logger = logging.getLogger(__name__)
 
 
-def _configure_logger(level) -> None:
+def _log_layer_result(n_atoms, dims, zdim, layer_zdim, extra_lines=()):
     """
-    Attach a StreamHandler to the mdinterface loggers and set their level.
+    Emit the standard size / z lines after a layer is assembled.
 
     Parameters
     ----------
-    level : bool, int, or str
-        ``True`` → INFO, ``False`` → WARNING, a :mod:`logging` integer
-        constant (e.g. ``logging.DEBUG``), or a string (``"DEBUG"``,
-        ``"INFO"``, ``"WARNING"`` …).
+    n_atoms : int or None
+        Atom count; omit the size line if None.
+    dims : tuple (x, y, z) or None
+        Cell dimensions in Å; omit the size line if None.
+    zdim : float
+        Running total Z height after this layer.
+    layer_zdim : float
+        Z contributed by this layer.
+    extra_lines : iterable of str
+        Additional lines (without leading ``>`` or indent) emitted between the
+        size line and the total-z line.  Each is prefixed with ``    > ``.
     """
-    if isinstance(level, bool):
-        level = logging.INFO if level else logging.WARNING
-    elif isinstance(level, str):
-        level = getattr(logging, level.upper(), logging.INFO)
-
-    fmt = logging.Formatter("[mdinterface] %(levelname)-8s %(message)s")
-
-    for name in ("mdinterface.builder", "mdinterface.box"):
-        lg = logging.getLogger(name)
-        if not any(isinstance(h, logging.StreamHandler) for h in lg.handlers):
-            handler = logging.StreamHandler()
-            handler.setFormatter(fmt)
-            lg.addHandler(handler)
-        lg.setLevel(level)
-        lg.propagate = False  # prevent double-printing via the root logger
+    if n_atoms is not None and dims is not None:
+        x, y, z = dims
+        logger.info("  ├> %d atoms  |  %.3f x %.3f x %.3f Å", n_atoms, x, y, z)
+    for line in extra_lines:
+        logger.info("  ├> %s", line)
+    logger.info("  └─> total z: %.2f Å  (+%.2f Å)", zdim, layer_zdim)
 
 
-class BoxBuilder:
+class SimCell:
     """
     Fluent builder for assembling layered simulation boxes.
 
@@ -59,7 +69,7 @@ class BoxBuilder:
 
     Example
     -------
-    >>> simbox = BoxBuilder(xysize=[15, 15])
+    >>> simbox = SimCell(xysize=[15, 15])
     >>> simbox.add_slab(gold, nlayers=3)
     >>> simbox.add_solvent(water, solute=[na, cl], nsolute=[5, 5], zdim=25, density=1.0)
     >>> simbox.add_slab(gold, nlayers=3)
@@ -73,21 +83,43 @@ class BoxBuilder:
         xysize: Union[List[float], Tuple[float, float]],
         verbose: Union[None, bool, int, str] = None,
     ) -> None:
+        """
+        Parameters
+        ----------
+        xysize : list or tuple of float
+            XY dimensions of the simulation box in Å, e.g. ``[15.0, 15.0]``.
+        verbose : None, bool, int, or str, optional
+            Controls package-wide log verbosity via :func:`set_verbosity`.
+            ``None`` (default) leaves the current level unchanged.
+
+            Integer scale:
+
+            - ``0`` / ``False`` — WARNING (quiet)
+            - ``1`` / ``True``  — INFO  (normal)
+            - ``2``             — DEBUG (detailed)
+            - ``3``, ``4``, …  — DEBUG (same as 2 for values < 10)
+
+            Integers ≥ 10 are treated as raw ``logging`` level constants.
+            Strings are resolved by name (``"DEBUG"``, ``"INFO"``, …).
+        """
         if verbose is not None:
-            _configure_logger(verbose)
+            set_verbosity(verbose)
+        
         xsize, ysize = self._validate_xysize(xysize)
         self._xsize = xsize
         self._ysize = ysize
         self._layers: List[dict] = []
         self._all_species: List[Any] = []
         self._universe: Optional[mda.Universe] = None
-        logger.debug("BoxBuilder initialised: xysize=[%.2f, %.2f] Å", xsize, ysize)
+        
+        log_banner(logger, "mdinterface :: SimCell", f"version {_get_mdi_version()}")
+        logger.info("  └─> xysize: %.2f x %.2f Å", xsize, ysize)
 
     # ------------------------------------------------------------------
     # Layer-adding methods (chainable)
     # ------------------------------------------------------------------
 
-    def add_slab(self, species: Any, nlayers: int = 1) -> "BoxBuilder":
+    def add_slab(self, species: Any, nlayers: int = 1) -> None:
         """
         Add a solid-interface layer (slab).
 
@@ -104,10 +136,40 @@ class BoxBuilder:
         for atom in slab_sp._stype:
             atom.set_label(atom.label + suffix)
         self._register(slab_sp)
-        self._layers.append({"type": "slab", "species": slab_sp, "nlayers": nlayers})
-        logger.debug("Layer added — slab: species=%s, nlayers=%d, suffix=%s",
-                     getattr(slab_sp, "resname", "?"), nlayers, suffix)
-        return self
+        self._layers.append({"type": "slab", "label": "slab",
+                              "species": slab_sp, "nlayers": nlayers})
+        logger.info("  + slab     %s,  %d layer(s)",
+                    getattr(slab_sp, "resname", "?"), nlayers)
+
+    def add_prebuilt(self, species: Any, nlayers: int = 1) -> None:
+        """
+        Add a pre-built layer whose atomic positions come from a prior MD run.
+
+        Semantically equivalent to :meth:`add_slab` but intended for species
+        whose positions have already been set (e.g. via
+        :meth:`~mdinterface.core.specie.Specie.update_positions`).  No XY
+        tiling is performed; the species cell is used as-is.
+
+        Any pre-processing of the positions (centering, trimming, …) should
+        be done on the species before passing it here.
+
+        Parameters
+        ----------
+        species : Specie or Polymer
+            Species with positions already set from a prior trajectory.
+        nlayers : int
+            Number of repeat units to stack along Z (usually 1).
+        """
+        slab_sp = species.copy()
+        slab_idx = sum(1 for lay in self._layers if lay["type"] == "slab")
+        suffix = f"_s{slab_idx}"
+        for atom in slab_sp._stype:
+            atom.set_label(atom.label + suffix)
+        self._register(slab_sp)
+        self._layers.append({"type": "slab", "label": "prebuilt",
+                              "species": slab_sp, "nlayers": nlayers})
+        logger.info("  + prebuilt %s,  %d layer(s)",
+                    getattr(slab_sp, "resname", "?"), nlayers)
 
     def add_solvent(
         self,
@@ -123,7 +185,7 @@ class BoxBuilder:
         dilate: float = 1.0,
         packmol_tolerance: float = 2.0,
         ratio: Optional[List[float]] = None,
-    ) -> "BoxBuilder":
+    ) -> None:
         """
         Add a solvent (liquid) layer, optionally with dissolved species.
 
@@ -146,8 +208,15 @@ class BoxBuilder:
         conmodel : dict, optional
             Spatially varying concentration model.
         solute_pos : str, optional
-            Solute placement strategy passed to PACKMOL
-            (``"box"``, ``"center"``, ``"left"``, or ``None`` for random).
+            Solute placement strategy:
+
+            - ``None`` / ``"packmol"`` — PACKMOL random placement in the full
+              box (default).
+            - ``"left"``   — PACKMOL random placement in the left half
+              (z ≤ zdim/2).
+            - ``"right"``  — PACKMOL random placement in the right half
+              (z ≥ zdim/2).
+            - ``"center"`` — each molecule fixed at the box centre.
         dilate : float, optional
             Dilation factor > 1 for concentrated systems. PACKMOL will pack
             into a box ``dilate`` times taller at ``density / dilate``,
@@ -193,15 +262,17 @@ class BoxBuilder:
             "packmol_tolerance":  packmol_tolerance,
             "ratio":              ratio,
         })
-        logger.debug(
-            "Layer added — solvent: solvent=%s, zdim=%.1f Å, density=%s, "
-            "nsolute=%s, dilate=%.2f, tolerance=%.1f",
-            [getattr(s, "resname", "?") for s in solv_copies], zdim, density,
-            nsolute, dilate, packmol_tolerance,
-        )
-        return self
+        solv_str = "+".join(getattr(s, "resname", "?") for s in solv_copies) or "ions"
+        rho_str  = (f"ρ={density:.2f} g/cm³" if density is not None
+                    else f"nsolvent={nsolvent}" if nsolvent is not None else "density=?")
+        solute_info = ""
+        if solute_copies:
+            sol_names = "+".join(getattr(s, "resname", "?") for s in solute_copies)
+            solute_info = f",  solute: {sol_names} (n={nsolute})"
+        logger.info("  + solvent  %s,  zdim=%.1f Å,  %s%s",
+                    solv_str, zdim, rho_str, solute_info)
 
-    def add_vacuum(self, zdim: float = 0.0) -> "BoxBuilder":
+    def add_vacuum(self, zdim: float = 0.0) -> None:
         """
         Add an empty vacuum gap.
 
@@ -211,8 +282,7 @@ class BoxBuilder:
             Thickness of the vacuum gap in Angstroms.
         """
         self._layers.append({"type": "vacuum", "zdim": zdim})
-        logger.debug("Layer added — vacuum: zdim=%.1f Å", zdim)
-        return self
+        logger.info("  + vacuum   zdim=%.1f Å", zdim)
 
     # ------------------------------------------------------------------
     # Build
@@ -220,12 +290,13 @@ class BoxBuilder:
 
     def build(
         self,
-        padding: float = 1.5,
+        padding: float = 0.5,
         center: bool = False,
         layered: bool = False,
-        match_cell: Union[bool, Any] = False,
+        match_cell: Union[bool, Any] = True,
         hijack: Optional[ase.Atoms] = None,
-    ) -> "BoxBuilder":
+        stack_axis: str = "z",
+    ) -> None:
         """
         Assemble all layers into a simulation box.
 
@@ -234,14 +305,19 @@ class BoxBuilder:
         padding : float
             Spacing (Å) inserted between adjacent layers.
         center : bool
-            If True, shift the whole system by half-box along Z after assembly.
+            If True, shift the system so the center of the first layer falls
+            on the periodic boundary (z=0).  This is the standard convention
+            for electrode/electrolyte slabs where one electrode straddles the
+            cell edge.
         layered : bool
             Assign distinct molecule indices to each slab layer for LAMMPS.
         match_cell : bool or Specie
             Controls XY cell matching:
 
-            - ``False`` — no scaling (default).
-            - ``True`` — scale all slabs to the largest fitted XY cell.
+            - ``True`` — scale all slabs to the largest fitted XY cell
+              (default). Ensures the solid/liquid interface is well-defined
+              with no XY mismatch between layers.
+            - ``False`` — no scaling; each slab keeps its natural tiled XY.
             - *Specie* — lock XY to that species' cell and stretch all other
               slabs to match. The reference species is left unscaled. Useful
               when a polymer or pre-relaxed slab should define the cell and
@@ -250,13 +326,21 @@ class BoxBuilder:
             After assembly, override both positions and cell dimensions with
             this external ``ase.Atoms`` object. Useful when you have a
             pre-relaxed structure you want to map the topology onto.
+        stack_axis : str, optional
+            Axis along which layers are stacked in the output file.
+            Assembly always happens along Z; a final coordinate permutation
+            reorients the box. Accepted values: ``"x"``, ``"y"``, ``"z"``
+            (default ``"z"``).
 
-        Returns
-        -------
-        BoxBuilder
-            Returns *self* so you can chain output methods.
         """
-        logger.info("Starting build: %d layers, padding=%.2f Å",
+        stack_axis = stack_axis.lower()
+        if stack_axis not in ("x", "y", "z"):
+            raise ValueError(
+                f"stack_axis must be 'x', 'y', or 'z', got {stack_axis!r}"
+            )
+
+        log_header(logger, "Build")
+        logger.info("  ├> %d layers, padding=%.2f Å",
                     len(self._layers), padding)
 
         self._update_topology_indexes()
@@ -265,41 +349,57 @@ class BoxBuilder:
         xsize, ysize = self._fit_slabs(xsize, ysize, cell_ref)
 
         all_sp_univs = [sp.to_universe() for sp in self._all_species]
-        system, zdim = self._stack_layers(
+        system, zdim, first_layer_zdim = self._stack_layers(
             xsize, ysize, all_sp_univs, padding, layered, do_match
         )
 
         system.dimensions = [xsize, ysize, zdim] + [90, 90, 90]
-        logger.info("Assembly complete: %d atoms, zdim=%.3f A",
-                    len(system.atoms), zdim)
+        res_counts = Counter(res.resname for res in system.residues)
+
+        log_header(logger, "Done")
+        logger.info("  ├> %d atoms  |  %.3f x %.3f x %.3f Å",
+                    len(system.atoms), xsize, ysize, zdim)
+        logger.info("  ├> %d layers  |  %d residues",
+                    len(self._layers), len(system.residues))
+        parts = [f"{name} ({n} mol)" for name, n in res_counts.items()]
+        for i in range(0, len(parts), 3):
+            logger.info("  ├> %s", ",  ".join(parts[i:i + 3]))
 
         if center:
-            system.atoms.translate([0, 0, zdim / 2])
+            shift = zdim - first_layer_zdim / 2
+            system.atoms.translate([0, 0, shift])
             _ = system.atoms.wrap()
-            logger.info("  -> system shifted by half-box along Z")
+            logger.info("  └─> system centered on first layer (shift %.2f Å)", shift)
 
         if hijack is not None:
             system.dimensions = hijack.get_cell_lengths_and_angles()
             system.atoms.positions = hijack.get_positions()
-            logger.info("  -> positions and cell overridden by hijack ase.Atoms")
+            logger.info("  └─> positions and cell overridden by hijack ase.Atoms")
+
+        if stack_axis != "z":
+            system, xsize, ysize = self._apply_stack_axis(system, xsize, ysize, zdim, stack_axis)
 
         self._universe = system
         self._xsize = xsize
         self._ysize = ysize
-        return self
+        
+        return
 
-    # ------------------------------------------------------------------
     # Output
-    # ------------------------------------------------------------------
-
     def write_lammps(
         self,
         filename: str = "data.lammps",
         atom_style: str = "full",
         write_coeff: bool = True,
-    ) -> "BoxBuilder":
+    ) -> None:
         """
         Write a LAMMPS data file (and optional force-field coefficients).
+
+        .. note::
+            This method is only needed for classical MD with LAMMPS.  If you
+            are using the assembled structure for AIMD, ML-MD, or any other
+            workflow, use :meth:`to_ase` or :attr:`universe` instead — no
+            force-field parameters are required for those paths.
 
         Parameters
         ----------
@@ -310,16 +410,12 @@ class BoxBuilder:
         write_coeff : bool
             Whether to write force-field coefficient blocks.
 
-        Returns
-        -------
-        BoxBuilder
-            Returns *self* for further chaining.
         """
         if self._universe is None:
             raise RuntimeError("Call build() before write_lammps().")
 
-        logger.info("Writing LAMMPS data file: %s (atom_style=%s, write_coeff=%s)",
-                    filename, atom_style, write_coeff)
+        log_header(logger, "Output")
+        logger.info("  ├> %s  (style=%s,  coeff=%s)", filename, atom_style, write_coeff)
         system = self._universe.copy()
 
         if not write_coeff:
@@ -352,8 +448,8 @@ class BoxBuilder:
             nbonds = len(system.atoms.bonds)
         except Exception:
             nbonds = 0
-        logger.info("Written: %d atoms, %d bonds -> %s", len(system.atoms), nbonds, filename)
-        return self
+        logger.info("  └─> %d atoms,  %d bonds  written", len(system.atoms), nbonds)
+        return
 
     def to_ase(self) -> ase.Atoms:
         """
@@ -391,6 +487,9 @@ class BoxBuilder:
             pass
 
         return atoms
+    
+    def to_universe(self):
+        return self.universe
 
     # ------------------------------------------------------------------
     # Properties
@@ -400,7 +499,7 @@ class BoxBuilder:
     def universe(self) -> Optional[mda.Universe]:
         """The assembled MDAnalysis Universe (available after build())."""
         return self._universe
-
+    
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -431,12 +530,13 @@ class BoxBuilder:
             else:
                 xsize = cell_ref.atoms.get_cell()[0][0]
                 ysize = cell_ref.atoms.get_cell()[1][1]
-            logger.info(
-                "Cell reference locked to %s (fitted): x=%.3f Å, y=%.3f Å",
-                getattr(cell_ref, "resname", "?"), xsize, ysize,
-            )
+            logger.info("  ├> Reference cell: %s:  %.3f x %.3f Å",
+                        getattr(cell_ref, "resname", "?"), xsize, ysize)
+            logger.info("  └─> All slabs will be stretched to match it")
         else:
             xsize, ysize = self._xsize, self._ysize
+            if do_match:
+                logger.info("  └─> No reference cell: using largest XY slab")
 
         return xsize, ysize, cell_ref, do_match
 
@@ -452,6 +552,10 @@ class BoxBuilder:
         xsize, ysize : float
             Final XY dimensions in Å.
         """
+        slab_layers = [l for l in self._layers if l["type"] == "slab"]
+        if slab_layers:
+            log_subheader(logger, "Slab tiling")
+
         slab_dims = []
         for layer in self._layers:
             if layer["type"] != "slab":
@@ -466,17 +570,18 @@ class BoxBuilder:
             yi = np.dot([0, 1, 0], tslab.atoms.cell @ [0, 1, 0])
             zi = np.dot([0, 0, 1], tslab.atoms.cell @ [0, 0, 1])
             slab_dims.append((xi, yi))
-            if cell_ref is None:
-                xsize = max(xsize, xi)
-                ysize = max(ysize, yi)
-            logger.debug(
-                "  Slab fitted: %s -> %.3f x %.3f x %.3f A, %d atoms",
-                getattr(layer["species"], "resname", "?"),
-                xi, yi, zi, len(tslab.atoms),
-            )
+            layer["_native_xy"] = (xi, yi)
+            logger.info("  ├> %s:  %.3f x %.3f x %.3f Å,  %d atoms",
+                        getattr(layer["species"], "resname", "?"),
+                        xi, yi, zi, len(tslab.atoms))
 
         if slab_dims:
-            logger.info("Cell size after slab fitting: x=%.3f Å, y=%.3f Å", xsize, ysize)
+            if cell_ref is None:
+                # Cell XY is defined by the largest fitted slab, not the
+                # requested xysize (which was only used as a tiling target).
+                xsize = max(d[0] for d in slab_dims)
+                ysize = max(d[1] for d in slab_dims)
+            logger.info("  └─> Final XY size: %.3f x %.3f Å", xsize, ysize)
             self._check_xy_mismatch(slab_dims, xsize, ysize)
 
         return xsize, ysize
@@ -498,37 +603,79 @@ class BoxBuilder:
         system : mda.Universe
         zdim : float
             Total Z height in Å (excluding final cell padding).
+        first_layer_zdim : float
+            Z height after the first layer only, used for centering.
         """
         system = None
         zdim = 0.0
+        first_layer_zdim = 0.0
         n_layers = len(self._layers)
 
         for ii, layer in enumerate(self._layers):
             ltype = layer["type"]
-            logger.info("Stacking layer %d/%d: %s", ii + 1, n_layers, ltype)
+            tag = f"[{ii + 1}/{n_layers}]"
 
             if ltype == "slab":
+                name  = getattr(layer["species"], "resname", "?")
+                label = layer.get("label", "slab")
+                log_subheader(logger, f"Layer {tag}")
+                logger.info("  ├> %s: %s,  %d layer(s)", label, name, layer["nlayers"])
                 slab_u = layer["_slab"].to_universe(
                     layered=layered, match_cell=do_match, xydim=[xsize, ysize]
                 )
+                zdim_before = zdim
                 system, zdim = add_component(system, slab_u, zdim, padding=padding)
-                logger.info("  -> %d atoms, zdim -> %.3f A", len(slab_u.atoms), zdim)
+                sx, sy, sz = slab_u.dimensions[:3]
+                native_xi, native_yi = layer.get("_native_xy", (sx, sy))
+                layer_zdim = zdim - zdim_before
+                stretched = (do_match and not
+                             (np.isclose(native_xi, sx, rtol=1e-2) and
+                              np.isclose(native_yi, sy, rtol=1e-2)))
+                extras = ([f"native XY: {native_xi:.3f} x {native_yi:.3f} Å"]
+                          if stretched else [])
+                _log_layer_result(len(slab_u.atoms), (sx, sy, sz),
+                                  zdim, layer_zdim, extra_lines=extras)
 
             elif ltype == "solvent":
+                solv_names = " + ".join(
+                    getattr(s, "resname", "?") for s in layer["solvent"]
+                ) or "ions"
+                log_subheader(logger, f"Layer {tag}")
+                logger.info("  ├> solvent: %s", solv_names)
+                if layer["density"] is not None:
+                    logger.info("  ├> density: %.2f g/cm³", layer["density"])
                 solv_box = self._build_solvent_layer(layer, xsize, ysize, all_sp_univs)
                 if solv_box is not None:
-                    logger.info("  -> %d atoms, zdim -> %.3f A",
-                                len(solv_box.atoms),
-                                zdim + layer["zdim"] * layer["dilate"])
+                    zdim_before = zdim
+                    system, zdim = add_component(system, solv_box, zdim, padding=padding)
+                    layer_zdim = zdim - zdim_before
+                    svx, svy, svz = solv_box.dimensions[:3]
+                    mol_counts = Counter(res.resname for res in solv_box.residues)
+                    # one line listing every species (solvent + solute) with counts
+                    all_sp = list(layer["solvent"]) + list(layer["solute"])
+                    mol_line = ",  ".join(
+                        f"{getattr(s, 'resname', '?')} ({mol_counts.get(getattr(s, 'resname', '?'), 0)} mol)"
+                        for s in all_sp
+                    )
+                    if mol_line:
+                        logger.info("  ├> %s", mol_line)
+                    _log_layer_result(len(solv_box.atoms), (svx, svy, svz),
+                                      zdim, layer_zdim)
                 else:
-                    logger.warning("  Solvent box is empty - check packmol.log")
-                system, zdim = add_component(system, solv_box, zdim, padding=padding)
+                    logger.warning("  └─> empty; check packmol.log")
+                    system, zdim = add_component(system, solv_box, zdim, padding=padding)
 
             elif ltype == "vacuum":
-                zdim += layer["zdim"]
-                logger.info("  -> zdim -> %.3f A", zdim)
+                layer_zdim = layer["zdim"]
+                zdim += layer_zdim
+                log_subheader(logger, f"Layer {tag}")
+                logger.info("  ├> vacuum: %.1f Å", layer_zdim)
+                _log_layer_result(None, None, zdim, layer_zdim)
 
-        return system, zdim
+            if ii == 0:
+                first_layer_zdim = zdim
+
+        return system, zdim, first_layer_zdim
 
     def _build_solvent_layer(
         self,
@@ -548,8 +695,7 @@ class BoxBuilder:
 
         if dilate != 1.0:
             logger.info(
-                "  Dilation x%.2f: packing into %.1f A at %.3f g/cm3"
-                " (target zdim=%.1f A)",
+                "  ├> dilation x%.2f: packing %.1f Å at %.3f g/cm³  (target: %.1f Å)",
                 dilate, eff_zdim,
                 eff_rho if eff_rho is not None else float("nan"),
                 layer["zdim"],
@@ -643,6 +789,37 @@ class BoxBuilder:
                 xsize, ysize, req_x, req_y, dx * 100, dy * 100,
             )
 
+    @staticmethod
+    def _apply_stack_axis(
+        system: mda.Universe,
+        xsize: float,
+        ysize: float,
+        zdim: float,
+        stack_axis: str,
+    ):
+        """
+        Permute atomic coordinates so that the stacking direction is *stack_axis*.
+
+        Assembly always builds along Z.  This method applies a lossless
+        coordinate permutation and updates the cell dimensions accordingly:
+
+        - ``"x"`` : (x, y, z) → (z, y, x)  |  cell [zdim, ysize, xsize]
+        - ``"y"`` : (x, y, z) → (x, z, y)  |  cell [xsize, zdim, ysize]
+
+        Returns the updated (system, new_xsize, new_ysize).
+        """
+        pos = system.atoms.positions
+        if stack_axis == "x":
+            system.atoms.positions = pos[:, [2, 1, 0]]
+            system.dimensions = [zdim, ysize, xsize, 90, 90, 90]
+            new_xsize, new_ysize = zdim, ysize
+        else:  # "y"
+            system.atoms.positions = pos[:, [0, 2, 1]]
+            system.dimensions = [xsize, zdim, ysize, 90, 90, 90]
+            new_xsize, new_ysize = xsize, zdim
+        logger.info("  └─> axis permuted Z -> %s", stack_axis.upper())
+        return system, new_xsize, new_ysize
+
     def _register(self, *species: Any) -> None:
         """Add species to the global registry if not already present."""
         for sp in species:
@@ -650,7 +827,7 @@ class BoxBuilder:
                 self._all_species.append(sp)
 
     def _update_topology_indexes(self) -> None:
-        logger.debug("Updating topology indexes for %d species", len(self._all_species))
+        n_species = len(self._all_species)
         nitems: dict = {
             "_btype": [],
             "_atype": [],
@@ -679,9 +856,8 @@ class BoxBuilder:
                 stype.set_id(idx + 1)
 
         logger.debug(
-            "Topology: %d atom type(s), %d bond type(s), "
-            "%d angle type(s), %d dihedral type(s), %d improper type(s)",
-            len(atom_types), len(nitems["_btype"]),
+            "  └─> %d species,  %d atom types,  %d bond,  %d angle,  %d dihedral,  %d improper",
+            n_species, len(atom_types), len(nitems["_btype"]),
             len(nitems["_atype"]), len(nitems["_dtype"]), len(nitems["_itype"]),
         )
 
@@ -703,3 +879,21 @@ class BoxBuilder:
                 attributes.append(attr)
 
         return [attributes[ii] for ii in np.argsort(indexes)]
+
+
+# ---------------------------------------------------------------------------
+# Backwards-compatibility alias
+# ---------------------------------------------------------------------------
+
+class BoxBuilder(SimCell):
+    """Deprecated alias for :class:`SimCell`.  Will be removed in a future version."""
+
+    def __init__(self, *args, **kwargs):
+        import warnings
+        warnings.warn(
+            "BoxBuilder is deprecated and will be removed in a future version. "
+            "Use SimCell instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)

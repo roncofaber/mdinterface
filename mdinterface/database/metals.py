@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jan 15 11:39:16 2025
+FCC metal (111) surface species for use in electrode simulations.
 
-@author: roncofaber
+Lennard-Jones parameters are taken from
+Heinz et al., J. Phys. Chem. C 2008, 112, 17281
+(https://pubs.acs.org/doi/full/10.1021/jp801931d).
 """
 
 import numpy as np
@@ -37,7 +39,31 @@ metal_params = {
         
 #metal parameters from https://pubs.acs.org/doi/full/10.1021/jp801931d
 class Metal111(Specie):
-    
+    """
+    FCC metal (111) surface slab as a Specie.
+
+    Generates a minimal orthogonal (1 x 2 x 3) unit cell using ASE
+    :func:`ase.build.fcc111`, ready to be tiled by :meth:`SimCell.add_slab`.
+
+    Parameters
+    ----------
+    metal : str
+        Element symbol (e.g. ``"Au"``, ``"Pt"``, ``"Cu"``).  Must be present
+        in the built-in ``metal_params`` table.
+    lj : list of float, optional
+        Custom ``[epsilon (kcal/mol), r0 (Å)]`` Lennard-Jones parameters.
+        Defaults to the tabulated Heinz 2008 values.
+    **kwargs
+        Forwarded to :class:`~mdinterface.core.specie.Specie`.
+
+    Examples
+    --------
+    ::
+
+        from mdinterface.database import Metal111
+        gold = Metal111("Au")
+    """
+
     def __init__(self, metal, lj=None, **kwargs):
         
         slab = fcc111(metal, size=(1,2,3), orthogonal=True, periodic=True)

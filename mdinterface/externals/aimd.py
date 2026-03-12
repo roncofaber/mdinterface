@@ -6,12 +6,16 @@ Created on Fri Oct  3 11:59:31 2025
 @author: roncofaber
 """
 
+import logging
+
 from ase import units
 from ase.io import Trajectory
 from ase.md import MDLogger
 from ase.md.langevin import Langevin
 from ase.md.bussi import Bussi
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
+
+logger = logging.getLogger(__name__)
 
 # Optional fairchem import
 try:
@@ -65,6 +69,9 @@ def run_aimd(atoms, timestep=0.5, temperature_K=300, friction=0.1, steps=1000,
             "Install it with: pip install fairchem-core"
         )
 
+    logger.info("AIMD: %d atoms,  T=%d K,  dt=%.2f fs,  %d steps  (%.3f ps)",
+                len(atoms), temperature_K, timestep, steps, timestep * steps / 1000)
+
     # Make a copy to avoid modifying the original
     aimd_atoms = atoms.copy()
 
@@ -72,20 +79,22 @@ def run_aimd(atoms, timestep=0.5, temperature_K=300, friction=0.1, steps=1000,
     try:
         predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device="cuda")
         calc = FAIRChemCalculator(predictor, task_name="omol")
+        logger.debug("  ├> UMA calculator loaded")
     except Exception as e:
         raise ValueError(f"Error loading UMA or OMol models: {e}")
 
     aimd_atoms.calc = calc
-    
+
     # start velocities
     MaxwellBoltzmannDistribution(aimd_atoms, temperature_K=temperature_K)
-    
-    # Initialize Bussi Dynamics
+    logger.debug("  ├> Maxwell-Boltzmann velocities initialized")
+
+    # Initialize Langevin dynamics
     dyn = Langevin(
             aimd_atoms,
-            timestep=timestep * units.fs,  # convert to effective unit
+            timestep=timestep * units.fs,
             temperature_K=temperature_K,
-            friction=friction / units.fs,  # convert to effective unit
+            friction=friction / units.fs,
             **kwargs
             )
 
@@ -93,11 +102,14 @@ def run_aimd(atoms, timestep=0.5, temperature_K=300, friction=0.1, steps=1000,
     if trajectory:
         npt_traj = Trajectory(trajectory, mode="w", atoms=aimd_atoms)
         dyn.attach(npt_traj.write, interval=1)
+        logger.debug("  ├> trajectory -> %s", trajectory)
     if logfile:
         npt_log  = MDLogger(dyn, aimd_atoms, logfile, stress=False, peratom=False, mode="w")
         dyn.attach(npt_log, interval=1)
+        logger.debug("  ├> log        -> %s", logfile)
 
     # Run the dynamics
     dyn.run(steps)
+    logger.info("  └─> done: %.3f ps simulated", timestep * steps / 1000)
 
-    return aimd_atoms  # Returning the updated structure after simulation
+    return aimd_atoms

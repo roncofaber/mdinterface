@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb  3 15:39:52 2025
+Graph-based utilities for molecular topology analysis.
 
-@author: roncofaber
+Builds NetworkX bond graphs from ASE Atoms objects and provides helpers for
+finding neighbours, equivalent atoms, improper dihedral centres, atom types,
+and shortest-path distances used during topology construction.
 """
 
 # repo

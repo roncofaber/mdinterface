@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jan 15 11:40:37 2025
+Built-in species database for common MD simulation components.
 
-@author: roncofaber
+Exports pre-parameterised Specie subclasses for metals, water models, ions,
+noble gases, graphene, and small molecules.  All entries are ready to use
+directly with :class:`~mdinterface.build.builder.SimCell`.
 """
 
 from .metals import Metal111

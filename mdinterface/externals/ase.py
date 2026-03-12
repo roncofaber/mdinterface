@@ -6,8 +6,12 @@ Created on Tue Oct 21 11:23:00 2025
 @author: roncofaber
 """
 
+import logging
+
 # ase stuff
 import ase
+
+logger = logging.getLogger(__name__)
 
 #%%
 
@@ -39,9 +43,12 @@ def make_ase_calc_pyscf(specie, **pyscfargs):
     
     # load default values
     pyscf_arguments = get_default_config()
-    
+
     # update values
     pyscf_arguments.update(pyscfargs)
+    logger.info("PySCF calculator: basis=%s,  xc=%s,  type=%s",
+                pyscf_arguments.get("basis"), pyscf_arguments.get("xc"),
+                pyscf_arguments.get("calc_type"))
     
     if pyscf_arguments["charge"] is None:
         pyscf_arguments["charge"] = specie._tot_charge
@@ -58,13 +65,15 @@ def make_ase_calc_pyscf(specie, **pyscfargs):
     return PySCF(method=mf)
 
 def make_ase_calc_uma(specie, task_name="omol", model_name="uma-s-1p1"):
-    
+
+    logger.info("UMA calculator: model=%s,  task=%s", model_name, task_name)
     try:
         from fairchem.core import pretrained_mlip, FAIRChemCalculator
 
         predictor = pretrained_mlip.get_predict_unit(model_name=model_name, device="cuda")
         calc = FAIRChemCalculator(predictor, task_name="omol")
+        logger.debug("  └─> UMA calculator ready")
     except Exception:
         raise ValueError("No UMA and OMol stuff")
-    
+
     return calc

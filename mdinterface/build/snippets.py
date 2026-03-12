@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Oct  6 16:03:43 2025
+Polymer snippet utilities for local topology refinement.
 
-@author: roncofaber
+A snippet is a small sub-molecule cut from a polymer chain around a junction
+atom, capped with terminating atoms (typically H), and passed to LigParGen to
+obtain accurate OPLS-AA parameters for the chain interior.  The resulting
+topology is then remapped back onto the full polymer indices.
 """
 
 import numpy as np

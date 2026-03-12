@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Tests for mdinterface.build.builder.BoxBuilder."""
+"""Tests for mdinterface.build.builder.SimCell."""
 
 import logging
 import pytest
 import numpy as np
 
-from mdinterface import BoxBuilder
-from mdinterface.build.builder import _configure_logger
+from mdinterface import SimCell
+from mdinterface.utils.logger import set_verbosity
 from mdinterface.database import Water, Ion
 
 
@@ -31,58 +31,58 @@ def cl():
 
 @pytest.fixture
 def builder():
-    return BoxBuilder(xysize=[20, 20])
+    return SimCell(xysize=[20, 20])
 
 
 # ---------------------------------------------------------------------------
 # Construction and xysize validation
 # ---------------------------------------------------------------------------
 
-class TestBoxBuilderCreation:
+class TestSimCellCreation:
 
     def test_basic_creation(self):
-        b = BoxBuilder(xysize=[20, 20])
+        b = SimCell(xysize=[20, 20])
         assert b is not None
 
     def test_stores_xysize(self):
-        b = BoxBuilder(xysize=[15.5, 12.3])
+        b = SimCell(xysize=[15.5, 12.3])
         assert np.isclose(b._xsize, 15.5)
         assert np.isclose(b._ysize, 12.3)
 
     def test_tuple_xysize(self):
-        b = BoxBuilder(xysize=(10, 10))
+        b = SimCell(xysize=(10, 10))
         assert np.isclose(b._xsize, 10.0)
 
     def test_numpy_xysize(self):
-        b = BoxBuilder(xysize=np.array([12.0, 8.0]))
+        b = SimCell(xysize=np.array([12.0, 8.0]))
         assert np.isclose(b._xsize, 12.0)
 
     def test_xysize_wrong_length_one(self):
         with pytest.raises(ValueError):
-            BoxBuilder(xysize=[10])
+            SimCell(xysize=[10])
 
     def test_xysize_wrong_length_three(self):
         with pytest.raises(ValueError):
-            BoxBuilder(xysize=[10, 10, 10])
+            SimCell(xysize=[10, 10, 10])
 
     def test_xysize_non_sequence_raises(self):
         with pytest.raises(TypeError):
-            BoxBuilder(xysize=20)
+            SimCell(xysize=20)
 
     def test_xysize_non_numeric_raises(self):
         with pytest.raises(ValueError):
-            BoxBuilder(xysize=["a", "b"])
+            SimCell(xysize=["a", "b"])
 
     def test_xysize_zero_raises(self):
         with pytest.raises(ValueError):
-            BoxBuilder(xysize=[0, 10])
+            SimCell(xysize=[0, 10])
 
     def test_xysize_negative_raises(self):
         with pytest.raises(ValueError):
-            BoxBuilder(xysize=[-5, 10])
+            SimCell(xysize=[-5, 10])
 
     def test_initial_universe_is_none(self):
-        b = BoxBuilder(xysize=[20, 20])
+        b = SimCell(xysize=[20, 20])
         assert b.universe is None
 
 
@@ -92,15 +92,17 @@ class TestBoxBuilderCreation:
 
 class TestLayerAccumulation:
 
-    def test_add_vacuum_returns_self(self, builder):
-        assert builder.add_vacuum(zdim=5) is builder
+    def test_add_vacuum_returns_none(self, builder):
+        assert builder.add_vacuum(zdim=5) is None
 
-    def test_add_solvent_returns_self(self, builder, water):
-        assert builder.add_solvent(water, zdim=25, density=1.0) is builder
+    def test_add_solvent_returns_none(self, builder, water):
+        assert builder.add_solvent(water, zdim=25, density=1.0) is None
 
     def test_chain_three_calls(self, builder, water):
-        b = builder.add_vacuum(5).add_solvent(water, zdim=20, density=1.0).add_vacuum(5)
-        assert b is builder
+        builder.add_vacuum(5)
+        builder.add_solvent(water, zdim=20, density=1.0)
+        builder.add_vacuum(5)
+        assert len(builder._layers) == 3
 
     def test_vacuum_layer_stored(self, builder):
         builder.add_vacuum(zdim=10)
@@ -167,8 +169,8 @@ class TestSoluteOnlyLayer:
         builder.add_solvent(None, solute=[na, cl], nsolute=[2, 2], zdim=20)
         assert len(builder._all_species) == 2  # na + cl, no solvent
 
-    def test_solute_only_returns_self(self, builder, na):
-        assert builder.add_solvent(None, solute=[na], nsolute=5, zdim=15) is builder
+    def test_solute_only_returns_none(self, builder, na):
+        assert builder.add_solvent(None, solute=[na], nsolute=5, zdim=15) is None
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +298,7 @@ class TestSlabSuffixes:
                 assert atom.label.endswith(suffix)
 
     def test_slab_suffix_increments(self, water):
-        b = BoxBuilder(xysize=[20, 20])
+        b = SimCell(xysize=[20, 20])
         b.add_slab(water)
         b.add_slab(water)
         slabs = [lay for lay in b._layers if lay["type"] == "slab"]
@@ -313,20 +315,20 @@ class TestSlabSuffixes:
 class TestLogging:
 
     def test_add_slab_logs_debug(self, water, caplog):
-        b = BoxBuilder(xysize=[20, 20])
-        with caplog.at_level(logging.DEBUG, logger="mdinterface.builder"):
+        b = SimCell(xysize=[20, 20])
+        with caplog.at_level(logging.DEBUG, logger="mdinterface"):
             b.add_slab(water)
         assert any("slab" in r.message for r in caplog.records)
 
     def test_add_solvent_logs_debug(self, water, caplog):
-        b = BoxBuilder(xysize=[20, 20])
-        with caplog.at_level(logging.DEBUG, logger="mdinterface.builder"):
+        b = SimCell(xysize=[20, 20])
+        with caplog.at_level(logging.DEBUG, logger="mdinterface"):
             b.add_solvent(water, zdim=20, density=1.0)
         assert any("solvent" in r.message for r in caplog.records)
 
     def test_add_vacuum_logs_debug(self, caplog):
-        b = BoxBuilder(xysize=[20, 20])
-        with caplog.at_level(logging.DEBUG, logger="mdinterface.builder"):
+        b = SimCell(xysize=[20, 20])
+        with caplog.at_level(logging.DEBUG, logger="mdinterface"):
             b.add_vacuum(zdim=5)
         assert any("vacuum" in r.message for r in caplog.records)
 
@@ -338,55 +340,54 @@ class TestLogging:
 class TestVerbose:
 
     def _clean_handlers(self):
-        """Remove StreamHandlers added by previous tests."""
-        for name in ("mdinterface.builder", "mdinterface.box"):
-            lg = logging.getLogger(name)
-            lg.handlers = [h for h in lg.handlers
-                           if not isinstance(h, logging.StreamHandler)]
+        """Remove StreamHandlers added by previous tests from the parent logger."""
+        lg = logging.getLogger("mdinterface")
+        lg.handlers = [h for h in lg.handlers
+                       if not isinstance(h, logging.StreamHandler)]
 
     def test_verbose_true_sets_info(self):
         self._clean_handlers()
-        _configure_logger(True)
-        assert logging.getLogger("mdinterface.builder").level == logging.INFO
+        set_verbosity(True)
+        assert logging.getLogger("mdinterface").level == logging.INFO
 
     def test_verbose_false_sets_warning(self):
         self._clean_handlers()
-        _configure_logger(False)
-        assert logging.getLogger("mdinterface.builder").level == logging.WARNING
+        set_verbosity(False)
+        assert logging.getLogger("mdinterface").level == logging.WARNING
 
     def test_verbose_string_debug(self):
         self._clean_handlers()
-        _configure_logger("DEBUG")
-        assert logging.getLogger("mdinterface.builder").level == logging.DEBUG
+        set_verbosity("DEBUG")
+        assert logging.getLogger("mdinterface").level == logging.DEBUG
 
     def test_verbose_int_level(self):
         self._clean_handlers()
-        _configure_logger(logging.WARNING)
-        assert logging.getLogger("mdinterface.builder").level == logging.WARNING
+        set_verbosity(logging.WARNING)
+        assert logging.getLogger("mdinterface").level == logging.WARNING
 
     def test_verbose_in_constructor(self):
         self._clean_handlers()
-        b = BoxBuilder(xysize=[20, 20], verbose="DEBUG")
-        assert logging.getLogger("mdinterface.builder").level == logging.DEBUG
+        b = SimCell(xysize=[20, 20], verbose="DEBUG")
+        assert logging.getLogger("mdinterface").level == logging.DEBUG
         assert b is not None
 
     def test_verbose_none_does_not_add_handler(self):
         self._clean_handlers()
-        n_before = len(logging.getLogger("mdinterface.builder").handlers)
-        BoxBuilder(xysize=[20, 20], verbose=None)
-        n_after = len(logging.getLogger("mdinterface.builder").handlers)
+        n_before = len(logging.getLogger("mdinterface").handlers)
+        SimCell(xysize=[20, 20], verbose=None)
+        n_after = len(logging.getLogger("mdinterface").handlers)
         assert n_after == n_before
 
     def test_configure_logger_adds_handler(self):
         self._clean_handlers()
-        _configure_logger(True)
-        handlers = logging.getLogger("mdinterface.builder").handlers
+        set_verbosity(True)
+        handlers = logging.getLogger("mdinterface").handlers
         assert any(isinstance(h, logging.StreamHandler) for h in handlers)
 
     def test_configure_logger_not_duplicated(self):
         self._clean_handlers()
-        _configure_logger(True)
-        _configure_logger(True)
-        handlers = [h for h in logging.getLogger("mdinterface.builder").handlers
+        set_verbosity(True)
+        set_verbosity(True)
+        handlers = [h for h in logging.getLogger("mdinterface").handlers
                     if isinstance(h, logging.StreamHandler)]
         assert len(handlers) == 1

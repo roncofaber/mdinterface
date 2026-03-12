@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Nov 22 13:57:02 2023
+PACKMOL input-file string templates.
 
-@author: roncoroni
+Provides the ``header``, ``box_place``, and ``fix_place`` format strings used
+by :func:`~mdinterface.build.box.populate_box` to generate PACKMOL ``.in``
+files.
 """
 
 

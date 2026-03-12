@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct 22 17:17:30 2024
+Low-level polymer chain assembly utilities.
 
-@author: roncofaber
+Handles the geometry of joining monomer Specie objects end-to-end,
+tracking connection points and bond overlaps via gradient-based
+overlap minimisation.
 """
 
 # numpy or nothing
+import logging
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 # ase stuff
 import ase
@@ -138,7 +143,7 @@ def optimize_monomer_rotation_gradient(oligomer, monomer, oli_idx, mon_idx,
         gradient_norm = np.linalg.norm(gradient)
 
         if gradient_norm < 1e-6:  # Converged
-            print(f"Converged after {iteration} iterations")
+            logger.debug("Converged after %d iterations", iteration)
             break
 
         # Normalize and apply small rotation in gradient direction

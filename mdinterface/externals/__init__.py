@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jan 15 11:40:37 2025
+Optional integrations with third-party tools.
 
-@author: roncofaber
+Exposes wrappers for LigParGen (OPLS-AA parameters), Open Babel (charge
+models), PySCF/gpu4pyscf (RESP charges), ASE optimisers (structure
+relaxation), and FAIRChem (AIMD).  Missing optional dependencies are handled
+gracefully at import time.
 """
 
 from .ligpargen import run_ligpargen

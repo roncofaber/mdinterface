@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BoxBuilder example: pure solvent box with dissolved species.
+SimCell example: pure solvent box with dissolved species.
 
-Equivalent to make_solvent_box.py but using the fluent BoxBuilder API.
+Equivalent to make_solvent_box.py but using the fluent SimCell API.
 
 Author: roncofaber
 """
 
-from mdinterface import BoxBuilder
+from mdinterface import SimCell
 from mdinterface.database import Water
 from mdinterface.core.specie import Specie
 
@@ -22,7 +22,7 @@ amm = Specie("NH3", ligpargen=True)
 
 #%% Set up simulation box
 
-simbox = BoxBuilder(xysize=[20, 20])
+simbox = SimCell(xysize=[20, 20])
 
 #%% Add layers
 

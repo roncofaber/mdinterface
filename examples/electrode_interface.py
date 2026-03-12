@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BoxBuilder example: Au(111) / NaCl electrolyte / Au(111) sandwich.
+SimCell example: Au(111) / NaCl electrolyte / Au(111) sandwich.
 
-Equivalent to make_box.py but using the fluent BoxBuilder API.
+Equivalent to make_box.py but using the fluent SimCell API.
 Layers are added in the order they appear in the cell (bottom → top).
 
 Author: roncofaber
 """
 
-from mdinterface import BoxBuilder
+from mdinterface import SimCell
 from mdinterface.database import Water, Ion, Metal111
 
 #%% Define species
@@ -23,7 +23,7 @@ gold = Metal111("Au")
 
 #%% Set up simulation box
 
-simbox = BoxBuilder(
+simbox = SimCell(
     xysize=[15, 15],
     verbose=True,   # True → INFO, "DEBUG" → DEBUG, False/None → silent
 )
@@ -52,10 +52,11 @@ simbox.add_vacuum(zdim=5)
 
 simbox.build(
     padding=0.5,
-    center=False,   # set True to center the first slab in the box
+    center=True,   # set True to center the first slab in the box
     layered=False,  # set True to tag each slab layer with a unique mol-id
     # hijack=atoms, # override positions + cell from an external ase.Atoms
     #               # (e.g. a pre-relaxed slab); topology is preserved
+    stack_axis="x"  # permute coordinates so stacking runs along X instead of Z
 )
 
 #%% Output

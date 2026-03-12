@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 19 13:58:43 2024
+Core Specie class representing a single molecule with its force-field parameters.
 
-@author: roncofaber
+A Specie bundles an ASE Atoms object with the topology information needed for
+a LAMMPS simulation: atom types, partial charges, bonds, angles, dihedrals,
+and Lennard-Jones parameters.  It is the building block for SimCell layers
+and the parent class for Polymer and all database species.
 """
+
+import logging
 
 import ase
 import ase.build
@@ -12,6 +17,8 @@ import ase.visualize
 from ase.data import vdw_radii
 from ase.data.colors import jmol_colors
 import MDAnalysis as mda
+
+logger = logging.getLogger(__name__)
 
 import mdinterface.utils.map as pmap
 from mdinterface.core.topology import Atom
@@ -34,13 +41,98 @@ import matplotlib.pyplot as plt
 #%%
 
 class Specie(object):
-    
+    """
+    A single molecular species with geometry and force-field parameters.
+
+    Combines an ASE :class:`ase.Atoms` object with the topology (atom types,
+    bonds, angles, dihedrals, impropers) and Lennard-Jones parameters needed
+    to write a LAMMPS data file.  All database entries (Water, Ion, Metal111,
+    …) and Polymer inherit from this class.
+
+    .. note::
+        All topology parameters (``bonds``, ``angles``, ``dihedrals``,
+        ``impropers``, ``lj``, ``atom_types``, ``charges``) are **optional**.
+        A bare ``Specie(atoms)`` containing only positions is perfectly valid
+        and sufficient for geometry tasks, AIMD, or ML-MD workflows.
+        Force-field parameters are only needed when writing LAMMPS data files.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms or str, optional
+        Molecular geometry.  A chemical formula string (e.g. ``"H2O"``) is
+        accepted and converted to an ``ase.Atoms`` object.
+    charges : float, list, or array-like, optional
+        Partial charges in elementary charge units.  A scalar broadcasts to
+        all atoms.
+    atom_types : list of Atom, optional
+        Force-field atom-type objects.  If *None* and *lj* is provided, types
+        are inferred from element symbols.
+    bonds : Bond or list of Bond, optional
+        Bond interaction definitions.
+    angles : Angle or list of Angle, optional
+        Angle interaction definitions.
+    dihedrals : Dihedral or list of Dihedral, optional
+        Dihedral interaction definitions.
+    impropers : Improper or list of Improper, optional
+        Improper dihedral definitions.
+    lj : dict, optional
+        Lennard-Jones parameters keyed by element symbol:
+        ``{element: [epsilon (kcal/mol), sigma (Å)]}``.
+    cutoff : float, default 1.0
+        Scale factor applied to covalent radii when building the bond graph.
+        Increase slightly for flexible molecules with long bonds.
+    name : str, optional
+        Residue name (truncated to 4 characters for PACKMOL compatibility).
+        Defaults to the chemical formula.
+    lammps_data : str, optional
+        Path to a LAMMPS data file.  When provided, geometry and topology are
+        read from this file and all other structural arguments are ignored.
+    fix_missing : bool, default False
+        If True, attempt to auto-generate missing bond/angle/dihedral entries
+        based on the bond graph.
+    chg_scaling : float, default 1.0
+        Multiplicative scale factor applied to *charges*.
+    pbc : bool, default False
+        Whether to treat the atomic cell as periodic.
+    ligpargen : bool, default False
+        If True, call LigParGen to generate OPLS-AA force-field parameters.
+        Requires a working LigParGen installation and ``BOSSdir`` in config.
+    tot_charge : int, optional
+        Total molecular charge (integer).  Inferred from ``nominal_charge``
+        arrays if not supplied.
+    prune_z : bool, default False
+        Remove the Z-coordinate component from atom positions.
+    calc : ase.Calculator, optional
+        ASE calculator to attach to the ``ase.Atoms`` object.
+    keep_ids : bool, default False
+        Preserve atom IDs as read from the input rather than re-indexing.
+
+    Examples
+    --------
+    Load from the built-in database::
+
+        from mdinterface.database import Water, Ion
+        water = Water(model="ewald")
+        na    = Ion("Na", ffield="Cheatham")
+
+    Define a custom molecule::
+
+        from ase import Atoms
+        from mdinterface import Specie
+        mol = Atoms("CO2", positions=[[0,0,0],[1.16,0,0],[-1.16,0,0]])
+        co2 = Specie(mol, charges=[-0.3298, 0.6596, -0.3298])
+
+    Generate OPLS-AA parameters with LigParGen::
+
+        methanol = Specie("CH3OH", ligpargen=True)
+    """
+
     def __init__(self, atoms=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj=None, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
                  pbc=False, ligpargen=False, tot_charge=None, prune_z=False,
                  calc=None, keep_ids=False):
-        
+
         # store int. variables
         self.cutoff = cutoff
         
@@ -69,9 +161,11 @@ class Specie(object):
         if name is None:
             name = atoms.get_chemical_formula()
         if len(name) > 4:
-            print("ATTENTION: resname for Specie could be misleading")
-            print("You wan the name to be 4 characters long otherwise packmol")
-            print("will have problems...")
+            logger.warning(
+                "Resname '%s' is longer than 4 characters and will be "
+                "truncated to '%s'. PACKMOL requires resnames <= 4 chars.",
+                name, name[:4],
+            )
         self.resname = name[:4]
         
         # set up atoms and generate graph of specie
@@ -641,7 +735,8 @@ class Specie(object):
         
         if charge is None:
             charge = 0
-            print("YOU WANT TO CHECK CHARGE BUD.")
+            logger.warning("No charge specified for estimate_charges; defaulting to 0. "
+                           "Verify this is correct for your system.")
         
         if method == "obabel":
             charges = run_OBChargeModel(self.atoms)

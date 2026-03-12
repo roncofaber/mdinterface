@@ -7,11 +7,14 @@ Created on Mon Feb  3 15:34:20 2025
 """
 
 # not repo
+import logging
 import numpy as np
 import os
 import tempfile
 import ase
 import ase.io
+
+logger = logging.getLogger(__name__)
 
 #%%
 
@@ -41,8 +44,10 @@ def run_OBChargeModel(atoms, charge_type="eem"):
     finally:
         os.remove(filename)
 
+    logger.info("OBabel charges: %s model,  %d atoms", charge_type, mol.NumAtoms())
     ob_charge_model = ob.OBChargeModel.FindType(charge_type)
     ob_charge_model.ComputeCharges(mol)
-    charges = ob_charge_model.GetPartialCharges()
-    
-    return np.array(charges)
+    charges = np.array(ob_charge_model.GetPartialCharges())
+    logger.debug("  └─> charges: sum=%.4f, min=%.4f, max=%.4f", charges.sum(), charges.min(), charges.max())
+
+    return charges

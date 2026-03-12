@@ -5,22 +5,25 @@
   </div>
 </div>
 
-[![PyPI version](https://badge.fury.io/py/mdinterface.svg?icon=si%3Apython)](https://pypi.org/project/mdinterface/) [![GitHub version](https://badge.fury.io/gh/roncofaber%2Fmdinterface.svg?icon=si%3Agithub)](https://github.com/roncofaber/mdinterface)
+[![PyPI version](https://badge.fury.io/py/mdinterface.svg?icon=si%3Apython)](https://pypi.org/project/mdinterface/) [![GitHub version](https://badge.fury.io/gh/roncofaber%2Fmdinterface.svg?icon=si%3Agithub)](https://github.com/roncofaber/mdinterface) [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://roncofaber.github.io/mdinterface)
 
 `mdinterface` is a Python package for building systems for Molecular Dynamics (MD) simulations. Initially developed for electrolyte/electrode solid-liquid interfaces, it is equally suited for pure solvent boxes, mixed-solvent electrolytes, and polymer networks.
 
 ## Features
 
-- **Fluent `BoxBuilder` API** -- stack slabs, solvent regions, and vacuum gaps layer by layer; call `.build()` when done.
+> **No force-field knowledge required.** If you only need atomic positions — for AIMD, ML-MD, or any non-LAMMPS workflow — you can ignore all force-field parameters entirely and just use `to_ase()` or `.universe` on the assembled box.
+
+- **Layer-by-layer `SimCell` builder** -- add slabs, solvent regions, and vacuum gaps one step at a time; call `.build()` when done.
+- **ASE & MDAnalysis integration** -- the assembled box converts to `ase.Atoms` or `mda.Universe` with a single call, ready for any downstream tool.
 - **Multi-solvent support** -- mix solvents by molar ratio + density, ratio + total count, or explicit per-species molecule counts.
 - **Ion placement** -- dissolve ions by count, molar concentration, or a spatially-varying concentration profile.
 - **PACKMOL integration** -- handles molecular packing automatically; tolerance and dilation are tunable per layer.
-- **Force-field database** -- pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with [LigParGen](https://github.com/Isra3l/ligpargen).
-- **Polymer builder** -- generate chains of arbitrary length from a monomer `Specie`.
-- **RESP charges** -- estimate partial charges with [PySCF](https://github.com/pyscf/pyscf) / [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) (optional).
+- **Configurable stacking axis** -- build along Z (default) and permute to X or Y at the end.
+- **Polymer builder** -- generate chains of arbitrary length from a monomer `Specie`; co-polymers via explicit monomer sequences.
 - **AIMD with FAIRChem** -- run ML-potential dynamics via [FAIRChem](https://github.com/facebookresearch/fairchem) (optional).
+- **RESP charges** -- estimate partial charges with [PySCF](https://github.com/pyscf/pyscf) / [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) (optional).
+- **Force-field database** -- pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with [LigParGen](https://github.com/Isra3l/ligpargen).
 - **LAMMPS output** -- writes data files and force-field coefficient blocks ready to run.
-- **MDAnalysis integration** -- every object converts to `mda.Universe` with a single call.
 
 ## Requirements
 
@@ -79,70 +82,51 @@ pip install mdinterface[all]    # everything
 
 ## Quick start
 
-### Define species
-
 ```python
-from mdinterface import BoxBuilder
-from mdinterface.database import Water, Ion, Metal111
+from mdinterface import SimCell
+from mdinterface.database import Water, Metal111
 
-water = Water(model="ewald")
-na    = Ion("Na", ffield="Cheatham")
-cl    = Ion("Cl", ffield="Cheatham")
+water = Water()
 gold  = Metal111("Au")
+
+simbox = SimCell(xysize=[15, 15])
+simbox.add_slab(gold, nlayers=3)
+simbox.add_solvent(water, zdim=20, density=1.0)
+simbox.build()
+
+atoms = simbox.to_ase()    # ase.Atoms — ready for AIMD, ML-MD, or any other tool
 ```
 
-### Build a gold / NaCl electrolyte / gold sandwich
+For LAMMPS, add ions and call `write_lammps()` instead:
 
 ```python
-simbox = BoxBuilder(xysize=[15, 15], verbose=True)
+from mdinterface.database import Ion
 
+na = Ion("Na", ffield="Cheatham")
+cl = Ion("Cl", ffield="Cheatham")
+
+simbox = SimCell(xysize=[15, 15], verbose=True)
 simbox.add_slab(gold, nlayers=3)
 simbox.add_solvent(water, solute=[na, cl], nsolute=[5, 5], zdim=25, density=1.0)
 simbox.add_slab(gold, nlayers=3)
-simbox.add_vacuum(zdim=5)
-
 simbox.build(padding=0.5)
 simbox.write_lammps("data.lammps", atom_style="full", write_coeff=True)
 ```
 
-### Mixed-solvent box (water + methanol)
-
-```python
-from mdinterface.core.specie import Specie
-
-methanol = Specie("CH3OH", ligpargen=True)
-
-simbox = BoxBuilder(xysize=[25, 25])
-simbox.add_solvent(
-    [water, methanol],
-    ratio=[3, 1],      # 3 water : 1 methanol by mole
-    density=0.95,
-    zdim=30,
-    solute=[na, cl],
-    nsolute=[5, 5],
-)
-simbox.build(padding=0.5)
-simbox.write_lammps("data_mixture.lammps", atom_style="full", write_coeff=True)
-```
-
-### Convert to ASE or MDAnalysis
-
-```python
-atoms    = simbox.to_ase()       # ase.Atoms with cell and PBC
-universe = simbox.universe       # mda.Universe
-```
-
-See the [examples/box_builder/](examples/box_builder/) directory for more complete scripts:
+More complete scripts are in the [examples/](examples/) directory:
 
 | Script | What it shows |
 |--------|--------------|
-| `builder_electrode_interface.py` | Au / NaCl electrolyte / Au sandwich |
-| `builder_solvent_box.py` | Pure solvent + dissolved species |
-| `builder_multisolvent_box.py` | Mixed-solvent box with ratio/density/count modes |
-| `builder_multilayer.py` | Five-layer multi-slab system |
-| `builder_sandwich_from_traj.py` | Load a relaxed structure via `hijack` |
+| `electrode_interface.py` | Au / NaCl electrolyte / Au sandwich |
+| `solvent_box.py` | Pure solvent + dissolved species |
+| `multisolvent_box.py` | Mixed-solvent box with ratio/density/count modes |
+| `multilayer.py` | Five-layer multi-slab system |
+| `sandwich_from_traj.py` | Electrode / membrane / electrode sandwich from an equilibrated MD trajectory |
+| `polymer/polymer_piperion.py` | Co-polymer membrane box with explicit hydration number |
 
-The legacy `SimulationBox` API is still available and unchanged; see [examples/simulation_box/](examples/simulation_box/).
+Full API reference and user guide: [roncofaber.github.io/mdinterface](https://roncofaber.github.io/mdinterface)
+
+The legacy `SimulationBox` API is still available and unchanged; see [examples/legacy/](examples/legacy/).
 
 ## Roadmap
 

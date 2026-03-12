@@ -10,12 +10,15 @@ Created on Tue Jan 28 19:43:33 2025
 from mdinterface.io.read import read_lammps_data_file
 
 # not repo
+import logging
 import os
 import ase
 import ase.io
 import tempfile
 import shutil
 import subprocess
+
+logger = logging.getLogger(__name__)
 
 #%%
 
@@ -35,9 +38,9 @@ def cleanup(path, check_file):
         if os.path.exists(log_file_path):
             shutil.rmtree(path)
         else:
-            print(f"Log file {check_file} not found in {path}. Directory not removed.")
+            logger.warning("Log file %s not found in %s; directory not removed.", check_file, path)
     else:
-        print(f"{path} is neither a file nor a directory")
+        logger.warning("%s is neither a file nor a directory", path)
 
 def run_ligpargen(system, charge=None, is_snippet=False):
     """
@@ -52,10 +55,12 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     
     if "BOSSdir" not in os.environ:
         mdint = os.environ["MDINT_CONFIG_DIR"]
-        print("BOSS was NOT found. Please either:")
-        print("os.environ['BOSSdir'] = '/path/to/your/boss'")
-        print("add 'BOSSdir = /path/to/your/boss' in [settings] in the")
-        print(f"{mdint}/config.ini file.")
+        logger.warning(
+            "BOSSdir not set. Please either:\n"
+            "  os.environ['BOSSdir'] = '/path/to/your/boss'\n"
+            "  or add 'BOSSdir = /path/to/boss' in [settings] in %s/config.ini",
+            mdint,
+        )
         
     # Write the XYZ file and prepare to run ligpargen
     folder_name = tempfile.mkdtemp(prefix="ligpargen_")
@@ -77,14 +82,12 @@ def run_ligpargen(system, charge=None, is_snippet=False):
         result = subprocess.run(ligpargen_command, check=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
-        # Optionally log stdout for debugging
-        output = result.stdout.decode()
-        print("Command executed successfully, output captured:")
-        print(output)
-        
+        logger.debug("ligpargen completed successfully")
+        logger.debug("ligpargen stdout:\n%s", result.stdout.decode())
+
     except subprocess.CalledProcessError as e:
-        print(f"An error occurred while running the command: {e}")
-        print(e.stderr.decode())
+        logger.error("ligpargen failed: %s", e)
+        logger.debug("ligpargen stderr:\n%s", e.stderr.decode())
         
         # Write stderr output to the error log
         with open(error_log_path, 'w') as error_log_file:

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct 24 15:14:41 2023
+Legacy SimulationBox API (deprecated).
 
-@author: roncoroni
+This module is retained for backwards compatibility.  New scripts should use
+:class:`~mdinterface.build.builder.SimCell` instead.  The SimulationBox
+interface will not receive new features and may be removed in a future major
+version.
 """
 
 from typing import List, Dict, Union, Optional, Tuple, Any

@@ -1,0 +1,12 @@
+pages:
+  stage: deploy
+  image: python:3.11-slim
+  script:
+    - pip install -r docs/requirements.txt
+    - pip install -e .
+    - mkdocs build --site-dir public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

@@ -1,0 +1,69 @@
+site_name: mdinterface
+site_description: Build Interface Systems for Molecular Dynamics Simulations
+site_author: Fabrice Roncoroni
+repo_url: https://github.com/roncofaber/mdinterface
+repo_name: roncofaber/mdinterface
+edit_uri: ""
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: true
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Quick Start: quickstart.md
+  - User Guide:
+      - SimCell: guide/simcell.md
+      - Species: guide/specie.md
+      - Polymer: guide/polymer.md
+      - Database: guide/database.md
+      - Logging: guide/logging.md
+  - API Reference:
+      - SimCell: api/simcell.md
+      - Specie: api/specie.md
+      - Polymer: api/polymer.md
+      - Database: api/database.md
+      - Externals: api/externals.md
+      - I/O: api/io.md

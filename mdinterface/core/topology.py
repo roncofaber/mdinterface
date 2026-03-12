@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Apr 19 14:05:39 2024
+Force-field topology data classes: Atom, Bond, Angle, Dihedral, Improper.
 
-@author: roncofaber
+These lightweight dataclasses store the per-interaction parameters that are
+written to the LAMMPS data file by
+:class:`~mdinterface.io.lammpswriter.DATAWriter`.  They are matched against
+the molecular graph inside :class:`~mdinterface.core.specie.Specie` to
+identify which parameter set applies to each interaction.
 """
 
 import copy

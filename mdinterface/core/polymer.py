@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb  3 15:00:01 2025
+Polymer class: a Specie built from one or more repeating monomer units.
 
-@author: roncofaber
+Handles chain assembly, LigParGen-based topology refinement at junction
+points, and snippet caching to avoid redundant force-field calls.
 """
 
 # repo stuff
@@ -19,13 +20,59 @@ import copy
 #%%
 
 class Polymer(Specie):
+    """
+    A polymer chain built from one or more repeating monomer Specie objects.
+
+    Inherits from :class:`~mdinterface.core.specie.Specie`.  The monomers are
+    assembled into a linear chain with :func:`build_polymer`, then the parent
+    class handles topology and force-field setup.  Optionally, LigParGen is
+    called at each junction point to refine atom types and charges.
+
+    Parameters
+    ----------
+    monomers : Specie or list of Specie
+        Monomer unit(s) to polymerize.  A list defines a co-polymer sequence.
+        Each monomer's ASE ``Atoms`` must carry a ``polymerize`` array marking
+        the leaving atom (e.g. H or F) at each chain end: value ``1`` = head,
+        ``2`` = tail.  Those atoms are deleted during assembly and the bond
+        forms between the heavy atoms they were attached to.
+    nrep : int, optional
+        Number of monomer repetitions in the chain.
+    sequence : list of int, optional
+        Explicit monomer sequence indices when *monomers* is a list (e.g.
+        ``[0, 1, 0, 1]`` alternates two monomers).
+    refine_polymer : bool, default False
+        If True, run LigParGen at every junction point to obtain accurate
+        OPLS-AA parameters for the chain interior.  Requires LigParGen.
+    offset : bool, default False
+        If True, shift the total charge to match the nominal charge after
+        topology refinement.
+    ending : str, default "H"
+        Element symbol used to cap dangling bonds at chain termini during
+        LigParGen snippet calculations.
+
+    Notes
+    -----
+    Parameters not listed above (``charges``, ``atom_types``, ``lj``,
+    ``cutoff``, ``name``, ``lammps_data``, ``fix_missing``, ``chg_scaling``,
+    ``pbc``, ``ligpargen``, ``tot_charge``) are forwarded to
+    :class:`~mdinterface.core.specie.Specie`.
+
+    Examples
+    --------
+    ::
+
+        from mdinterface import Polymer
+        chain = Polymer(monomer, nrep=10)
+        chain = Polymer([monomer_A, monomer_B], sequence=[0,1,0,1,0,1])
+    """
 
     def __init__(self, monomers=None, charges=None, atom_types=None, bonds=None,
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
                  pbc=False, ligpargen=False, tot_charge=None, nrep=None,
                  sequence=None, refine_polymer=False, offset=False, ending="H"):
-        
+
         # initialize polymer stuff
         self._snippet_cache = {}
         self._sequence = sequence

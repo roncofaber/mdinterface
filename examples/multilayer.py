@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BoxBuilder example: multi-layer cell with heterogeneous electrolyte regions.
+SimCell example: multi-layer cell with heterogeneous electrolyte regions.
 
 This setup is impractical to express with the old SimulationBox API (which
 only supports one interface, one enderface, and one miderface slot). With
-BoxBuilder you can stack as many slabs and solvent regions as needed.
+SimCell you can stack as many slabs and solvent regions as needed.
 
 Layout (bottom to top):
     Au(111) slab        — bottom electrode
@@ -18,7 +18,7 @@ Layout (bottom to top):
 Author: roncofaber
 """
 
-from mdinterface import BoxBuilder
+from mdinterface import SimCell
 from mdinterface.database import Water, Ion, Metal111
 
 #%% Define species
@@ -35,7 +35,7 @@ platinum = Metal111("Pt")
 
 #%% Set up simulation box
 
-simbox = BoxBuilder(xysize=[20, 20])
+simbox = SimCell(xysize=[20, 20], verbose=1)
 
 #%% Add layers  (bottom → top)
 
@@ -53,7 +53,7 @@ simbox.add_vacuum(zdim=10)                                              # gap at
 
 #%% Build
 
-simbox.build(padding=0.5)
+simbox.build(padding=0.5, match_cell=gold)
 
 #%% Output
 

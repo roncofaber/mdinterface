@@ -1,0 +1,146 @@
+# SimCell
+
+`SimCell` is the main class for building MD simulation boxes. Add layers in the order they should appear along the z axis (you can rotate it later), then call `.build()` to assemble and pack everything.
+
+```python
+from mdinterface import SimCell
+```
+
+## Creating a SimCell
+
+```python
+simbox = SimCell(xysize=[15, 15], verbose=True)
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `xysize` | Target XY dimensions in Angstroms. Used as a tiling guide for slabs; the actual cell XY is set by the largest fitted slab. |
+| `verbose` | Verbosity: `False`/`0` = quiet, `True`/`1` = INFO, `2` = DEBUG, or a string like `"DEBUG"`. |
+
+## Adding layers
+
+You can add any type of layer to your system with the following methods. Call them in the order you want them along the stacking axis.
+
+### `add_slab(species, nlayers)`
+
+Adds a periodic solid layer by tiling a unit-cell `Specie` in XY. The number of repeats is chosen to cover the requested `xysize`; the actual XY cell is then set by the tiled footprint (an integer multiple of the unit cell). `nlayers` controls how many unit-cell layers are stacked along Z.
+
+```python
+from mdinterface.database import Metal111
+gold = Metal111("Au")
+simbox.add_slab(gold, nlayers=4)
+```
+
+When multiple slabs are present, each gets distinct atom-type labels (`_s0`, `_s1`, …) so their force-field parameters remain independent.
+
+### `add_prebuilt(species, nlayers)`
+
+Like `add_slab`, but skips XY tiling — the species positions are used exactly as provided. Intended for structures taken from a previous MD run or geometry optimisation (e.g. a relaxed electrode loaded with `hijack` and then saved back as a `Specie`).
+
+```python
+simbox.add_prebuilt(relaxed_electrode, nlayers=1)
+```
+
+Any centering or trimming should be done on the species before passing it here.
+
+### `add_solvent(solvent, zdim, ...)`
+
+Adds a PACKMOL-packed solvent (liquid) layer. Accepts a single `Specie`, a list of species for mixtures, or `None` for a solute-only region.
+
+```python
+from mdinterface.database import Water, Ion
+water = Water(model="ewald")
+na    = Ion("Na", ffield="Cheatham")
+
+simbox.add_solvent(
+    water,
+    zdim=25,
+    density=1.0,
+    solute=[na],
+    nsolute=5,
+    solute_pos="right",   # "left", "right", "center", or None (full box)
+)
+```
+
+**Mixing solvents:**
+
+```python
+simbox.add_solvent(
+    [water, methanol],
+    ratio=[3, 1],     # molar ratio
+    density=0.95,
+    zdim=30,
+)
+```
+
+**Key parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `solvent` | `Specie`, list of `Specie`, or `None` (solute-only) |
+| `zdim` | Z thickness of the layer in Angstroms |
+| `density` | Target density in g/cm³ |
+| `nsolvent` | Explicit molecule count (int or list) |
+| `ratio` | Molar ratio for multi-solvent mixtures |
+| `solute` | `Specie` or list of `Specie` to dissolve |
+| `nsolute` | Molecule count per solute species |
+| `solute_pos` | Placement region: `None`, `"left"`, `"right"`, `"center"` |
+| `dilate` | Expand the PACKMOL box by this fraction to help convergence |
+| `packmol_tolerance` | PACKMOL distance tolerance in Angstroms (default 2.0) |
+
+### `add_vacuum(zdim)`
+
+Adds an empty vacuum gap.
+
+```python
+simbox.add_vacuum(zdim=10)
+```
+
+## Building
+
+```python
+simbox.build(padding=0.5, center=False, stack_axis="z")
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `padding` | Extra space (Angstroms) added above/below each PACKMOL region |
+| `center` | Shift the system so the center of the first layer falls on the periodic boundary (z=0). Standard convention for electrode/electrolyte slabs. |
+| `layered` | Keep per-layer residue numbering instead of merging |
+| `match_cell` | `True` (default): stretch all slabs to the largest XY cell, ensuring a consistent solid/liquid interface. `False`: each slab keeps its natural tiled XY. A `Specie`: lock XY to that species' cell and stretch everything else to match — useful when a pre-relaxed slab or polymer defines the cell. |
+| `hijack` | Replace positions and cell with a prebuilt `ase.Atoms` object |
+| `stack_axis` | Stacking direction: `"z"` (default), `"x"`, or `"y"` |
+
+### Stacking axis
+
+By default the system is assembled along Z. Use `stack_axis` to permute coordinates at the end:
+
+```python
+simbox.build(stack_axis="x")   # stacking direction becomes X
+```
+
+This is a coordinate permutation applied after assembly, but the build process itself always runs along Z.
+
+## Output
+
+```python
+# LAMMPS data file
+simbox.write_lammps("data.lammps", atom_style="full", write_coeff=True)
+
+# ASE Atoms object
+atoms = simbox.to_ase()
+
+# MDAnalysis Universe
+universe = simbox.universe
+```
+
+## Verbosity
+
+```python
+import mdinterface
+mdinterface.set_verbosity("DEBUG")   # package-wide
+mdinterface.set_verbosity(1)         # INFO
+mdinterface.set_verbosity(0)         # quiet
+```
+
+See the [Logging guide](logging.md) for details.

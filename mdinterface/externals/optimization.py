@@ -8,10 +8,13 @@ Created on XXX
 @author: roncofaber
 """
 
+import logging
 import ase
 import numpy as np
 from ase.optimize import BFGS, LBFGS, FIRE
 import warnings
+
+logger = logging.getLogger(__name__)
 
 #%%
 
@@ -58,10 +61,16 @@ def relax_structure(atoms, optimizer='FIRE', fmax=0.05, steps=200,
     # Initialize optimizer
     opt_class = optimizer_dict[optimizer]
     
-    # Create
+    logger.info("Relaxing: %d atoms,  optimizer=%s,  fmax=%.3f eV/Å,  max steps=%d",
+                len(atoms), optimizer, fmax, steps)
+
     dyn = opt_class(atoms, trajectory=trajectory, logfile=logfile, **kwargs)
-    
-    dyn.run(fmax, steps)
+    converged = dyn.run(fmax, steps)
+
+    if converged:
+        logger.info("  └─> converged in %d steps", dyn.get_number_of_steps())
+    else:
+        logger.warning("  └─> NOT converged after %d steps", steps)
 
     return atoms
 

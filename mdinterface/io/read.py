@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct 24 18:33:06 2024
+Readers for LAMMPS data and dump files.
 
-@author: roncofaber
+Wraps ASE's LAMMPS I/O with mdinterface topology reconstruction so that
+:class:`~mdinterface.core.specie.Specie` objects can be initialised directly
+from LAMMPS data files, and trajectory frames can be loaded for use with the
+``hijack`` mode of :meth:`~mdinterface.build.builder.SimCell.build`.
 """
 
 import collections
+import logging
 from io import StringIO
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 import ase
 import ase.visualize
@@ -21,6 +27,7 @@ from mdinterface.utils.auxiliary import mass2symbol
 #%%
 
 def read_lammps_data_file(filename, pbc=False, ato_start_idx=0, is_snippet=False):
+    logger.debug("Reading LAMMPS data file: %s", filename)
     system = ase.io.lammpsdata.read_lammps_data(filename)
     
     if not pbc:
@@ -146,6 +153,8 @@ def read_lammps_data_file(filename, pbc=False, ato_start_idx=0, is_snippet=False
                 impropers.append(improper)
 
     system.new_array("stype", np.array(atoms))
+    logger.debug("  └─> %d atoms, %d bonds, %d angles, %d dihedrals, %d impropers",
+                 len(atoms), len(bonds), len(angles), len(dihedrals), len(impropers))
     return system, atoms, bonds, angles, dihedrals, impropers
 
 
@@ -166,6 +175,32 @@ def _iter_lammps_dump_frames(filename):
             yield "".join(lines)
 
 
+def _read_last_frame_text(filename):
+    """Return the raw text of the last frame by seeking backwards from EOF.
+
+    Scans from the end of the file in 64 KiB chunks until the last
+    ``ITEM: TIMESTEP`` marker is found.  This is O(frame size) rather than
+    O(file size), making it orders of magnitude faster on multi-GB trajectories.
+    """
+    marker = b"ITEM: TIMESTEP"
+    chunk_size = 1 << 16  # 64 KiB
+    with open(filename, "rb") as fh:
+        fh.seek(0, 2)
+        pos = fh.tell()
+        buf = b""
+        while True:
+            step = min(chunk_size, pos)
+            pos -= step
+            fh.seek(pos)
+            buf = fh.read(step) + buf
+            idx = buf.rfind(marker)
+            if idx != -1:
+                return buf[idx:].decode()
+            if pos == 0:
+                break
+    return buf.decode()
+
+
 def read_lammps_nth_frame(filename, frame=-1):
     """
     Read a single frame from a LAMMPS dump file without loading the full trajectory.
@@ -177,8 +212,8 @@ def read_lammps_nth_frame(filename, frame=-1):
     frame : int
         Frame index. ``0`` = first frame, ``-1`` = last frame (default),
         ``-2`` = second-to-last, etc.
-        For non-negative indices the file is read only up to that frame,
-        making this efficient even for large trajectories.
+        Reading the last frame (``frame=-1``) seeks from the end of the file
+        and is O(frame size), making it fast even for multi-GB trajectories.
 
     Returns
     -------
@@ -190,7 +225,13 @@ def read_lammps_nth_frame(filename, frame=-1):
     IndexError
         If the requested frame index is out of range.
     """
-    if frame >= 0:
+    logger.debug("Reading frame %d from dump: %s", frame, filename)
+    if frame == -1:
+        # Fast path: seek from EOF -- O(frame size) regardless of file size.
+        return ase.io.lammpsrun.read_lammps_dump_text(
+            StringIO(_read_last_frame_text(filename))
+        )
+    elif frame >= 0:
         for ii, chunk in enumerate(_iter_lammps_dump_frames(filename)):
             if ii == frame:
                 return ase.io.lammpsrun.read_lammps_dump_text(StringIO(chunk))

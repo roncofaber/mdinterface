@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Aug  5 17:13:50 2024
+Graphene species with OPLS-AA force-field parameters.
 
-@author: roncofaber
+Bond, angle, dihedral, and improper parameters from
+Jorgensen & Severance, J. Am. Chem. Soc. 1990;
+LJ parameters (epsilon=0.07 kcal/mol, sigma=3.55 Å) from
+Koenig et al., Adv. Mater. 2018.
 """
 
 import numpy as np
@@ -17,6 +20,25 @@ import ase
 
 # graphene https://onlinelibrary.wiley.com/doi/10.1002/adma.201705791
 class Graphene(Specie):
+    """
+    Single graphene sheet with OPLS-AA force-field parameters.
+
+    The unit cell is built with :func:`ase.build.graphene` and the
+    interlayer spacing is set to 3.35 Å.  Bond, angle, dihedral, and
+    improper parameters follow the OPLS-AA graphene parametrisation.
+
+    Parameters
+    ----------
+    **kwargs
+        Forwarded to :class:`~mdinterface.core.specie.Specie`.
+
+    Examples
+    --------
+    ::
+
+        from mdinterface.database import Graphene
+        grap = Graphene()
+    """
     def __init__(self, **kwargs):
         system = ase.build.graphene()
         system.cell[-1][-1] = 3.35

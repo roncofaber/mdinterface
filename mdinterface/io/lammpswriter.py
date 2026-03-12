@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed Oct 25 15:03:47 2023
+LAMMPS data-file writer for MDAnalysis Universe objects.
 
-@author: roncoroni
+Writes atom positions, bonds, angles, dihedrals, and impropers in the
+LAMMPS ``full`` (or ``atomic``) atom style, optionally appending a
+force-field coefficient block for direct use with LAMMPS ``include``.
 """
 
+import logging
 from typing import Dict, List, Optional, Union, TextIO, Any
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from MDAnalysis.lib import util, mdamath
 from MDAnalysis.core.groups import requires
@@ -149,7 +154,7 @@ class DATAWriter(base.WriterBase):
                         'atoms with same type must have same mass')
         
         
-            self.f.write('{:d} {:> 8.3f}   # {}\n'.format(cc+1, mass, atype))
+            self.f.write('{:>3d} {:> 8.3f}   # {}\n'.format(cc+1, mass, atype))
 
     def _write_bonds(self, bonds):
         self.f.write('\n')

@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jan 14 10:34:26 2025
+Convert a continuum concentration profile into discrete ion positions for PACKMOL.
 
-@author: roncofaber
+Integrates a spatially-varying concentration curve (e.g. from a DFT-continuum
+model or a fit to MD data) over the simulation-box cross-section to compute
+how many ions belong in each Z-slice, then returns the bin positions to be
+passed as PACKMOL fixed-placement instructions.
 """
+
+import logging
 
 from ase import units
 import numpy as np
 from scipy import integrate
+
+logger = logging.getLogger(__name__)
 
 #%%
 # return a discrete concentration profile given a "continuum" conc. profile
@@ -42,4 +49,6 @@ def discretize_concentration(specie, conc_profile, z_coords, volume):
         z_pos.append((z_coords.max()+bins[-1])/2)
         Nions += 1
     
+    logger.debug("  └─> concentration model: %d ions placed from %d z-points",
+                 len(z_pos), len(z_coords))
     return z_pos

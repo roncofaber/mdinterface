@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-BoxBuilder example: mixed-solvent box (water + methanol).
+SimCell example: mixed-solvent box (water + methanol).
 
 Demonstrates the three ways to specify solvent composition when multiple
 solvent species are present.  A dissolved NaCl salt is added on top.
@@ -15,7 +15,7 @@ Mixing modes (choose one):
 Author: roncofaber
 """
 
-from mdinterface import BoxBuilder
+from mdinterface import SimCell
 from mdinterface.database import Water, Ion
 from mdinterface.core.specie import Specie
 
@@ -31,7 +31,7 @@ cl = Ion("Cl", ffield="Cheatham")
 
 #%% Set up simulation box
 
-simbox = BoxBuilder(
+simbox = SimCell(
     xysize=[25, 25],
     verbose=True,
 )
