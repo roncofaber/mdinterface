@@ -12,6 +12,9 @@ from typing import List, Optional, Union, Tuple, Any
 from mdinterface.io.packmol import header, box_place, fix_place
 
 import logging
+import os
+import shutil
+import tempfile
 import MDAnalysis as mda
 
 import numpy as np
@@ -23,8 +26,6 @@ logger = logging.getLogger(__name__)
 def populate_box(
     volume: List[float],
     instructions: List[Tuple[Any, Union[int, List[float]], str]],
-    input_file: str = "input_packmol.in",
-    output_file: str = "system.pdb",
     tolerance: float = 2.0
 ) -> Optional[mda.Universe]:
     """
@@ -45,10 +46,6 @@ def populate_box(
     instructions : list of tuple
         Packing instructions (see above).  An empty list returns ``None``
         immediately without calling PACKMOL.
-    input_file : str, default ``"input_packmol.in"``
-        Path for the generated PACKMOL input file.
-    output_file : str, default ``"system.pdb"``
-        Path for the PACKMOL output PDB file.
     tolerance : float, default 2.0
         Minimum intermolecular distance in Angstroms passed to PACKMOL.
 
@@ -63,70 +60,76 @@ def populate_box(
 
     # check volume
     assert len(volume) == 3, "Check volume!"
-    
+
     # generate box boundaries with 1 AA padding
     box = np.concatenate(([1,1,1], np.asarray(volume)-1)).tolist()
-    
-    tmp_files = ["packmol.log", "input_packmol.in", "system.pdb"]
-    with open(input_file, "w") as fout:
-        
-        fout.write(header.format(tolerance, output_file, np.random.randint(100000)))
-        
-        for cc, instruction in enumerate(instructions):
 
-            # unpack instructions
-            mol = instruction[0]
-            rep = instruction[1]
-            typ = instruction[2]
-            custom_bounds = instruction[3] if len(instruction) > 3 else None
-
-            if isinstance(rep, int):
-                if not rep:
-                    continue
-
-            if typ == "box": # normal add
-                bounds = custom_bounds if custom_bounds is not None else box
-                fout.write(box_place.format(cc, rep, " ".join(map(str, bounds))))
-            
-            elif typ == "fixed": # coordinate -> fixed point
-                fout.write(fix_place.format(cc, *rep))
-                
-            elif typ == "zfixed": # small bin to use in CM
-                tbox = box.copy()
-                tbox[2] = tbox[2] - mol.estimate_specie_radius()
-                tbox[5] = tbox[5] + mol.estimate_specie_radius()
-                fout.write(box_place.format(cc, 1, " ".join(map(str, tbox))))
-                mol = mol.to_universe()
-            
-            else:
-                raise ValueError("Wrong instructions")
-            
-            # write tmp pdb file and store info
-            mol.atoms.write("mol_{}.pdb".format(cc))
-            tmp_files.append("mol_{}.pdb".format(cc))
-            
-    # run packmol
-    logger.debug("  ├> Running PACKMOL (tolerance=%.1f Å, %d molecule type(s))",
-                 tolerance, len(instructions))
-    try:
-        with open(input_file, 'r') as stdin_f, open('packmol.log', 'w') as stdout_f:
-            subprocess.run(['packmol'], stdin=stdin_f, stdout=stdout_f, check=True)
-        logger.debug("  ├> PACKMOL converged")
-
-    except subprocess.CalledProcessError:
-        logger.warning("  ├> PACKMOL may not have converged - check packmol.log")
+    # all PACKMOL files go in a temp dir; kept on failure for inspection
+    tmpdir = tempfile.mkdtemp(prefix="packmol_")
+    input_file  = os.path.join(tmpdir, "input_packmol.in")
+    output_file = os.path.join(tmpdir, "system.pdb")
+    log_file    = os.path.join(tmpdir, "packmol.log")
 
     try:
-        universe = mda.Universe(output_file)
-        logger.debug("  └─> PACKMOL output: %d atoms", len(universe.atoms))
+        with open(input_file, "w") as fout:
+            fout.write(header.format(tolerance, output_file, np.random.randint(100000)))
+
+            for cc, instruction in enumerate(instructions):
+
+                # unpack instructions
+                mol = instruction[0]
+                rep = instruction[1]
+                typ = instruction[2]
+                custom_bounds = instruction[3] if len(instruction) > 3 else None
+
+                if isinstance(rep, int):
+                    if not rep:
+                        continue
+
+                if typ == "box":  # normal add
+                    bounds = custom_bounds if custom_bounds is not None else box
+                    fout.write(box_place.format(cc, rep, " ".join(map(str, bounds))))
+
+                elif typ == "fixed":  # coordinate -> fixed point
+                    fout.write(fix_place.format(cc, *rep))
+
+                elif typ == "zfixed":  # small bin to use in CM
+                    tbox = box.copy()
+                    tbox[2] = tbox[2] - mol.estimate_specie_radius()
+                    tbox[5] = tbox[5] + mol.estimate_specie_radius()
+                    fout.write(box_place.format(cc, 1, " ".join(map(str, tbox))))
+                    mol = mol.to_universe()
+
+                else:
+                    raise ValueError("Wrong instructions")
+
+                mol.atoms.write(os.path.join(tmpdir, "mol_{}.pdb".format(cc)))
+
+        # run packmol
+        logger.debug("  ├> Running PACKMOL (tolerance=%.1f Å, %d molecule type(s))",
+                     tolerance, len(instructions))
+        with open(input_file, "r") as stdin_f, open(log_file, "w") as stdout_f:
+            result = subprocess.run(["packmol"], stdin=stdin_f, stdout=stdout_f, cwd=tmpdir)
+
+        if result.returncode != 0:
+            logger.warning("  ├> PACKMOL may not have converged - check %s", tmpdir)
+        else:
+            logger.debug("  ├> PACKMOL converged")
+
+        try:
+            universe = mda.Universe(output_file)
+            logger.debug("  └─> PACKMOL output: %d atoms", len(universe.atoms))
+        except Exception:
+            logger.warning("  └─> Could not load PACKMOL output; temp files kept at: %s", tmpdir)
+            return None
+
+        # success -- clean up
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        return universe
+
     except Exception:
-        logger.warning("  └─> Could not load PACKMOL output file '%s'", output_file)
-        universe = None
-
-    # remove temp mol files and packmol files
-    subprocess.call(['rm'] + tmp_files)
-    
-    return universe
+        logger.warning("  └─> PACKMOL failed; temp files kept at: %s", tmpdir)
+        raise
 
 def make_interface_slab(interface_uc, xsize, ysize, layers=1):
     """
