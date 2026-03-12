@@ -79,7 +79,7 @@ def run_aimd(atoms, timestep=0.5, temperature_K=300, friction=0.1, steps=1000,
     try:
         predictor = pretrained_mlip.get_predict_unit("uma-s-1p1", device="cuda")
         calc = FAIRChemCalculator(predictor, task_name="omol")
-        logger.debug("  ├> UMA calculator loaded")
+        logger.debug("  >> UMA calculator loaded")
     except Exception as e:
         raise ValueError(f"Error loading UMA or OMol models: {e}")
 
@@ -87,7 +87,7 @@ def run_aimd(atoms, timestep=0.5, temperature_K=300, friction=0.1, steps=1000,
 
     # start velocities
     MaxwellBoltzmannDistribution(aimd_atoms, temperature_K=temperature_K)
-    logger.debug("  ├> Maxwell-Boltzmann velocities initialized")
+    logger.debug("  >> Maxwell-Boltzmann velocities initialized")
 
     # Initialize Langevin dynamics
     dyn = Langevin(
@@ -102,14 +102,14 @@ def run_aimd(atoms, timestep=0.5, temperature_K=300, friction=0.1, steps=1000,
     if trajectory:
         npt_traj = Trajectory(trajectory, mode="w", atoms=aimd_atoms)
         dyn.attach(npt_traj.write, interval=1)
-        logger.debug("  ├> trajectory -> %s", trajectory)
+        logger.debug("  >> trajectory -> %s", trajectory)
     if logfile:
         npt_log  = MDLogger(dyn, aimd_atoms, logfile, stress=False, peratom=False, mode="w")
         dyn.attach(npt_log, interval=1)
-        logger.debug("  ├> log        -> %s", logfile)
+        logger.debug("  >> log        -> %s", logfile)
 
     # Run the dynamics
     dyn.run(steps)
-    logger.info("  └─> done: %.3f ps simulated", timestep * steps / 1000)
+    logger.info("  >> done: %.3f ps simulated", timestep * steps / 1000)
 
     return aimd_atoms

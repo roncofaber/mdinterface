@@ -49,6 +49,6 @@ def discretize_concentration(specie, conc_profile, z_coords, volume):
         z_pos.append((z_coords.max()+bins[-1])/2)
         Nions += 1
     
-    logger.debug("  └─> concentration model: %d ions placed from %d z-points",
+    logger.debug("  >> concentration model: %d ions placed from %d z-points",
                  len(z_pos), len(z_coords))
     return z_pos

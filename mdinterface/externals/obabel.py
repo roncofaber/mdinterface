@@ -48,6 +48,6 @@ def run_OBChargeModel(atoms, charge_type="eem"):
     ob_charge_model = ob.OBChargeModel.FindType(charge_type)
     ob_charge_model.ComputeCharges(mol)
     charges = np.array(ob_charge_model.GetPartialCharges())
-    logger.debug("  └─> charges: sum=%.4f, min=%.4f, max=%.4f", charges.sum(), charges.min(), charges.max())
+    logger.debug("  >> charges: sum=%.4f, min=%.4f, max=%.4f", charges.sum(), charges.min(), charges.max())
 
     return charges

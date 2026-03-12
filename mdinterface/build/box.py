@@ -106,21 +106,21 @@ def populate_box(
                 mol.atoms.write(os.path.join(tmpdir, "mol_{}.pdb".format(cc)))
 
         # run packmol
-        logger.debug("  ├> Running PACKMOL (tolerance=%.1f Å, %d molecule type(s))",
+        logger.debug("  >> Running PACKMOL (tolerance=%.1f Å, %d molecule type(s))",
                      tolerance, len(instructions))
         with open(input_file, "r") as stdin_f, open(log_file, "w") as stdout_f:
             result = subprocess.run(["packmol"], stdin=stdin_f, stdout=stdout_f, cwd=tmpdir)
 
         if result.returncode != 0:
-            logger.warning("  ├> PACKMOL may not have converged - check %s", tmpdir)
+            logger.warning("  >> PACKMOL may not have converged - check %s", tmpdir)
         else:
-            logger.debug("  ├> PACKMOL converged")
+            logger.debug("  >> PACKMOL converged")
 
         try:
             universe = mda.Universe(output_file)
-            logger.debug("  └─> PACKMOL output: %d atoms", len(universe.atoms))
+            logger.debug("  >> PACKMOL output: %d atoms", len(universe.atoms))
         except Exception:
-            logger.warning("  └─> Could not load PACKMOL output; temp files kept at: %s", tmpdir)
+            logger.warning("  >> Could not load PACKMOL output; temp files kept at: %s", tmpdir)
             return None
 
         # success -- clean up
@@ -128,7 +128,7 @@ def populate_box(
         return universe
 
     except Exception:
-        logger.warning("  └─> PACKMOL failed; temp files kept at: %s", tmpdir)
+        logger.warning("  >> PACKMOL failed; temp files kept at: %s", tmpdir)
         raise
 
 def make_interface_slab(interface_uc, xsize, ysize, layers=1):

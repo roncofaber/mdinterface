@@ -82,9 +82,6 @@ def write_gromacs_itp(specie, filename=None):
     filename : str, optional
         Output filename. Defaults to ``{resname}.itp``.
     """
-    logger.warning(
-        "write_gromacs_itp is experimental -- verify output before production use."
-    )
     if filename is None:
         filename = f"{specie.resname}.itp"
 
@@ -224,7 +221,6 @@ def write_gromacs_itp(specie, filename=None):
                 f.write(_DIHS_FMT.format(ai+1, aj+1, ak+1, al+1, 4, phi0, kphi, n))
             f.write("\n")
 
-    logger.debug("Wrote GROMACS ITP: %s", filename)
 
 
 def write_gromacs_top(universe, itp_files, filename="system.top",
@@ -271,4 +267,3 @@ def write_gromacs_top(universe, itp_files, filename="system.top",
         for resname, count in seen.items():
             f.write(f"  {resname:<14s}  {count:>6d}\n")
 
-    logger.debug("Wrote GROMACS TOP: %s", filename)

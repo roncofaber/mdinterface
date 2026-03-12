@@ -119,7 +119,7 @@ def _candidate_cut_bonds(specie, n_needed=1):
         if best_diff <= max_diff:
             if tier_num > 0:
                 logger.info(
-                    "  ├> using tier-%d cut criteria "
+                    "  >> using tier-%d cut criteria "
                     "(tier-1 bonds cannot give a balanced split)",
                     tier_num + 1)
             return candidates
@@ -288,7 +288,7 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     return system, atoms, bonds, angles, dihedrals, impropers
 
 
-def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False,
+def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=True,
                                  segment_size=200):
     """
     Assign OPLS-AA force-field parameters to a ``Specie`` via LigParGen using
@@ -338,7 +338,7 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False,
 
     n_segments = math.ceil(natoms / segment_size)
     n_cuts     = n_segments - 1
-    logger.info("refine_large_specie_topology: %d atoms -> %d segments",
+    logger.info("Refining topology for %d-atom molecule -- %d segment(s) via LigParGen",
                 natoms, n_segments)
 
     # ------------------------------------------------------------------
@@ -354,8 +354,9 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False,
 
     cut_edges, segments = _balanced_cuts(specie, n_cuts, candidates)
     for ii, seg in enumerate(segments):
-        logger.info("  ├> segment %d: %d atoms", ii, len(seg))
-    logger.info("  ├> cut bonds: %s", cut_edges)
+        logger.info("  >> segment %d: %d atoms", ii, len(seg))
+    logger.info("  >> cut bond(s): %s",
+                ", ".join(f"{int(a)} -- {int(b)}" for a, b in cut_edges) or "none")
 
     # ------------------------------------------------------------------
     # 2. Run LigParGen on each segment, accumulate topology
@@ -366,7 +367,7 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False,
 
     for seg_idx, seg_set in enumerate(segments):
         seg_indices = sorted(seg_set)
-        logger.info("  ├> ligpargen on segment %d (%d atoms)...",
+        logger.info("  >> ligpargen on segment %d (%d atoms)...",
                     seg_idx, len(seg_indices))
 
         capped, n_real = _make_capped_segment(
@@ -411,7 +412,7 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False,
         # One snippet per cut, centred on ci (it is bonded to cj so the
         # snippet naturally spans both sides of the cut)
         center = ci
-        logger.info("  ├> refining junction at bond (%d, %d)...", ci, cj)
+        logger.info("  >> refining junction at atoms %d -- %d...", ci, cj)
 
         snippet, snippet_idxs = make_snippet(specie, center, Nmax,
                                              ending=ending)
@@ -454,6 +455,6 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False,
         charges -= (charges.sum() - target) / natoms
 
     specie.atoms.set_initial_charges(charges)
-    logger.info("  └─> done.  Total charge: %.4f  (target %d)",
+    logger.info("  >> done.  Total charge: %.4f  (target %d)",
                 charges.sum(),
                 int(specie.atoms.arrays["nominal_charge"].sum()))

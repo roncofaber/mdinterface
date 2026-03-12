@@ -72,7 +72,7 @@ def make_ase_calc_uma(specie, task_name="omol", model_name="uma-s-1p1"):
 
         predictor = pretrained_mlip.get_predict_unit(model_name=model_name, device="cuda")
         calc = FAIRChemCalculator(predictor, task_name="omol")
-        logger.debug("  └─> UMA calculator ready")
+        logger.debug("  >> UMA calculator ready")
     except Exception:
         raise ValueError("No UMA and OMol stuff")
 

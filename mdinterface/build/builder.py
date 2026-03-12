@@ -55,10 +55,10 @@ def _log_layer_result(n_atoms, dims, zdim, layer_zdim, extra_lines=()):
     """
     if n_atoms is not None and dims is not None:
         x, y, z = dims
-        logger.info("  ├> %d atoms  |  %.3f x %.3f x %.3f Å", n_atoms, x, y, z)
+        logger.info("  >> %d atoms  |  %.3f x %.3f x %.3f Å", n_atoms, x, y, z)
     for line in extra_lines:
-        logger.info("  ├> %s", line)
-    logger.info("  └─> total z: %.2f Å  (+%.2f Å)", zdim, layer_zdim)
+        logger.info("  >> %s", line)
+    logger.info("  >> layer z: +%.2f Å  |  total z: %.2f Å", layer_zdim, zdim)
 
 
 class SimCell:
@@ -114,7 +114,7 @@ class SimCell:
         self._universe: Optional[mda.Universe] = None
         
         log_banner(logger, "mdinterface :: SimCell", f"version {_get_mdi_version()}")
-        logger.info("  └─> xysize: %.2f x %.2f Å", xsize, ysize)
+        logger.info("  >> xysize: %.2f x %.2f Å", xsize, ysize)
 
     # ------------------------------------------------------------------
     # Layer-adding methods (chainable)
@@ -341,7 +341,7 @@ class SimCell:
             )
 
         log_header(logger, "Build")
-        logger.info("  ├> %d layers, padding=%.2f Å",
+        logger.info("  >> %d layer(s)  |  inter-layer padding: %.2f Å",
                     len(self._layers), padding)
 
         self._update_topology_indexes()
@@ -358,24 +358,24 @@ class SimCell:
         res_counts = Counter(res.resname for res in system.residues)
 
         log_header(logger, "Done")
-        logger.info("  ├> %d atoms  |  %.3f x %.3f x %.3f Å",
+        logger.info("  >> %d atoms  |  %.3f x %.3f x %.3f Å",
                     len(system.atoms), xsize, ysize, zdim)
-        logger.info("  ├> %d layers  |  %d residues",
+        logger.info("  >> %d layers  |  %d residues",
                     len(self._layers), len(system.residues))
         parts = [f"{name} ({n} mol)" for name, n in res_counts.items()]
         for i in range(0, len(parts), 3):
-            logger.info("  ├> %s", ",  ".join(parts[i:i + 3]))
+            logger.info("  >> %s", ",  ".join(parts[i:i + 3]))
 
         if center:
             shift = zdim - first_layer_zdim / 2
             system.atoms.translate([0, 0, shift])
             _ = system.atoms.wrap()
-            logger.info("  └─> system centered on first layer (shift %.2f Å)", shift)
+            logger.info("  >> system centered on first layer (shift %.2f Å)", shift)
 
         if hijack is not None:
             system.dimensions = hijack.get_cell_lengths_and_angles()
             system.atoms.positions = hijack.get_positions()
-            logger.info("  └─> positions and cell overridden by hijack ase.Atoms")
+            logger.info("  >> positions and cell overridden by hijack ase.Atoms")
 
         if stack_axis != "z":
             system, xsize, ysize = self._apply_stack_axis(system, xsize, ysize, zdim, stack_axis)
@@ -416,7 +416,7 @@ class SimCell:
             raise RuntimeError("Call build() before write_lammps().")
 
         log_header(logger, "Output")
-        logger.info("  ├> %s  (style=%s,  coeff=%s)", filename, atom_style, write_coeff)
+        logger.info("  >> LAMMPS data file: %s  (style=%s,  coeff=%s)", filename, atom_style, write_coeff)
         system = self._universe.copy()
 
         if not write_coeff:
@@ -449,7 +449,7 @@ class SimCell:
             nbonds = len(system.atoms.bonds)
         except Exception:
             nbonds = 0
-        logger.info("  └─> %d atoms,  %d bonds  written", len(system.atoms), nbonds)
+        logger.info("  >> Written: %d atoms,  %d bonds", len(system.atoms), nbonds)
         return
 
     def write_gromacs(
@@ -498,10 +498,10 @@ class SimCell:
         import os
         os.makedirs(outdir, exist_ok=True)
 
+        log_header(logger, "Output")
         logger.warning(
             "write_gromacs is experimental -- verify output before production use."
         )
-        log_header(logger, "Output")
 
         # -- one ITP per unique species (keyed by resname) -----------------
         itp_basenames = []
@@ -513,18 +513,18 @@ class SimCell:
                 write_gromacs_itp(sp, filename=itp_path)
                 itp_basenames.append(itp_name)   # basename only for #include
                 written.add(sp.resname)
-                logger.info("  ├> %s", itp_path)
+                logger.info("  >> Species topology: %s", itp_path)
 
         # -- coordinates (.gro) --------------------------------------------
         gro_file = os.path.join(outdir, f"{prefix}.gro")
         self._universe.atoms.write(gro_file)
-        logger.info("  ├> %s  (%d atoms)", gro_file, len(self._universe.atoms))
+        logger.info("  >> Coordinates:      %s  (%d atoms)", gro_file, len(self._universe.atoms))
 
         # -- system topology (.top) ----------------------------------------
         top_file = os.path.join(outdir, f"{prefix}.top")
         write_gromacs_top(self._universe, itp_basenames,
                           filename=top_file, system_name=system_name)
-        logger.info("  └─> %s", top_file)
+        logger.info("  >> System topology:  %s", top_file)
 
     def to_ase(self) -> ase.Atoms:
         """
@@ -605,13 +605,13 @@ class SimCell:
             else:
                 xsize = cell_ref.atoms.get_cell()[0][0]
                 ysize = cell_ref.atoms.get_cell()[1][1]
-            logger.info("  ├> Reference cell: %s:  %.3f x %.3f Å",
+            logger.info("  >> Reference cell: %s:  %.3f x %.3f Å",
                         getattr(cell_ref, "resname", "?"), xsize, ysize)
-            logger.info("  └─> All slabs will be stretched to match it")
+            logger.info("  >> All slabs will be stretched to match it")
         else:
             xsize, ysize = self._xsize, self._ysize
             if do_match:
-                logger.info("  └─> No reference cell: using largest XY slab")
+                logger.info("  >> No reference cell: using largest XY slab")
 
         return xsize, ysize, cell_ref, do_match
 
@@ -646,7 +646,7 @@ class SimCell:
             zi = np.dot([0, 0, 1], tslab.atoms.cell @ [0, 0, 1])
             slab_dims.append((xi, yi))
             layer["_native_xy"] = (xi, yi)
-            logger.info("  ├> %s:  %.3f x %.3f x %.3f Å,  %d atoms",
+            logger.info("  >> %s:  %.3f x %.3f x %.3f Å,  %d atoms",
                         getattr(layer["species"], "resname", "?"),
                         xi, yi, zi, len(tslab.atoms))
 
@@ -656,7 +656,7 @@ class SimCell:
                 # requested xysize (which was only used as a tiling target).
                 xsize = max(d[0] for d in slab_dims)
                 ysize = max(d[1] for d in slab_dims)
-            logger.info("  └─> Final XY size: %.3f x %.3f Å", xsize, ysize)
+            logger.info("  >> Final XY size: %.3f x %.3f Å", xsize, ysize)
             self._check_xy_mismatch(slab_dims, xsize, ysize)
 
         return xsize, ysize
@@ -694,7 +694,7 @@ class SimCell:
                 name  = getattr(layer["species"], "resname", "?")
                 label = layer.get("label", "slab")
                 log_subheader(logger, f"Layer {tag}")
-                logger.info("  ├> %s: %s,  %d layer(s)", label, name, layer["nlayers"])
+                logger.info("  >> %s: %s,  %d layer(s)", label, name, layer["nlayers"])
                 slab_u = layer["_slab"].to_universe(
                     layered=layered, match_cell=do_match, xydim=[xsize, ysize]
                 )
@@ -716,9 +716,9 @@ class SimCell:
                     getattr(s, "resname", "?") for s in layer["solvent"]
                 ) or "ions"
                 log_subheader(logger, f"Layer {tag}")
-                logger.info("  ├> solvent: %s", solv_names)
+                logger.info("  >> solvent: %s", solv_names)
                 if layer["density"] is not None:
-                    logger.info("  ├> density: %.2f g/cm³", layer["density"])
+                    logger.info("  >> density: %.2f g/cm³", layer["density"])
                 solv_box = self._build_solvent_layer(layer, xsize, ysize, all_sp_univs)
                 if solv_box is not None:
                     zdim_before = zdim
@@ -733,18 +733,18 @@ class SimCell:
                         for s in all_sp
                     )
                     if mol_line:
-                        logger.info("  ├> %s", mol_line)
+                        logger.info("  >> %s", mol_line)
                     _log_layer_result(len(solv_box.atoms), (svx, svy, svz),
                                       zdim, layer_zdim)
                 else:
-                    logger.warning("  └─> empty; check packmol.log")
+                    logger.warning("  >> empty; check packmol.log")
                     system, zdim = add_component(system, solv_box, zdim, padding=padding)
 
             elif ltype == "vacuum":
                 layer_zdim = layer["zdim"]
                 zdim += layer_zdim
                 log_subheader(logger, f"Layer {tag}")
-                logger.info("  ├> vacuum: %.1f Å", layer_zdim)
+                logger.info("  >> vacuum: %.1f Å", layer_zdim)
                 _log_layer_result(None, None, zdim, layer_zdim)
 
             if ii == 0:
@@ -770,7 +770,7 @@ class SimCell:
 
         if dilate != 1.0:
             logger.info(
-                "  ├> dilation x%.2f: packing %.1f Å at %.3f g/cm³  (target: %.1f Å)",
+                "  >> dilation x%.2f: packing %.1f Å at %.3f g/cm³  (target: %.1f Å)",
                 dilate, eff_zdim,
                 eff_rho if eff_rho is not None else float("nan"),
                 layer["zdim"],
@@ -892,7 +892,7 @@ class SimCell:
             system.atoms.positions = pos[:, [0, 2, 1]]
             system.dimensions = [xsize, zdim, ysize, 90, 90, 90]
             new_xsize, new_ysize = xsize, zdim
-        logger.info("  └─> axis permuted Z -> %s", stack_axis.upper())
+        logger.info("  >> axis permuted Z -> %s", stack_axis.upper())
         return system, new_xsize, new_ysize
 
     def _register(self, *species: Any) -> None:
@@ -931,7 +931,7 @@ class SimCell:
                 stype.set_id(idx + 1)
 
         logger.debug(
-            "  └─> %d species,  %d atom types,  %d bond,  %d angle,  %d dihedral,  %d improper",
+            "  >> %d species,  %d atom types,  %d bond,  %d angle,  %d dihedral,  %d improper",
             n_species, len(atom_types), len(nitems["_btype"]),
             len(nitems["_atype"]), len(nitems["_dtype"]), len(nitems["_itype"]),
         )

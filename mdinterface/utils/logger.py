@@ -139,8 +139,8 @@ def log_header(log: logging.Logger, title: str,
         # [mdi] INFO | ===  Build  ================================
     """
     log.log(level, "")
-    left = f"══╤ {title} "
-    fill = "═" * (_HEADER_WIDTH - len(left))
+    left = f"=== {title} "
+    fill = "=" * (_HEADER_WIDTH - len(left))
     log.log(level, "%s%s", left, fill)
 
 
@@ -185,6 +185,6 @@ def log_subheader(log: logging.Logger, title: str,
         # [mdi] INFO | --  Layer [1/4]  ----------------------------
     """
     log.log(level, "")
-    left = f"──┬ {title} "
-    fill = "─" * max(2, _HEADER_WIDTH - len(left))
+    left = f"-- {title} "
+    fill = "-" * max(2, _HEADER_WIDTH - len(left))
     log.log(level, "%s%s", left, fill)

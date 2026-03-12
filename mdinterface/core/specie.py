@@ -151,12 +151,7 @@ class Specie(object):
             if not "nominal_charge" in atoms.arrays:
                 atoms.set_array("nominal_charge", np.array(len(atoms)*[0]))
             tot_charge = int(np.sum(atoms.arrays["nominal_charge"]))
-                
-        # run ligpargen to calculate parameters
-        if ligpargen:
-            atoms, atom_types, bonds, angles, dihedrals, impropers = run_ligpargen(
-                atoms, charge=tot_charge)
-        
+
         # assign name
         if name is None:
             name = atoms.get_chemical_formula()
@@ -184,7 +179,19 @@ class Specie(object):
             
         # initialize topology indexing
         self._update_topology_indexing()
-        
+
+        # run ligpargen to calculate parameters; for large molecules use the
+        # segment-and-junction strategy automatically
+        if ligpargen:
+            if len(self.atoms) <= 200:
+                _, atom_types, bonds, angles, dihedrals, impropers = run_ligpargen(
+                    self.atoms, charge=tot_charge)
+                self._setup_topology(atom_types, bonds, angles, dihedrals, impropers)
+                self._update_topology_indexing()
+            else:
+                from mdinterface.externals.ligpargen import refine_large_specie_topology
+                refine_large_specie_topology(self)
+
         # set tot charge
         self._tot_charge = tot_charge
         
@@ -781,6 +788,9 @@ class Specie(object):
         filename : str, optional
             Output filename. Defaults to ``{resname}.itp``.
         """
+        logger.warning(
+            "write_gromacs_itp is experimental -- verify output before production use."
+        )
         from mdinterface.io.gromacswriter import write_gromacs_itp
         write_gromacs_itp(self, filename=filename)
 

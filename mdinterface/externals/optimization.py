@@ -68,9 +68,9 @@ def relax_structure(atoms, optimizer='FIRE', fmax=0.05, steps=200,
     converged = dyn.run(fmax, steps)
 
     if converged:
-        logger.info("  └─> converged in %d steps", dyn.get_number_of_steps())
+        logger.info("  >> converged in %d steps", dyn.get_number_of_steps())
     else:
-        logger.warning("  └─> NOT converged after %d steps", steps)
+        logger.warning("  >> NOT converged after %d steps", steps)
 
     return atoms
 

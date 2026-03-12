@@ -188,7 +188,7 @@ def populate_solutes(solute, nsolute, volume, solute_pos=None, conmodel=None):
             "Choose from: None, 'packmol', 'left', 'right', 'center'."
         )
 
-    logger.debug("  ├> solute placement: %s", solute_pos or "packmol (full box)")
+    logger.debug("  >> solute placement: %s", solute_pos or "packmol (full box)")
     return [
         (
             sp.to_universe(),

@@ -38,23 +38,23 @@ def calculate_RESP_charges(specie, basis='def2-svpd', xc="b3lyp", calc_type="RKS
 
     atoms = specie._atoms
     if optimize:
-        logger.info("  ├> geometry optimization (max 100 steps)")
+        logger.info("  >> geometry optimization (max 100 steps)")
         gopt = Geometry_optimizer(mf)
         gopt.optimize(100)
         mol = gopt.mol_eq
         atoms = mole_to_ase(mol)
-        logger.info("  ├> geometry optimized")
+        logger.info("  >> geometry optimized")
 
     mol.cart = True    # PySCF uses spherical basis by default
 
     # run calculation and calculate density matrix
     mf = make_pyscf_calculator(mol, xc=xc, calc_type=calc_type, gpu=gpu)
-    logger.debug("  ├> SCF kernel")
+    logger.debug("  >> SCF kernel")
     mf.kernel()
     dm = mf.make_rdm1()
 
     # RESP charge // first stage fitting
-    logger.debug("  ├> RESP stage 1")
+    logger.debug("  >> RESP stage 1")
     q1 = esp.resp_solve(mol, dm, maxit=maxit)
 
     # Add constraint: fix those charges in the second stage
@@ -71,10 +71,10 @@ def calculate_RESP_charges(specie, basis='def2-svpd', xc="b3lyp", calc_type="RKS
             equal_constraints.append(tmp_idx.tolist())
 
     # RESP charge // second stage fitting
-    logger.debug("  ├> RESP stage 2 (%d equal constraints)", len(equal_constraints))
+    logger.debug("  >> RESP stage 2 (%d equal constraints)", len(equal_constraints))
     q2 = esp.resp_solve(mol, dm, resp_a=5e-4, resp_b=0.1, tol=1e-7,
                         sum_constraints=sum_constraints,
                         equal_constraints=equal_constraints, maxit=maxit)
 
-    logger.info("  └─> done: sum=%.4f,  min=%.4f,  max=%.4f", q2.sum(), q2.min(), q2.max())
+    logger.info("  >> done: sum=%.4f,  min=%.4f,  max=%.4f", q2.sum(), q2.min(), q2.max())
     return q2, atoms

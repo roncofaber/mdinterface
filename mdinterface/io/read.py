@@ -153,7 +153,7 @@ def read_lammps_data_file(filename, pbc=False, ato_start_idx=0, is_snippet=False
                 impropers.append(improper)
 
     system.new_array("stype", np.array(atoms))
-    logger.debug("  └─> %d atoms, %d bonds, %d angles, %d dihedrals, %d impropers",
+    logger.debug("  >> %d atoms, %d bonds, %d angles, %d dihedrals, %d impropers",
                  len(atoms), len(bonds), len(angles), len(dihedrals), len(impropers))
     return system, atoms, bonds, angles, dihedrals, impropers
 
