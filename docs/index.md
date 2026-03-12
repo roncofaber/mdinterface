@@ -21,7 +21,6 @@
 - **Force-field database**: pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with LigParGen.
 - **LAMMPS output**: writes data files and force-field coefficient blocks ready to run.
 
-
 !!! warning
     The documentation is still under construction and *might* contain mistakes.
 

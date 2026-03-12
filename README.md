@@ -13,17 +13,17 @@
 
 > **No force-field knowledge required.** If you only need atomic positions — for AIMD, ML-MD, or any non-LAMMPS workflow — you can ignore all force-field parameters entirely and just use `to_ase()` or `.universe` on the assembled box.
 
-- **Layer-by-layer `SimCell` builder** -- add slabs, solvent regions, and vacuum gaps one step at a time; call `.build()` when done.
-- **ASE & MDAnalysis integration** -- the assembled box converts to `ase.Atoms` or `mda.Universe` with a single call, ready for any downstream tool.
-- **Multi-solvent support** -- mix solvents by molar ratio + density, ratio + total count, or explicit per-species molecule counts.
-- **Ion placement** -- dissolve ions by count, molar concentration, or a spatially-varying concentration profile.
-- **PACKMOL integration** -- handles molecular packing automatically; tolerance and dilation are tunable per layer.
-- **Configurable stacking axis** -- build along Z (default) and permute to X or Y at the end.
-- **Polymer builder** -- generate chains of arbitrary length from a monomer `Specie`; co-polymers via explicit monomer sequences.
-- **AIMD with FAIRChem** -- run ML-potential dynamics via [FAIRChem](https://github.com/facebookresearch/fairchem) (optional).
-- **RESP charges** -- estimate partial charges with [PySCF](https://github.com/pyscf/pyscf) / [gpu4pyscf](https://github.com/pyscf/gpu4pyscf) (optional).
-- **Force-field database** -- pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with [LigParGen](https://github.com/Isra3l/ligpargen).
-- **LAMMPS output** -- writes data files and force-field coefficient blocks ready to run.
+- **Layer-by-layer `SimCell` builder**: add slabs, solvent regions, and vacuum gaps one step at a time; call `.build()` when done.
+- **ASE & MDAnalysis integration**: the assembled box converts to `ase.Atoms` or `mda.Universe` with a single call, ready for any downstream tool.
+- **Multi-solvent support**: mix solvents by molar ratio + density, ratio + total count, or explicit per-species molecule counts.
+- **Ion placement**: dissolve ions by count, molar concentration, or a spatially-varying concentration profile.
+- **PACKMOL integration**: handles molecular packing automatically; tolerance and dilation are tunable per layer.
+- **Configurable stacking axis**: build along Z (default) and permute to X or Y at the end.
+- **Polymer builder**: generate chains of arbitrary length from a monomer `Specie`.
+- **AIMD with FAIRChem**: run ML-potential dynamics via FAIRChem (optional).
+- **RESP charges**: estimate partial charges with PySCF / gpu4pyscf (optional).
+- **Force-field database**: pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with LigParGen.
+- **LAMMPS output**: writes data files and force-field coefficient blocks ready to run.
 
 ## Requirements
 
