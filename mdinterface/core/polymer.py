@@ -118,7 +118,7 @@ class Polymer(Specie):
         return np.concatenate([str_idx, end_idx])
     
 
-    def _update_connection(self, center, Nmax, charges, ending="H"):
+    def _update_connection(self, center, partner, Nmax, charges, ending="H"):
 
         # make a lil snippet
         snippet, snippet_idxs = make_snippet(self, center, Nmax, ending=ending)
@@ -185,7 +185,11 @@ class Polymer(Specie):
             sn_impropers, local_idxs)
         
         charges[ldxs] = new_charges[mapping]
-        
+
+        # Correct OPLS types for the two junction atoms (they had H caps
+        # substituting their bonded partner during monomer LigParGen runs).
+        self._update_junction_lj_types([center, partner], snippet_idxs, sn_atypes)
+
         self._add_to_topology(bonds=new_bonds, angles=new_angles,
                               dihedrals=new_dihedrals, impropers=new_impropers)
         
@@ -210,13 +214,14 @@ class Polymer(Specie):
 
         # get charges and connection elements
         charges = self.charges
-        centers = np.array([int(ii[1]) for ii in self._get_connection_elements()])
-        
+        pairs = self._get_connection_elements()
+
         str_end_idxs = self._get_start_end()
-        
+
         # get charges at every point
-        for center in centers:
-            self._update_connection(center, Nmax, charges, ending=ending)
+        for pair in pairs:
+            ci, cj = int(pair[0]), int(pair[1])
+            self._update_connection(cj, ci, Nmax, charges, ending=ending)
         # for center in str_end_idxs:
             # self._update_connection(center, Nmax, charges, ending=ending)
 

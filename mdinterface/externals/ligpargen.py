@@ -288,16 +288,17 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     return system, atoms, bonds, angles, dihedrals, impropers
 
 
-def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False):
+def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False,
+                                 segment_size=200):
     """
-    Assign OPLS-AA force-field parameters to a large ``Specie`` (> 200 atoms)
-    via LigParGen using a segment-and-junction strategy.
+    Assign OPLS-AA force-field parameters to a ``Specie`` via LigParGen using
+    a segment-and-junction strategy.
 
-    The molecule is split into segments of <= 200 atoms along clean C--C bonds
-    (avoiding rings, heteroatoms, and their immediate neighbours).  Each
-    segment is capped with *ending* atoms and passed to LigParGen
-    independently.  A local snippet centred on each cut bond is then refined
-    to correct parameters for atoms that were adjacent to a cap.
+    The molecule is split into segments of at most *segment_size* atoms along
+    clean backbone bonds (avoiding rings, heteroatoms, and their immediate
+    neighbours).  Each segment is capped with *ending* atoms and passed to
+    LigParGen independently.  A local snippet centred on each cut bond is then
+    refined to correct parameters for atoms adjacent to a cap.
 
     Parameters
     ----------
@@ -312,6 +313,9 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False):
     offset : bool
         If ``True``, redistribute any charge rounding error uniformly so the
         total partial charge matches ``nominal_charge.sum()``.
+    segment_size : int
+        Maximum number of atoms per segment.  Default 200.  Lower values
+        force more splits and are useful for testing.
 
     Raises
     ------
@@ -332,7 +336,7 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False):
             "charged ones (same convention as the Polymer class)."
         )
 
-    n_segments = math.ceil(natoms / 200)
+    n_segments = math.ceil(natoms / segment_size)
     n_cuts     = n_segments - 1
     logger.info("refine_large_specie_topology: %d atoms -> %d segments",
                 natoms, n_segments)
@@ -434,6 +438,10 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=False):
 
         new_charges    = sn_sys.get_initial_charges()
         charges[ldxs]  = new_charges[mapping]
+
+        # Correct OPLS types for the two cut-bond atoms (they had H caps in
+        # their respective segments so their types may be wrong).
+        specie._update_junction_lj_types([ci, cj], snippet_idxs, sn_atypes)
 
         specie._add_to_topology(bonds=new_bonds, angles=new_angles,
                                 dihedrals=new_dihs, impropers=new_imps)

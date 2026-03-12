@@ -268,9 +268,12 @@ class Specie(object):
         charges = chg_scaling*np.asarray(charges)
         atoms.set_initial_charges(charges)
         
-        # see if stype is already present
+        # see if stype is already present and contains Atom objects (not raw
+        # strings from a serialized xyz -- those can't be used without LJ data)
         if "stype" in atoms.arrays:
             stype = atoms.arrays["stype"]
+            if len(stype) == 0 or not hasattr(stype[0], "label"):
+                stype = None
         else:
             stype = None
             
@@ -346,6 +349,38 @@ class Specie(object):
                 attr_type.append(idx)
         
         return
+
+    def _update_junction_lj_types(self, cut_idxs, snippet_idxs, sn_atypes):
+        """Update LJ atom types for junction atoms using a snippet LigParGen result.
+
+        Called after a junction snippet run to correct the OPLS types of atoms
+        that had H caps substituting their real bonded partner during the
+        segment/monomer LigParGen run.  Only the atoms in *cut_idxs* are
+        updated; atoms further from the cut already have correct context.
+
+        Parameters
+        ----------
+        cut_idxs : iterable of int
+            Original atom indices whose types need correcting (typically the
+            two atoms on either side of the cut bond).
+        snippet_idxs : array-like of int
+            Mapping from snippet positions to original atom indices.
+        sn_atypes : list of Atom
+            Atom-type objects returned by ``run_ligpargen`` for the snippet.
+        """
+        for cut_idx in cut_idxs:
+            sn_pos     = int(np.argwhere(snippet_idxs == cut_idx)[0][0])
+            new_atom   = sn_atypes[sn_pos]
+            atom_label = str(self._sids[cut_idx])
+            existing_idx = next(
+                (idx for idx, a in enumerate(self._stype) if a == new_atom),
+                None)
+            if existing_idx is None:
+                added = copy.deepcopy(new_atom)
+                added.set_label(atom_label)
+                self._stype.append(added)
+                existing_idx = len(self._stype) - 1
+            self._smap[atom_label] = existing_idx
 
     def _add_to_topology(self, bonds=None, angles=None, dihedrals=None, impropers=None):
         if bonds is None:
@@ -749,18 +784,21 @@ class Specie(object):
         from mdinterface.io.gromacswriter import write_gromacs_itp
         write_gromacs_itp(self, filename=filename)
 
-    def refine_large_topology(self, Nmax=12, ending="H", offset=False):
+    def refine_large_topology(self, Nmax=12, ending="H", offset=False,
+                              segment_size=200):
         """
         Assign OPLS-AA parameters to this species via LigParGen using a
-        segment-and-junction strategy for molecules with more than 200 atoms.
+        segment-and-junction strategy.
 
-        The molecule is split into segments of <= 200 atoms along clean C--C
-        single bonds (avoiding rings, heteroatoms, and their neighbours).
-        Each segment is capped and passed to LigParGen individually; a local
-        snippet centred on each cut bond then corrects the junction region.
+        The molecule is split into segments of at most *segment_size* atoms
+        along clean backbone bonds (avoiding rings, heteroatoms, and their
+        neighbours). Each segment is capped and passed to LigParGen
+        individually; a local snippet centred on each cut bond then corrects
+        the junction region.
 
         Requires ``nominal_charge`` to be set on ``self.atoms`` (integer
-        formal charge per atom, same convention as :class:`~mdinterface.core.polymer.Polymer`).
+        formal charge per atom, same convention as
+        :class:`~mdinterface.core.polymer.Polymer`).
 
         Parameters
         ----------
@@ -771,10 +809,13 @@ class Specie(object):
         offset : bool
             Redistribute residual charge error uniformly to match
             ``nominal_charge.sum()``.
+        segment_size : int
+            Maximum atoms per segment. Default 200. Lower values force more
+            splits and are useful for testing.
         """
         from mdinterface.externals.ligpargen import refine_large_specie_topology
         refine_large_specie_topology(self, Nmax=Nmax, ending=ending,
-                                     offset=offset)
+                                     offset=offset, segment_size=segment_size)
 
     def write_gro(self, filename=None):
         """
