@@ -749,6 +749,20 @@ class Specie(object):
         from mdinterface.io.gromacswriter import write_gromacs_itp
         write_gromacs_itp(self, filename=filename)
 
+    def write_gro(self, filename=None):
+        """
+        Write a GROMACS structure (.gro) file for this species.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Output filename. Defaults to ``{resname}.gro``.
+        """
+        if filename is None:
+            filename = f"{self.resname}.gro"
+        universe = self.to_universe()
+        universe.atoms.write(filename)
+
     def estimate_charges(self, method="obabel", charge=None, assign=False, **respargs):
         
         if charge is None:
