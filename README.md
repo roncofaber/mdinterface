@@ -22,6 +22,7 @@
 - **RESP charges**: estimate partial charges with PySCF / gpu4pyscf (optional).
 - **Force-field database**: pre-defined parameters for common metals, noble gases, water models, and ions; or generate OPLS-AA parameters on the fly with LigParGen.
 - **LAMMPS output**: writes data files and force-field coefficient blocks ready to run.
+- **GROMACS output** *(experimental)*: write `.gro`, `.top`, and per-species `.itp` files directly from `SimCell.write_gromacs()` or `Specie.write_gromacs_itp()`.
 
 ## Requirements
 

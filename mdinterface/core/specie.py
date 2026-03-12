@@ -734,6 +734,21 @@ class Specie(object):
         
         return
     
+    def write_gromacs_itp(self, filename=None):
+        """
+        Write a GROMACS include topology (.itp) file for this species.
+
+        See :func:`~mdinterface.io.gromacswriter.write_gromacs_itp` for full
+        documentation.
+
+        Parameters
+        ----------
+        filename : str, optional
+            Output filename. Defaults to ``{resname}.itp``.
+        """
+        from mdinterface.io.gromacswriter import write_gromacs_itp
+        write_gromacs_itp(self, filename=filename)
+
     def estimate_charges(self, method="obabel", charge=None, assign=False, **respargs):
         
         if charge is None:
