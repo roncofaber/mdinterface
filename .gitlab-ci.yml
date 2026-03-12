@@ -2,7 +2,7 @@ pages:
   stage: deploy
   image: python:3.11-slim
   script:
-    - apt-get update -qq && apt-get install -y -qq build-essential cmake
+    - apt-get update -qq && apt-get install -y -qq build-essential cmake gfortran
     - pip install -r docs/requirements.txt
     - pip install -e .
     - mkdocs build --site-dir public
