@@ -631,7 +631,10 @@ class Specie(object):
         try:
             from libarvo import molecular_vs
         except ImportError:
-            raise ImportError("libarvo NOT found. Install it.")
+            raise ImportError(
+                "libarvo is required for volume estimation but is not installed. "
+                "Install it with: pip install libarvo"
+            )
 
         centers = self.atoms.get_positions()
         radii = [vdw_radii[ii] for ii in self.atoms.get_atomic_numbers()]
