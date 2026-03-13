@@ -20,8 +20,8 @@ copper  = Metal111("Cu")
 ```python
 from mdinterface.database import Water
 
-water_spce  = Water(model="ewald")    # SPC/E
-water_tip4p = Water(model="tip4p")    # TIP4P/2005
+water_spce  = Water(model="ewald") # modified tip3p model
+water_tip4p = Water(model="spce")  # SPC/E water
 ```
 
 ## Ions
@@ -35,18 +35,30 @@ li = Ion("Li", ffield="Cheatham")
 k  = Ion("K",  ffield="Cheatham")
 ```
 
-`lookup_parameters` can be used to check what force fields are available for a given ion:
+Currently, the following force field parameters for monovalent ions have been implemented:
 
-```python
-from mdinterface.database import lookup_parameters
-lookup_parameters("Na")
-```
+- **Aqvist**   : J. Phys. Chem. B 2008, [https://pubs.acs.org/doi/10.1021/jp8001614](https://pubs.acs.org/doi/10.1021/jp8001614),
+- **Jorgensen**: J. Chem. Theory Comput. 2006, [https://pubs.acs.org/doi/10.1021/ct600252r](https://pubs.acs.org/doi/10.1021/ct600252r)
+- **Cheatham** : J. Phys. Chem. B 2008, [https://pubs.acs.org/doi/10.1021/jp8001614](https://pubs.acs.org/doi/10.1021/jp8001614)
+- **Sengupta** : J. Chem. Inf. Model. 2021, [https://pubs.acs.org/doi/10.1021/acs.jcim.0c01390](https://pubs.acs.org/doi/10.1021/acs.jcim.0c01390)
+- **Dang**     : J. Chem. Phys. 1992/1994
+- **OPLS-AA**  : J. Chem. Theory Comput. 2009, [https://pubs.acs.org/doi/10.1021/ct900009a](https://pubs.acs.org/doi/10.1021/ct900009a)
 
 Special ion species also available:
 
 ```python
 from mdinterface.database import Perchlorate, Hydronium, Hydroxide
 ```
+
+If the parameter set you are looking for are not present, you can always create a Specie explicitly:
+
+```python
+from mdinterface import Specie
+
+Li = Specie("Li", charges=1, lj={"Li": [0.33673, 1.40940]})
+```
+
+
 
 ## Noble gases
 

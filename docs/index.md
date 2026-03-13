@@ -24,22 +24,26 @@
 !!! warning
     The documentation is still under construction and *might* contain mistakes.
 
-## Quick example
+## Example
 
 ```python
 from mdinterface import SimCell
 from mdinterface.database import Water, Ion, Metal111
 
+# set up your species
 water = Water(model="ewald")
 na    = Ion("Na", ffield="Cheatham")
 cl    = Ion("Cl", ffield="Cheatham")
 gold  = Metal111("Au")
 
+# build the simulation cell
 simbox = SimCell(xysize=[15, 15], verbose=True)
 simbox.add_slab(gold, nlayers=3)
 simbox.add_solvent(water, solute=[na, cl], nsolute=[5, 5], zdim=25, density=1.0)
 simbox.add_slab(gold, nlayers=3)
 simbox.build(padding=0.5)
+
+# write output files
 simbox.write_lammps("data.lammps", atom_style="full", write_coeff=True)
 ```
 
