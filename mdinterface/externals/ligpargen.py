@@ -238,12 +238,13 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     tuple: Containing system, atoms, bonds, angles, dihedrals, impropers.
     """
 
-    if "BOSSdir" not in os.environ:
+    if "BOSSdir" not in os.environ and "BOSS_CONTAINER" not in os.environ:
         mdint = os.environ["MDINT_CONFIG_DIR"]
         logger.warning(
-            "BOSSdir not set. Please either:\n"
-            "  os.environ['BOSSdir'] = '/path/to/your/boss'\n"
-            "  or add 'BOSSdir = /path/to/boss' in [settings] in %s/config.ini",
+            "Neither BOSSdir nor BOSS_CONTAINER is set. Please either:\n"
+            "  os.environ['BOSSdir'] = '/path/to/your/boss'  (native)\n"
+            "  os.environ['BOSS_CONTAINER'] = '/path/to/boss-container.sif'  (container)\n"
+            "  or add one of these to [settings] in %s/config.ini",
             mdint,
         )
 
