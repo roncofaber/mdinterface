@@ -43,13 +43,37 @@ pip install mdinterface[all]    # everything
 
 Follow the instructions on the [LigParGen GitHub](https://github.com/Isra3l/ligpargen) (or try [this fork](https://github.com/roncofaber/ligpargen) if you hit installation issues).
 
-Point `mdinterface` to your BOSS directory via a config file:
+LigParGen requires [BOSS](http://zarbi.chem.yale.edu/software.html), a 32-bit binary. Point `mdinterface` to it via `BOSSdir` in the config file. Three modes are supported depending on how BOSS is available:
 
-```ini
-# ~/.config/mdinterface/config.ini
-[settings]
-BOSSdir = /path/to/boss
-```
+=== "Apptainer / Singularity (HPC)"
+
+    Build the container with [boss-container](https://github.com/roncofaber/boss-container), then:
+
+    ```ini
+    # ~/.config/mdinterface/config.ini
+    [settings]
+    BOSSdir = /path/to/boss-container.sif
+    ```
+
+=== "Docker (local)"
+
+    Build the container with [boss-container](https://github.com/roncofaber/boss-container), then:
+
+    ```ini
+    # ~/.config/mdinterface/config.ini
+    [settings]
+    BOSSdir = boss-container:latest
+    ```
+
+=== "Native BOSS"
+
+    Requires `csh` installed on the host and a working 32-bit BOSS binary:
+
+    ```ini
+    # ~/.config/mdinterface/config.ini
+    [settings]
+    BOSSdir = /path/to/boss
+    ```
 
 ### RESP charges with PySCF
 
