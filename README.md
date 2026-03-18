@@ -38,13 +38,17 @@ conda install -c conda-forge packmol
 
 #### LigParGen (automatic OPLS-AA parameters)
 
-Follow the instructions on the [LigParGen GitHub](https://github.com/Isra3l/ligpargen) (or try [this fork](https://github.com/roncofaber/ligpargen) if you hit installation issues). Point `mdinterface` to your BOSS directory via `config.ini`:
+Follow the instructions on the [LigParGen GitHub](https://github.com/Isra3l/ligpargen) (or try [this fork](https://github.com/roncofaber/ligpargen) if you hit installation issues). Point `mdinterface` to your BOSS backend via `config.ini`:
 
 ```ini
 # ~/.config/mdinterface/config.ini  (path is OS-dependent)
 [settings]
-BOSSdir = /path/to/boss
+BOSSdir = /path/to/boss          # native directory
+# BOSSdir = /path/to/boss.sif   # Apptainer/Singularity container
+# BOSSdir = boss-container:latest  # Docker image
 ```
+
+BOSS is a 32-bit binary that can be awkward to run on modern systems. The [boss-container](https://github.com/roncofaber/boss-container) repo provides a ready-to-build Docker/Apptainer image that handles the 32-bit library setup.
 
 #### RESP charges with PySCF
 
