@@ -6,8 +6,8 @@ Initially developed to construct electrolyte/electrode interfaces, it is also we
 
 """
 
-__version__ = '1.5.0'
-__date__ = '09 Mar. 2026'
+__version__ = '1.5.1'
+__date__ = '31 Mar. 2026'
 __author__ = 'Fabrice Roncoroni'
 __all__ = ['SimulationBox', 'SimCell', 'BoxBuilder', "Specie", "Polymer"]
 
