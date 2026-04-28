@@ -379,8 +379,10 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=True,
         sn_sys, sn_atypes, sn_bonds, sn_angles, sn_dihs, sn_imps = \
             run_ligpargen(capped, charge=sn_charge, is_snippet=True)
 
-        # Remap: real atoms -> original sids; caps -> placeholders
-        real_sids     = list(specie._sids[seg_indices])
+        # Remap: real atoms -> globally unique labels (original atom index
+        # avoids collisions across segments); caps -> placeholders
+        real_sids     = [f"{sn_atypes[pos].symbol}_{seg_indices[pos]:03d}"
+                         for pos in range(n_real)]
         cap_sids      = [f"__cap_{seg_idx}_{c}__"
                          for c in range(len(sn_atypes) - n_real)]
         original_idxs = np.array(real_sids + cap_sids)
@@ -399,6 +401,7 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=True,
         for pos, orig_idx in enumerate(seg_indices):
             charges[orig_idx]            = seg_charges[pos]
             atom_types_ordered[orig_idx] = sn_atypes[pos]
+            atom_types_ordered[orig_idx].set_label(real_sids[pos])
 
     # ------------------------------------------------------------------
     # 3. Rebuild topology from assembled segment results
