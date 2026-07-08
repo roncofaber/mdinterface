@@ -140,7 +140,7 @@ def map_dihedrals(dihedrals):
 def map_impropers(impropers):
     
     if impropers is None:
-        return None, None
+        return [], {}, np.array([])
     
     improper_type_ids = []
     type_id = 0
