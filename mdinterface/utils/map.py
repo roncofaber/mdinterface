@@ -267,49 +267,39 @@ def generate_missing_interactions(nas, interaction_type):
             continue
 
     for mss_interaction in mss_interactions:
-        found_interaction = False
         stypes = tuple(nas._smap[ii] for ii in mss_interaction)
         stypes_rev = stypes[::-1]
-        
+
         # topology attribute already existing in map
         if stypes in interaction_type_map or stypes_rev in interaction_type_map:
-            if found_interaction:
-                raise ValueError(f"More than one possible {interaction_type[:-1]} found, abort!")
-                
             if stypes in interaction_type_map:
                 ninteraction = interaction_type_map[stypes].copy()
-                
             else:
                 ninteraction = interaction_type_map[stypes_rev].copy()
                 mss_interaction = mss_interaction[::-1]
-            
+
             a1, a2, *rest = mss_interaction
-            
+
             ninteraction._a1 = a1
             ninteraction._a2 = a2
-            
+
             if num_atoms > 2:
                 ninteraction._a3 = rest[0]
             if num_atoms > 3:
                 ninteraction._a4 = rest[1]
             new_interactions.append(ninteraction)
-            found_interaction = True
-        
-        # new topology attribute
+
+        # new topology attribute — type not yet defined, create bare object
         else:
-            if found_interaction:
-                raise ValueError(f"More than one possible {interaction_type[:-1]} found, abort!")
-            
             a1, a2, *rest = mss_interaction
-            
+
             if num_atoms == 2:
                 ninteraction = Bond(a1, a2)
             elif num_atoms == 3:
                 ninteraction = Angle(a1, a2, rest[0])
             elif num_atoms == 4:
                 ninteraction = Dihedral(a1, a2, rest[0], rest[1])
-                
+
             new_interactions.append(ninteraction)
-            found_interaction = True
             
     return new_interactions
