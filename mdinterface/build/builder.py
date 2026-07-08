@@ -669,7 +669,7 @@ class SimCell:
         padding: float,
         layered: bool,
         do_match: bool,
-    ) -> Tuple[mda.Universe, float]:
+    ) -> Tuple[mda.Universe, float, float]:
         """
         Second pass: assemble all layers into a single Universe.
 
