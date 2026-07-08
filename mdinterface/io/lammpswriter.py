@@ -96,9 +96,10 @@ class DATAWriter(base.WriterBase):
         moltags = atoms.resindices
         m_l = len(str(moltags.max()))+1
     
+        coordinates = atoms.positions.copy()
         if self.convert_units:
-            coordinates = self.convert_pos_to_native(atoms.positions, inplace=False)
-            
+            coordinates = self.convert_pos_to_native(coordinates, inplace=False)
+
         b_l = len(str(int(coordinates.max()))) + 1
         b_t = b_l + 6
 
@@ -173,9 +174,9 @@ class DATAWriter(base.WriterBase):
         """Convert dimensions to triclinic vectors, convert lengths to native
         units and then write the dimensions section
         """
+        triv = mdamath.triclinic_vectors(dimensions)
         if self.convert_units:
-            triv = self.convert_pos_to_native(mdamath.triclinic_vectors(
-                                              dimensions),inplace=False)
+            triv = self.convert_pos_to_native(triv, inplace=False)
         self.f.write('\n')
         self.f.write('{:f} {:f} xlo xhi\n'.format(0., triv[0][0]))
         self.f.write('{:f} {:f} ylo yhi\n'.format(0., triv[1][1]))
