@@ -857,9 +857,10 @@ class Specie(object):
             charges, atoms = calculate_RESP_charges(self, **respargs)
             
         if assign:
-            self.atoms.set_positions(atoms.get_positions())
             self.atoms.set_initial_charges(charges)
-        
+            if method == "resp":
+                self.atoms.set_positions(atoms.get_positions())
+
         return charges
 
     def estimate_OPLSAA_parameters(self, charge=None):
