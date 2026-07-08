@@ -408,7 +408,7 @@ def write_lammps_coefficients(
         if improper.id not in np.array(system.impropers.types(), dtype=int):
             continue
 
-        atype = "{}".format(*improper.symbols)
+        atype = "{}-{}-{}-{}".format(*improper.symbols)
         value = "{:>7.4f}    {:>2d}    {:>2d}".format(*improper.values)
 
         fout.write("{:>5}    {}  #  {:<2} | {}\n".format(improper.id, value, atype, improper.resname))
