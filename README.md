@@ -1,9 +1,7 @@
-<div style="display: flex; align-items: center;">
-  <img src="./assets/mdinterface.png" alt="Logo" width="80"  style="margin-right: 10px;">
-  <div style="display: flex; flex-direction: column;">
-    <h1 style="margin: 0;">mdinterface: Build Interface Systems for Molecular Dynamics Simulations</h1>
-  </div>
-</div>
+<h1>
+  <img src="./assets/mdinterface.png" alt="Logo" width="60" style="vertical-align: middle; margin-right: 10px;">
+  mdinterface: Build Interface Systems for Molecular Dynamics Simulations
+</h1>
 
 [![PyPI version](https://badge.fury.io/py/mdinterface.svg?icon=si%3Apython)](https://pypi.org/project/mdinterface/) [![GitHub version](https://badge.fury.io/gh/roncofaber%2Fmdinterface.svg?icon=si%3Agithub)](https://github.com/roncofaber/mdinterface) [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://roncofaber.github.io/mdinterface)
 
