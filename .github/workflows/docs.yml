@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "docs/**"
+      - "mdinterface/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
 
 permissions:
   contents: write
