@@ -4,6 +4,10 @@ All notable changes to mdinterface are documented here.
 
 ## [Unreleased]
 
+---
+
+## [1.5.3] — 2026-07-09
+
 ### Fixed
 - `NameError` in `DATAWriter` when `convert_units=False` (`coordinates` and `triv` were only assigned inside the conditional branch)
 - Improper type label in LAMMPS coefficient output was silently truncated to the first atom; now writes the full four-atom type string
@@ -11,6 +15,11 @@ All notable changes to mdinterface are documented here.
 - Wrong return-type annotation on `SimCell._stack_layers` (declared 2-tuple, returns 3-tuple)
 - `map_impropers(None)` returned a 2-tuple instead of the consistent 3-tuple returned by all other `map_*` functions
 - Dead unreachable error-checking code removed from `generate_missing_interactions`
+
+### Changed
+- Canonical repository moved from GitLab to GitHub
+- Deployment: tag/version consistency check and GitHub Release creation added to publish workflow
+- Deployment: docs workflow now only rebuilds when source files change
 
 ---
 
