@@ -1,3 +1,5 @@
+> **This repository has been archived.** Active development has moved to [github.com/roncofaber/mdinterface](https://github.com/roncofaber/mdinterface). Please open issues and pull requests there.
+
 <div style="display: flex; align-items: center;">
   <img src="./assets/mdinterface.png" alt="Logo" width="80"  style="margin-right: 10px;">
   <div style="display: flex; flex-direction: column;">

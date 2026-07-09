@@ -38,10 +38,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://gitlab.com/roncofaber/mdinterface"
-Repository = "https://gitlab.com/roncofaber/mdinterface.git"
-Documentation = "https://gitlab.com/roncofaber/mdinterface"
-"Bug Tracker" = "https://gitlab.com/roncofaber/mdinterface/-/issues"
+Homepage = "https://github.com/roncofaber/mdinterface"
+Repository = "https://github.com/roncofaber/mdinterface.git"
+Documentation = "https://roncofaber.github.io/mdinterface"
+"Bug Tracker" = "https://github.com/roncofaber/mdinterface/issues"
 
 [project.optional-dependencies]
 resp = [
