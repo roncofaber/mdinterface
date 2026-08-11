@@ -25,6 +25,16 @@ btype_sections = {'bond':'Bonds', 'angle':'Angles',
                   'dihedral':'Dihedrals', 'improper':'Impropers'}
 
 
+def _renumber_bonded_types(raw_types):
+    """
+    Map raw per-item bond/angle/dihedral/improper type ids -- which may be
+    sparse or non-contiguous (e.g. when a Specie template is reused across
+    several layers) -- to a contiguous 1..N range ordered by numeric value.
+    """
+    unique_sorted = sorted({int(t) for t in raw_types})
+    return {t: i + 1 for i, t in enumerate(unique_sorted)}
+
+
 class DATAWriter(base.WriterBase):
     """Write out the current time step as a LAMMPS DATA file.
 
@@ -161,9 +171,14 @@ class DATAWriter(base.WriterBase):
         self.f.write('\n')
         self.f.write('{}\n'.format(btype_sections[bonds.btype]))
         self.f.write('\n')
+        try:
+            remap = _renumber_bonded_types(bond.type for bond in bonds)
+        except (TypeError, ValueError):
+            remap = None
         for bond, i in zip(bonds, range(1, len(bonds)+1)):
             try:
-                self.f.write('{:d} {:d} '.format(i, int(bond.type))+\
+                btype_id = remap[int(bond.type)] if remap is not None else int(bond.type)
+                self.f.write('{:d} {:d} '.format(i, btype_id)+\
                         ' '.join((bond.atoms.indices + 1).astype(str))+'\n')
             except TypeError:
                 errmsg = (f"LAMMPS DATAWriter: Trying to write bond, but bond "
@@ -337,18 +352,20 @@ def write_lammps_coefficients(
     # Write Pair Coefficients
     fout.write("Pair Coeffs\n\n")
 
-    idx = 1
+    present_types = list(np.unique(system.atoms.types))
     atom_types = sorted_attributes.get("atoms", [])
+    written = set()
     for atom in atom_types:
-        if atom.extended_label not in np.unique(system.atoms.types):
+        if atom.extended_label not in present_types or atom.extended_label in written:
             continue
+        written.add(atom.extended_label)
+        idx = present_types.index(atom.extended_label) + 1
 
         eps = atom.eps if atom.eps is not None else 0
         sig = atom.sig if atom.sig is not None else 0
 
         fout.write("{:>5}    {:>12.8f}    {:>12.8f}  # {}\n".format(
             idx, eps, sig, atom.extended_label))
-        idx += 1
 
     # Write Bond Coefficients
     bond_types = sorted_attributes.get("bonds", [])
@@ -356,9 +373,13 @@ def write_lammps_coefficients(
         fout.write("\n")
         fout.write("Bond Coeffs\n\n")
 
+    bond_remap = _renumber_bonded_types(system.bonds.types()) if len(system.bonds) else {}
+    written_bonds = set()
     for bond in bond_types:
-        if bond.id not in np.array(system.bonds.types(), dtype=int):
+        if int(bond.id) not in bond_remap or bond.id in written_bonds:
             continue
+        written_bonds.add(bond.id)
+        idx = bond_remap[int(bond.id)]
 
         kr = bond.kr if bond.kr is not None else 0
         r0 = bond.r0 if bond.r0 is not None else 0
@@ -366,7 +387,7 @@ def write_lammps_coefficients(
         btype = "{}-{}".format(*bond.symbols)
 
         fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<5} | {}\n".format(
-            bond.id, kr, r0, btype, bond.resname))
+            idx, kr, r0, btype, bond.resname))
 
     # Write Angle Coefficients
     angle_types = sorted_attributes.get("angles", [])
@@ -374,9 +395,13 @@ def write_lammps_coefficients(
         fout.write("\n")
         fout.write("Angle Coeffs\n\n")
 
+    angle_remap = _renumber_bonded_types(system.angles.types()) if len(system.angles) else {}
+    written_angles = set()
     for angle in angle_types:
-        if angle.id not in np.array(system.angles.types(), dtype=int):
+        if int(angle.id) not in angle_remap or angle.id in written_angles:
             continue
+        written_angles.add(angle.id)
+        idx = angle_remap[int(angle.id)]
 
         kr = angle.kr if angle.kr is not None else 0
         theta0 = angle.theta0 if angle.theta0 is not None else 0
@@ -384,7 +409,7 @@ def write_lammps_coefficients(
         atype = "{}-{}-{}".format(*angle.symbols)
 
         fout.write("{:>5}    {:>10.6f}    {:>10.6f}  #  {:<8} | {}\n".format(
-            angle.id, kr, theta0, atype, angle.resname))
+            idx, kr, theta0, atype, angle.resname))
 
     # Write Dihedral Coefficients
     dihedral_types = sorted_attributes.get("dihedrals", [])
@@ -392,26 +417,33 @@ def write_lammps_coefficients(
         fout.write("\n")
         fout.write("Dihedral Coeffs\n\n")
 
+    dihedral_remap = _renumber_bonded_types(system.dihedrals.types()) if len(system.dihedrals) else {}
+    written_dihedrals = set()
     for dihedral in dihedral_types:
-        if dihedral.id not in np.array(system.dihedrals.types(), dtype=int):
+        if int(dihedral.id) not in dihedral_remap or dihedral.id in written_dihedrals:
             continue
+        written_dihedrals.add(dihedral.id)
 
-        dihedral.write(fout)
+        dihedral.write(fout, idx=dihedral_remap[int(dihedral.id)])
 
     # Write Improper Coefficients
     improper_types = sorted_attributes.get("impropers", [])
     if improper_types and system.impropers.types():
         fout.write("\n")
         fout.write("Improper Coeffs\n\n")
-        
+
+    improper_remap = _renumber_bonded_types(system.impropers.types()) if len(system.impropers) else {}
+    written_impropers = set()
     for improper in improper_types:
-        if improper.id not in np.array(system.impropers.types(), dtype=int):
+        if int(improper.id) not in improper_remap or improper.id in written_impropers:
             continue
+        written_impropers.add(improper.id)
+        idx = improper_remap[int(improper.id)]
 
         atype = "{}-{}-{}-{}".format(*improper.symbols)
         value = "{:>7.4f}    {:>2d}    {:>2d}".format(*improper.values)
 
-        fout.write("{:>5}    {}  #  {:<2} | {}\n".format(improper.id, value, atype, improper.resname))
+        fout.write("{:>5}    {}  #  {:<2} | {}\n".format(idx, value, atype, improper.resname))
 
     fout.write("\n")
 

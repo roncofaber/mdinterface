@@ -249,13 +249,14 @@ class Dihedral(Topology):
         return (self.values == other.values and
                 (self.symbols == other.symbols or self.symbols == other.symbols[::-1]))
 
-    def write(self, fout):
+    def write(self, fout, idx=None):
         atype = "{}-{}-{}-{}".format(*self.symbols)
         if self._values[-1] is not None:
             value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*self.values)
         else:
             value = "{:>7.4f}  {:>7.4f}  {:>7.4f}  {:>7.4f}".format(*self.values[:-1])
-        fout.write("{:>5}    {}  #  {:<8} | {}\n".format(self.id, value, atype, self.resname))
+        fout.write("{:>5}    {}  #  {:<8} | {}\n".format(
+            idx if idx is not None else self.id, value, atype, self.resname))
         
     def __bool__(self):
         return any([bool(val) for val in self.values])
