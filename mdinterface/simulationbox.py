@@ -373,7 +373,7 @@ class SimulationBox():
                 ion_pos  = layer["ion_pos"]
 
                 # make solvent box
-                solvent = make_solvent_box(self.species, self.solvent, self._solute,
+                solvent = make_solvent_box(self.species, self._solvent, self._solute,
                                            [xsize, ysize, zsize], solv_rho,
                                            nions, concentration, conmodel, ion_pos, nsolvent)
 
