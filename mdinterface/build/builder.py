@@ -8,6 +8,7 @@ Add slabs, solvent regions, and vacuum gaps one step at a time, then call
 """
 
 import logging
+from copy import deepcopy
 from collections import Counter
 from typing import List, Optional, Union, Tuple, Any
 
@@ -16,6 +17,7 @@ from mdinterface.io.lammpswriter import DATAWriter, write_lammps_coefficients
 from mdinterface.io.gromacswriter import write_gromacs_itp, write_gromacs_top
 from mdinterface.build.box import make_interface_slab, add_component
 from mdinterface.build.solvent import make_solvent_box
+from mdinterface.build.regions import FilledRegion
 
 import ase
 import MDAnalysis as mda
@@ -186,6 +188,7 @@ class SimCell:
         dilate: float = 1.0,
         packmol_tolerance: float = 2.0,
         ratio: Optional[List[float]] = None,
+        regions: Optional[List[FilledRegion]] = None,
     ) -> None:
         """
         Add a solvent (liquid) layer, optionally with dissolved species.
@@ -229,6 +232,11 @@ class SimCell:
             Minimum distance (Å) between atoms of different molecules during
             PACKMOL packing. Reduce from the default of ``2.0`` for very
             concentrated systems if PACKMOL cannot find a valid packing.
+        regions : list of FilledRegion, optional
+            Spatially-heterogeneous sub-regions within this layer (e.g. a gas
+            pocket embedded in the bulk solvent). Build with
+            ``SomeRegion(...).fill(solvent=..., density=...)`` — see
+            :mod:`mdinterface.build.regions`.
         """
         if zdim is None:
             raise ValueError("'zdim' is required for add_solvent()")
@@ -246,7 +254,20 @@ class SimCell:
             solv_copies = [solvent.copy()]
 
         solute_copies = [sp.copy() for sp in (solute or [])]
-        self._register(*solv_copies, *solute_copies)
+
+        region_copies = [self._copy_filled_region(fr) for fr in (regions or [])]
+        region_species: List[Any] = []
+        for fr in region_copies:
+            if fr.solvent is None:
+                pass
+            elif isinstance(fr.solvent, (list, tuple)):
+                region_species.extend(fr.solvent)
+            else:
+                region_species.append(fr.solvent)
+            if fr.solute:
+                region_species.extend(fr.solute)
+
+        self._register(*solv_copies, *solute_copies, *region_species)
 
         self._layers.append({
             "type":               "solvent",
@@ -262,6 +283,7 @@ class SimCell:
             "dilate":             dilate,
             "packmol_tolerance":  packmol_tolerance,
             "ratio":              ratio,
+            "regions":            region_copies,
         })
         solv_str = "+".join(getattr(s, "resname", "?") for s in solv_copies) or "ions"
         rho_str  = (f"ρ={density:.2f} g/cm³" if density is not None
@@ -270,8 +292,9 @@ class SimCell:
         if solute_copies:
             sol_names = "+".join(getattr(s, "resname", "?") for s in solute_copies)
             solute_info = f",  solute: {sol_names} (n={nsolute})"
-        logger.info("  + solvent  %s,  zdim=%.1f Å,  %s%s",
-                    solv_str, zdim, rho_str, solute_info)
+        region_info = f",  {len(region_copies)} region(s)" if region_copies else ""
+        logger.info("  + solvent  %s,  zdim=%.1f Å,  %s%s%s",
+                    solv_str, zdim, rho_str, solute_info, region_info)
 
     def add_vacuum(self, zdim: float = 0.0) -> None:
         """
@@ -789,6 +812,7 @@ class SimCell:
             nsolvent=layer["nsolvent"],
             tolerance=layer["packmol_tolerance"],
             ratio=layer["ratio"],
+            regions=layer["regions"],
         )
 
     @staticmethod
@@ -900,6 +924,28 @@ class SimCell:
         for sp in species:
             if sp is not None and not any(s is sp for s in self._all_species):
                 self._all_species.append(sp)
+
+    @staticmethod
+    def _copy_filled_region(fr: FilledRegion) -> FilledRegion:
+        """Deep-copy a FilledRegion's species (region geometry is immutable, shared as-is)."""
+        if fr.solvent is None:
+            solvent_copy = None
+        elif isinstance(fr.solvent, (list, tuple)):
+            solvent_copy = [s.copy() for s in fr.solvent]
+        else:
+            solvent_copy = fr.solvent.copy()
+        solute_copy = [sp.copy() for sp in fr.solute] if fr.solute else None
+        return FilledRegion(
+            region=deepcopy(fr.region),
+            solvent=solvent_copy,
+            solute=solute_copy,
+            nsolute=fr.nsolute,
+            density=fr.density,
+            nsolvent=fr.nsolvent,
+            concentration=fr.concentration,
+            conmodel=fr.conmodel,
+            ratio=fr.ratio,
+        )
 
     def _update_topology_indexes(self) -> None:
         n_species = len(self._all_species)

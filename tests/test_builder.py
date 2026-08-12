@@ -257,6 +257,44 @@ class TestMultiSolvent:
 
 
 # ---------------------------------------------------------------------------
+# Regions
+# ---------------------------------------------------------------------------
+
+class TestRegions:
+
+    def test_regions_stored(self, builder, water, na):
+        from mdinterface.build.regions import Sphere
+
+        pocket = Sphere(center=(10.0, 10.0, 15.0), radius=4.0)
+        builder.add_solvent(water, zdim=20, density=1.0, regions=[pocket.fill(na, nsolvent=2)])
+        assert len(builder._layers[0]["regions"]) == 1
+        assert builder._layers[0]["regions"][0].region is not pocket  # copied, not aliased
+
+    def test_regions_default_empty(self, builder, water):
+        builder.add_solvent(water, zdim=20, density=1.0)
+        assert builder._layers[0]["regions"] == []
+
+    def test_region_species_registered(self, builder, water, na):
+        from mdinterface.build.regions import Sphere
+
+        pocket = Sphere(center=(10.0, 10.0, 15.0), radius=4.0)
+        builder.add_solvent(water, zdim=20, density=1.0, regions=[pocket.fill(na, nsolvent=2)])
+        assert any(sp.resname == na.resname for sp in builder._all_species)
+
+    def test_region_solute_species_registered(self, builder, water, na, cl):
+        from mdinterface.build.regions import Sphere
+
+        pocket = Sphere(center=(10.0, 10.0, 15.0), radius=4.0)
+        builder.add_solvent(
+            water, zdim=20, density=1.0,
+            regions=[pocket.fill(solute=[na, cl], nsolute=[1, 1])],
+        )
+        resnames = {sp.resname for sp in builder._all_species}
+        assert na.resname in resnames
+        assert cl.resname in resnames
+
+
+# ---------------------------------------------------------------------------
 # match_cell resolution
 # ---------------------------------------------------------------------------
 
