@@ -15,6 +15,14 @@ All notable changes to mdinterface are documented here.
 - `.claude/skills/release` documenting the version-bump/changelog/tag procedure
 - `scripts/extract_changelog_summary.py` for extracting a version's changelog summary paragraph
 
+### Deprecated
+- `SimulationBox` now emits a `DeprecationWarning` on construction; use `SimCell` instead
+
+### Fixed
+- `simulationbox.py` called `warnings.filterwarnings('ignore')` at import time, silently
+  suppressing all warnings process-wide for the rest of the program (including the existing
+  `BoxBuilder` deprecation warning and this module's own warnings) - removed
+
 ---
 
 ## [1.5.3] — 2026-07-09
