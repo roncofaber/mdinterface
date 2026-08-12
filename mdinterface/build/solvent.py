@@ -251,7 +251,7 @@ def _compute_solvent_counts(solvents, density, nsolvent, ratio, volume_cm3):
 
 
 def _concentration_to_nsolute(concentration, volume_A3):
-    """Convert a Molar concentration to a solute molecule count for the given volume (Ų)."""
+    """Convert a Molar concentration to a solute molecule count for the given volume (Å³)."""
     return int(concentration * volume_A3 * units.mol / ((units.m / 10) ** 3))
 
 

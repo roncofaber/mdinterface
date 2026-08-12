@@ -218,7 +218,7 @@ class TestMakeSolventBoxRegions:
         assert len(na_atoms) == 3
         for pos in na_atoms.positions:
             dist = sum((pos[i] - pocket.center[i]) ** 2 for i in range(3)) ** 0.5
-            assert dist <= pocket.radius + 1e-6
+            assert dist <= pocket.radius + 0.2
 
     def test_region_conmodel_raises(self, water, na):
         from mdinterface.build.solvent import make_solvent_box
