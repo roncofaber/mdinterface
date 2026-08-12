@@ -18,6 +18,7 @@ from ase import units
 
 from mdinterface.build.box import populate_box
 from mdinterface.build.continuum2sim import discretize_concentration
+from mdinterface.build.regions import Region, Box
 
 import logging
 
@@ -175,29 +176,113 @@ def populate_solutes(solute, nsolute, volume, solute_pos=None, conmodel=None):
         )
         solute_pos = "packmol"
 
-    # PACKMOL-based placement: full box, left half, or right half
-    if solute_pos in (None, "packmol"):
-        bounds = box
+    region = None
+    if isinstance(solute_pos, Region):
+        region = solute_pos
     elif solute_pos == "left":
-        bounds = [box[0], box[1], box[2], box[3], box[4], volume[2] / 2]
+        warnings.warn(
+            "solute_pos='left' is deprecated; pass an equivalent Region instead, "
+            "e.g. Box.from_bounds(xmin, ymin, zmin, xmax, ymax, zdim / 2).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        region = Box.from_bounds(box[0], box[1], box[2], box[3], box[4], volume[2] / 2)
     elif solute_pos == "right":
-        bounds = [box[0], box[1], volume[2] / 2, box[3], box[4], box[5]]
-    else:
+        warnings.warn(
+            "solute_pos='right' is deprecated; pass an equivalent Region instead, "
+            "e.g. Box.from_bounds(xmin, ymin, zdim / 2, xmax, ymax, zmax).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        region = Box.from_bounds(box[0], box[1], volume[2] / 2, box[3], box[4], box[5])
+    elif solute_pos not in (None, "packmol"):
         raise ValueError(
             f"Unknown solute_pos {solute_pos!r}. "
-            "Choose from: None, 'packmol', 'left', 'right', 'center'."
+            "Choose from: None, 'packmol', 'center', or a Region instance."
         )
 
     logger.debug("  >> solute placement: %s", solute_pos or "packmol (full box)")
+
+    if region is not None:
+        return [
+            (
+                sp.to_universe(),
+                nsolute if isinstance(nsolute, int) else nsolute[cc],
+                "region",
+                region,
+            )
+            for cc, sp in enumerate(solute)
+        ]
+
     return [
         (
             sp.to_universe(),
             nsolute if isinstance(nsolute, int) else nsolute[cc],
             "box",
-            bounds,
+            box,
         )
         for cc, sp in enumerate(solute)
     ]
+
+
+# ---------------------------------------------------------------------------
+# Solvent-count helpers
+# ---------------------------------------------------------------------------
+
+def _compute_solvent_counts(solvents, density, nsolvent, ratio, volume_cm3):
+    """Per-species molecule counts for a solvent mixture given density/nsolvent/ratio."""
+    if ratio is not None:
+        ratio_arr = np.array(ratio, dtype=float)
+        if nsolvent is not None:
+            counts = [max(1, int(r / ratio_arr.sum() * nsolvent)) for r in ratio_arr]
+        else:
+            masses = np.array([s.atoms.get_masses().sum() for s in solvents])
+            mass_per_unit = float(np.dot(ratio_arr, masses))
+            n_units = units.mol * density * volume_cm3 / mass_per_unit
+            counts = [max(1, int(r * n_units)) for r in ratio_arr]
+    elif isinstance(nsolvent, (list, tuple)):
+        counts = list(nsolvent)
+    elif nsolvent is not None:
+        counts = [int(nsolvent)]
+    else:
+        mass = solvents[0].atoms.get_masses().sum()
+        counts = [int(units.mol * density * (1.0 / mass) * volume_cm3)]
+    return counts
+
+
+def _concentration_to_nsolute(concentration, volume_A3):
+    """Convert a Molar concentration to a solute molecule count for the given volume (Ų)."""
+    return int(concentration * volume_A3 * units.mol / ((units.m / 10) ** 3))
+
+
+def _validate_regions(regions, volume):
+    """Raise if any region extends outside the layer box; warn on bbox overlap."""
+    if not regions:
+        return
+    xsize, ysize, zsize = volume
+    for fr in regions:
+        rxmin, rymin, rzmin, rxmax, rymax, rzmax = fr.region.bounding_box()
+        if (rxmin < 0 or rymin < 0 or rzmin < 0
+                or rxmax > xsize or rymax > ysize or rzmax > zsize):
+            raise ValueError(
+                f"Region {fr.region!r} extends outside the layer volume "
+                f"[0, {xsize}] x [0, {ysize}] x [0, {zsize}]."
+            )
+    for i in range(len(regions)):
+        for j in range(i + 1, len(regions)):
+            if _bboxes_overlap(regions[i].region.bounding_box(), regions[j].region.bounding_box()):
+                warnings.warn(
+                    f"Regions {regions[i].region!r} and {regions[j].region!r} have "
+                    "overlapping bounding boxes; verify they don't actually intersect.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+
+
+def _bboxes_overlap(a, b):
+    ax0, ay0, az0, ax1, ay1, az1 = a
+    bx0, by0, bz0, bx1, by1, bz1 = b
+    return ax0 < bx1 and ax1 > bx0 and ay0 < by1 and ay1 > by0 and az0 < bz1 and az1 > bz0
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +302,7 @@ def make_solvent_box(
     nsolvent=None,
     tolerance: float = 2.0,
     ratio: Optional[List[float]] = None,
+    regions: Optional[List["FilledRegion"]] = None,
 ) -> Optional[mda.Universe]:
     """
     Build a solvent box with optional dissolved species.
@@ -249,6 +335,11 @@ def make_solvent_box(
     ratio : list of float or None
         Molar mixing ratio for multi-solvent boxes.  Must be used with
         either *density* or *nsolvent* (int).
+    regions : list of FilledRegion or None
+        Spatially-heterogeneous sub-regions carved out of this layer (e.g. a
+        gas pocket). Each is a Region (Sphere/Box/Cylinder) paired with its
+        own content via Region.fill(). See SimCell.add_solvent's `regions`
+        parameter.
 
     Returns
     -------
@@ -278,30 +369,53 @@ def make_solvent_box(
                                         conmodel=conmodel)
         instructions.extend(solute_instr)
 
+    # regions carve volume out of the bulk and get their own PACKMOL constraints
+    _validate_regions(regions, volume)
+    region_volume_A3 = sum(fr.region.volume() for fr in (regions or []))
+    outside_lines = [fr.region.packmol_line("outside") for fr in (regions or [])]
+
     # solvents
     if solvents:
-        solvent_volume = 1e-24 * np.prod(volume)
-
-        if ratio is not None:
-            ratio_arr = np.array(ratio, dtype=float)
-            if nsolvent is not None:
-                counts = [max(1, int(r / ratio_arr.sum() * nsolvent)) for r in ratio_arr]
-            else:
-                masses = np.array([s.atoms.get_masses().sum() for s in solvents])
-                mass_per_unit = float(np.dot(ratio_arr, masses))
-                n_units = units.mol * density * solvent_volume / mass_per_unit
-                counts = [max(1, int(r * n_units)) for r in ratio_arr]
-        elif isinstance(nsolvent, (list, tuple)):
-            counts = list(nsolvent)
-        elif nsolvent is not None:
-            counts = [int(nsolvent)]
-        else:
-            mass = solvents[0].atoms.get_masses().sum()
-            counts = [int(units.mol * density * (1.0 / mass) * solvent_volume)]
+        solvent_volume = 1e-24 * (np.prod(volume) - region_volume_A3)
+        counts = _compute_solvent_counts(solvents, density, nsolvent, ratio, solvent_volume)
 
         for sp, n in zip(solvents, counts):
             if n > 0:
-                instructions.append([sp.to_universe(), n, "box"])
+                instructions.append([sp.to_universe(), n, "box", None, outside_lines])
+
+    # region fills
+    for fr in (regions or []):
+        if fr.conmodel is not None:
+            raise ValueError(
+                "conmodel is not yet supported inside a region; "
+                "use it only at the top-level add_solvent() call."
+            )
+
+        r_nsolute = fr.nsolute
+        if fr.concentration is not None:
+            r_nsolute = _concentration_to_nsolute(fr.concentration, fr.region.volume())
+
+        if fr.solute is not None and r_nsolute is not None:
+            for cc, sp in enumerate(fr.solute):
+                n = r_nsolute if isinstance(r_nsolute, int) else r_nsolute[cc]
+                if n > 0:
+                    instructions.append((sp.to_universe(), n, "region", fr.region))
+
+        if fr.solvent is None:
+            r_solvents = []
+        elif isinstance(fr.solvent, (list, tuple)):
+            r_solvents = list(fr.solvent)
+        else:
+            r_solvents = [fr.solvent]
+
+        if r_solvents:
+            r_volume_cm3 = 1e-24 * fr.region.volume()
+            r_counts = _compute_solvent_counts(
+                r_solvents, fr.density, fr.nsolvent, fr.ratio, r_volume_cm3
+            )
+            for sp, n in zip(r_solvents, r_counts):
+                if n > 0:
+                    instructions.append((sp.to_universe(), n, "region", fr.region))
 
     universe = populate_box(volume, instructions, tolerance=tolerance)
 
