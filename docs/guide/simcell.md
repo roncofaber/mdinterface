@@ -75,7 +75,7 @@ simbox.add_solvent(
 
 **Spatially heterogeneous regions (pockets):**
 
-Carve a `Sphere`, `Box`, or `Cylinder` out of the layer and fill it with different content — e.g.
+Carve a `Sphere`, `Box`, or `Cylinder` out of the layer and fill it with different content - e.g.
 a CO2 gas pocket embedded in bulk water:
 
 ```python
@@ -107,7 +107,7 @@ molecule count automatically accounts for the volume carved out by each region.
 | `ratio` | Molar ratio for multi-solvent mixtures |
 | `solute` | `Specie` or list of `Specie` to dissolve |
 | `nsolute` | Molecule count per solute species |
-| `solute_pos` | Placement region: `None`, `"center"`, or a `Region` instance. `"left"`/`"right"` strings are deprecated — pass an equivalent `Box` instead (e.g. `Box.from_bounds(...)`) |
+| `solute_pos` | Placement region: `None`, `"center"`, or a `Region` instance. `"left"`/`"right"` strings are deprecated - pass an equivalent `Box` instead (e.g. `Box.from_bounds(...)`) |
 | `regions` | List of `FilledRegion` (from `SomeRegion(...).fill(...)`) for spatially heterogeneous sub-regions within the layer |
 | `dilate` | Expand the PACKMOL box by this fraction to help convergence |
 | `packmol_tolerance` | PACKMOL distance tolerance in Angstroms (default 2.0) |
