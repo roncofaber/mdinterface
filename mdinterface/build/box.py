@@ -41,8 +41,15 @@ def populate_box(
     - ``(universe, count, "box")`` -- pack *count* copies anywhere in the box.
     - ``(universe, count, "box", bounds)`` -- restrict placement to a
       sub-region ``[xmin, ymin, zmin, xmax, ymax, zmax]``.
+    - ``(universe, count, "box", None, extra_constraints)`` -- pack *count* copies
+      in the full box with additional PACKMOL constraint lines (e.g., to exclude a region).
+      *extra_constraints* is a list of raw PACKMOL constraint strings.
+    - ``(universe, count, "region", region_obj)`` -- pack *count* copies constrained to
+      a Region object's interior (using its ``packmol_line("inside")`` method).
     - ``(universe, coords, "fixed")`` -- place a single molecule at fixed
       fractional coordinates *coords*.
+    - ``(universe, coords, "zfixed")`` -- place a single molecule at fixed
+      fractional XY coordinates with Z placement in a thin bin near the center of mass.
 
     Parameters
     ----------
