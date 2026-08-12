@@ -22,6 +22,8 @@ All notable changes to mdinterface are documented here.
 - `simulationbox.py` called `warnings.filterwarnings('ignore')` at import time, silently
   suppressing all warnings process-wide for the rest of the program (including the existing
   `BoxBuilder` deprecation warning and this module's own warnings) - removed
+- `SimulationBox` crashed with `AttributeError: AtomGroup has no attribute get_masses` when using
+  a single solvent with density (no `ratio`/`nsolvent`) - its most common usage
 
 ---
 
