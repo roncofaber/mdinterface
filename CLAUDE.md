@@ -25,6 +25,7 @@ change.**
 | `docs/guide/logging.md` | Verbosity levels (`verbose=` scale) | Change logging behavior |
 | `docs/api/*.md` | mkdocstrings-generated reference (numpy docstring style, `show_source: true`) | Regenerated from docstrings - keep docstrings accurate instead |
 | `CHANGELOG.md` | User-facing history | Every user-visible change, same commit |
+| `.claude/skills/release` | Version bump, changelog promotion, tag/push, release workflow stages | Change the release process itself |
 
 ## Build & test
 
@@ -41,10 +42,13 @@ solvent-layer test shells out to it; failures leave the temp working dir behind 
 ## Versioning
 
 `mdinterface/__init__.py`'s `__version__` is the single source of truth (`pyproject.toml` reads
-it via `dynamic = ["version"]` / `attr = "mdinterface.__version__"`). `publish.yml` hard-fails a
-tag push if `v{tag}` doesn't match `__version__` - bump the string before tagging, not after.
-`docs.yml` redeploys GitHub Pages on push to `main` when `docs/`, `mdinterface/`, `mkdocs.yml`,
-or `pyproject.toml` change.
+it via `dynamic = ["version"]` / `attr = "mdinterface.__version__"`). `.github/workflows/release.yml`
+runs `preflight` → `test` → `build` → `publish` (PyPI) → `release` (draft GitHub release) on a
+`v*.*.*` tag push or manual `workflow_dispatch`; `preflight` hard-fails if `v{tag}` doesn't match
+`__version__`, or if the changelog summary check (see Changelog discipline) fails - bump the
+string and write the changelog entry before tagging, not after. See `.claude/skills/release` for
+the full procedure. `docs.yml` redeploys GitHub Pages on push to `main` when `docs/`,
+`mdinterface/`, `mkdocs.yml`, or `pyproject.toml` change.
 
 ## Changelog discipline
 
@@ -57,6 +61,11 @@ fix, e.g.:
 - `NameError` in `Specie.estimate_charges(assign=True)` for non-RESP methods (`atoms` was only
   defined in the RESP branch)
 - Wrong return-type annotation on `SimCell._stack_layers` (declared 2-tuple, returns 3-tuple)
+
+At release time (see `.claude/skills/release`), every versioned section (`## [X.Y.Z]`) must also
+get a one-to-two sentence summary paragraph before its first `### ` group -
+`release.yml`'s `preflight` job runs `scripts/extract_changelog_summary.py` and **fails the
+release, before tests or PyPI publish run, if it's missing.**
 
 ## Key architecture decisions
 
@@ -80,7 +89,10 @@ fix, e.g.:
   `np.unique(..., return_inverse=True)` *at write time*. Bond/angle/dihedral/improper "type" is a
   raw numeric `.id` assigned once by `_update_topology_indexes` (`build/builder.py`, and a
   duplicate implementation in `simulationbox.py`). These two schemes are not naturally consistent
-  with each other - see the first gotcha below.
+  with each other - `io/lammpswriter.py::write_lammps_coefficients` renumbers everything against
+  what is actually present in the assembled `Universe` at write time rather than trusting `.id`
+  directly; do not add a new output path that trusts `.id` as if it were already a clean LAMMPS
+  type index.
 
 ## Testing
 
