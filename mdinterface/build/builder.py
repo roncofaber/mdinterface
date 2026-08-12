@@ -8,7 +8,6 @@ Add slabs, solvent regions, and vacuum gaps one step at a time, then call
 """
 
 import logging
-from copy import deepcopy
 from collections import Counter
 from typing import List, Optional, Union, Tuple, Any
 
@@ -936,7 +935,7 @@ class SimCell:
             solvent_copy = fr.solvent.copy()
         solute_copy = [sp.copy() for sp in fr.solute] if fr.solute else None
         return FilledRegion(
-            region=deepcopy(fr.region),
+            region=fr.region,
             solvent=solvent_copy,
             solute=solute_copy,
             nsolute=fr.nsolute,

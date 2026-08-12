@@ -268,7 +268,7 @@ class TestRegions:
         pocket = Sphere(center=(10.0, 10.0, 15.0), radius=4.0)
         builder.add_solvent(water, zdim=20, density=1.0, regions=[pocket.fill(na, nsolvent=2)])
         assert len(builder._layers[0]["regions"]) == 1
-        assert builder._layers[0]["regions"][0].region is not pocket  # copied, not aliased
+        assert builder._layers[0]["regions"][0].region is pocket  # shared, not copied
 
     def test_regions_default_empty(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0)
