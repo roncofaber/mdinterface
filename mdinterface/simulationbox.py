@@ -22,7 +22,6 @@ import numpy as np
 
 import shutil
 import warnings
-warnings.filterwarnings('ignore')
 
 #%%
 
@@ -56,7 +55,14 @@ class SimulationBox():
     def __init__(self, solvent: Optional[Any] = None, solute: Optional[Union[Any, List[Any]]] = None,
                  interface: Optional[Any] = None, enderface: Optional[Any] = None,
                  miderface: Optional[Any] = None) -> None:
-        
+
+        warnings.warn(
+            "SimulationBox is deprecated and will be removed in a future version. "
+            "Use SimCell instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         # start species
         self._setup_species(solvent, solute, interface, enderface, miderface)
         
