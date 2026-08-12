@@ -4,6 +4,16 @@ All notable changes to mdinterface are documented here.
 
 ## [Unreleased]
 
+### Added
+- `mdinterface.build.regions`: `Sphere`, `Box`, `Cylinder` region primitives for spatially
+  constrained PACKMOL placement, and `Region.fill()` to pair a region with content
+- `SimCell.add_solvent(regions=...)` for spatially-heterogeneous solvent layers (e.g. a gas
+  pocket embedded in the bulk solvent)
+
+### Deprecated
+- `add_solvent(solute_pos="left"/"right")` - pass an equivalent `Region` (e.g.
+  `Box.from_bounds(...)`) instead
+
 ---
 
 ## [1.5.4] - 2026-08-12

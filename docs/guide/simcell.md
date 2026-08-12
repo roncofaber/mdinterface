@@ -73,6 +73,29 @@ simbox.add_solvent(
 )
 ```
 
+**Spatially heterogeneous regions (pockets):**
+
+Carve a `Sphere`, `Box`, or `Cylinder` out of the layer and fill it with different content — e.g.
+a CO2 gas pocket embedded in bulk water:
+
+```python
+from mdinterface.build.regions import Sphere
+
+bubble = Sphere(center=(12.5, 12.5, 15.0), radius=6.0)
+
+simbox.add_solvent(
+    water,
+    zdim=30,
+    density=1.0,
+    regions=[bubble.fill(co2, density=0.8)],
+)
+```
+
+`Region.fill()` accepts the same content parameters as `add_solvent` itself (`solvent`, `solute`,
+`nsolute`, `density`, `nsolvent`, `concentration`, `ratio`), minus `zdim`/`xysize` since the
+region defines its own extent. `conmodel` is not yet supported inside a region. The bulk solvent's
+molecule count automatically accounts for the volume carved out by each region.
+
 **Key parameters:**
 
 | Parameter | Description |
@@ -84,7 +107,8 @@ simbox.add_solvent(
 | `ratio` | Molar ratio for multi-solvent mixtures |
 | `solute` | `Specie` or list of `Specie` to dissolve |
 | `nsolute` | Molecule count per solute species |
-| `solute_pos` | Placement region: `None`, `"left"`, `"right"`, `"center"` |
+| `solute_pos` | Placement region: `None`, `"center"`, or a `Region` instance. `"left"`/`"right"` strings are deprecated — pass an equivalent `Box` instead (e.g. `Box.from_bounds(...)`) |
+| `regions` | List of `FilledRegion` (from `SomeRegion(...).fill(...)`) for spatially heterogeneous sub-regions within the layer |
 | `dilate` | Expand the PACKMOL box by this fraction to help convergence |
 | `packmol_tolerance` | PACKMOL distance tolerance in Angstroms (default 2.0) |
 
