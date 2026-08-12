@@ -3,9 +3,8 @@
 """
 PACKMOL input-file string templates.
 
-Provides the ``header``, ``box_place``, and ``fix_place`` format strings used
-by :func:`~mdinterface.build.box.populate_box` to generate PACKMOL ``.in``
-files.
+Provides the ``header``, ``box_place``, ``fix_place``, and ``structure_place`` format strings
+used by :func:`~mdinterface.build.box.populate_box` to generate PACKMOL ``.in`` files.
 """
 
 
@@ -27,11 +26,19 @@ structure mol_{}.pdb
 end structure
             """
             
+structure_place = """
+structure mol_{0}.pdb
+    number      {1}
+{2}
+    resnumbers  2
+end structure
+            """
+
 fix_place = """
 structure mol_{}.pdb
     number      1
     center
-    fixed {} {} {} 0. 0. 0. 
+    fixed {} {} {} 0. 0. 0.
     resnumbers  2
 end structure
 """

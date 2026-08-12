@@ -9,7 +9,7 @@ and layer stacking (``add_component``).  Solvent-specific logic lives in
 """
 
 from typing import List, Optional, Union, Tuple, Any
-from mdinterface.io.packmol import header, box_place, fix_place
+from mdinterface.io.packmol import header, box_place, fix_place, structure_place
 
 import logging
 import os
@@ -21,6 +21,11 @@ import numpy as np
 import subprocess
 
 logger = logging.getLogger(__name__)
+
+
+def _indent_constraints(lines):
+    """Join PACKMOL constraint lines, each indented for the .in file."""
+    return "\n".join(f"    {line}" for line in lines)
 
 
 def populate_box(
@@ -86,9 +91,18 @@ def populate_box(
                     if not rep:
                         continue
 
-                if typ == "box":  # normal add
+                if typ == "box":  # normal add, optionally with extra "outside" constraints
                     bounds = custom_bounds if custom_bounds is not None else box
-                    fout.write(box_place.format(cc, rep, " ".join(map(str, bounds))))
+                    extra_constraints = instruction[4] if len(instruction) > 4 else None
+                    lines = ["inside box " + " ".join(map(str, bounds))]
+                    if extra_constraints:
+                        lines.extend(extra_constraints)
+                    fout.write(structure_place.format(cc, rep, _indent_constraints(lines)))
+
+                elif typ == "region":  # placed via a Region's own "inside" constraint
+                    region_obj = instruction[3]
+                    lines = [region_obj.packmol_line("inside")]
+                    fout.write(structure_place.format(cc, rep, _indent_constraints(lines)))
 
                 elif typ == "fixed":  # coordinate -> fixed point
                     fout.write(fix_place.format(cc, *rep))
@@ -97,7 +111,8 @@ def populate_box(
                     tbox = box.copy()
                     tbox[2] = tbox[2] - mol.estimate_specie_radius()
                     tbox[5] = tbox[5] + mol.estimate_specie_radius()
-                    fout.write(box_place.format(cc, 1, " ".join(map(str, tbox))))
+                    lines = ["inside box " + " ".join(map(str, tbox))]
+                    fout.write(structure_place.format(cc, 1, _indent_constraints(lines)))
                     mol = mol.to_universe()
 
                 else:
