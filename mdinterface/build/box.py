@@ -46,6 +46,8 @@ def populate_box(
       *extra_constraints* is a list of raw PACKMOL constraint strings.
     - ``(universe, count, "region", region_obj)`` -- pack *count* copies constrained to
       a Region object's interior (using its ``packmol_line("inside")`` method).
+    - ``(universe, count, "region", region_obj, extra_constraints)`` -- as above, plus
+      additional raw PACKMOL constraint lines (e.g. to exclude a nested sub-region).
     - ``(universe, coords, "fixed")`` -- place a single molecule at fixed
       fractional coordinates *coords*.
     - ``(universe, coords, "zfixed")`` -- place a single molecule at fixed
@@ -106,9 +108,13 @@ def populate_box(
                         lines.extend(extra_constraints)
                     fout.write(structure_place.format(cc, rep, _indent_constraints(lines)))
 
-                elif typ == "region":  # placed via a Region's own "inside" constraint
+                elif typ == "region":  # placed via a Region's own "inside" constraint,
+                                       # optionally excluding nested sub-regions
                     region_obj = instruction[3]
+                    extra_constraints = instruction[4] if len(instruction) > 4 else None
                     lines = [region_obj.packmol_line("inside")]
+                    if extra_constraints:
+                        lines.extend(extra_constraints)
                     fout.write(structure_place.format(cc, rep, _indent_constraints(lines)))
 
                 elif typ == "fixed":  # coordinate -> fixed point
