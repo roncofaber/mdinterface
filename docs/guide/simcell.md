@@ -94,6 +94,8 @@ simbox.add_solvent(
 A `FilledRegion` can itself carry `regions=[...]` for further nested sub-regions, to arbitrary depth - e.g. a neon bubble nested inside the CO2 pocket:
 
 ```python
+from mdinterface.build.regions import Sphere
+
 pocket = Sphere(center=(12.5, 12.5, 15.0), radius=6.0)
 bubble = Sphere(center=(12.5, 12.5, 15.0), radius=1.0)
 
