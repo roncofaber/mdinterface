@@ -255,18 +255,25 @@ def _concentration_to_nsolute(concentration, volume_A3):
     return int(concentration * volume_A3 * units.mol / ((units.m / 10) ** 3))
 
 
-def _validate_regions(regions, volume):
-    """Raise if any region extends outside the layer box; warn on bbox overlap."""
+def _validate_regions(regions, bounds):
+    """Raise if any region extends outside `bounds`; warn on bbox overlap.
+
+    `bounds` is an explicit (xmin, ymin, zmin, xmax, ymax, zmax) tuple so this
+    can validate either a layer's top-level regions (bounds = the layer
+    volume) or one region's own nested regions (bounds = that region's
+    bounding_box()) - see _region_instructions, which calls this once per
+    nesting depth as it recurses.
+    """
     if not regions:
         return
-    xsize, ysize, zsize = volume
+    xmin, ymin, zmin, xmax, ymax, zmax = bounds
     for fr in regions:
         rxmin, rymin, rzmin, rxmax, rymax, rzmax = fr.region.bounding_box()
-        if (rxmin < 0 or rymin < 0 or rzmin < 0
-                or rxmax > xsize or rymax > ysize or rzmax > zsize):
+        if (rxmin < xmin or rymin < ymin or rzmin < zmin
+                or rxmax > xmax or rymax > ymax or rzmax > zmax):
             raise ValueError(
-                f"Region {fr.region!r} extends outside the layer volume "
-                f"[0, {xsize}] x [0, {ysize}] x [0, {zsize}]."
+                f"Region {fr.region!r} extends outside its parent volume "
+                f"[{xmin}, {xmax}] x [{ymin}, {ymax}] x [{zmin}, {zmax}]."
             )
     for i in range(len(regions)):
         for j in range(i + 1, len(regions)):
@@ -283,6 +290,62 @@ def _bboxes_overlap(a, b):
     ax0, ay0, az0, ax1, ay1, az1 = a
     bx0, by0, bz0, bx1, by1, bz1 = b
     return ax0 < bx1 and ax1 > bx0 and ay0 < by1 and ay1 > by0 and az0 < bz1 and az1 > bz0
+
+
+def _region_instructions(fr, parent_bounds):
+    """
+    Recursively build PACKMOL instructions for one FilledRegion and its nested regions.
+
+    fr's own solute/solvent fill excludes its immediate children (they get
+    their own instructions from the recursive call below), mirroring how the
+    top-level bulk fill excludes top-level regions. One flat instruction list
+    is produced per top-level FilledRegion, regardless of nesting depth, so
+    the caller still makes exactly one populate_box() call per layer.
+    """
+    if fr.conmodel is not None:
+        raise ValueError(
+            "conmodel is not yet supported inside a region; "
+            "use it only at the top-level add_solvent() call."
+        )
+
+    _validate_regions(fr.regions, fr.region.bounding_box())
+
+    instructions = []
+    child_outside = [child.region.packmol_line("outside") for child in fr.regions]
+    child_volume_A3 = sum(child.region.volume() for child in fr.regions)
+
+    r_nsolute = fr.nsolute
+    if fr.concentration is not None:
+        r_nsolute = _concentration_to_nsolute(
+            fr.concentration, fr.region.volume() - child_volume_A3
+        )
+
+    if fr.solute is not None and r_nsolute is not None:
+        for cc, sp in enumerate(fr.solute):
+            n = r_nsolute if isinstance(r_nsolute, int) else r_nsolute[cc]
+            if n > 0:
+                instructions.append((sp.to_universe(), n, "region", fr.region, child_outside))
+
+    if fr.solvent is None:
+        r_solvents = []
+    elif isinstance(fr.solvent, (list, tuple)):
+        r_solvents = list(fr.solvent)
+    else:
+        r_solvents = [fr.solvent]
+
+    if r_solvents:
+        r_volume_cm3 = 1e-24 * (fr.region.volume() - child_volume_A3)
+        r_counts = _compute_solvent_counts(
+            r_solvents, fr.density, fr.nsolvent, fr.ratio, r_volume_cm3
+        )
+        for sp, n in zip(r_solvents, r_counts):
+            if n > 0:
+                instructions.append((sp.to_universe(), n, "region", fr.region, child_outside))
+
+    for child in fr.regions:
+        instructions.extend(_region_instructions(child, fr.region.bounding_box()))
+
+    return instructions
 
 
 # ---------------------------------------------------------------------------
@@ -338,8 +401,9 @@ def make_solvent_box(
     regions : list of FilledRegion or None
         Spatially-heterogeneous sub-regions carved out of this layer (e.g. a
         gas pocket). Each is a Region (Sphere/Box/Cylinder) paired with its
-        own content via Region.fill(). See SimCell.add_solvent's `regions`
-        parameter.
+        own content via Region.fill(). A FilledRegion may itself carry
+        `regions=[...]` for further nested sub-regions, to arbitrary depth.
+        See SimCell.add_solvent's `regions` parameter.
 
     Returns
     -------
@@ -370,7 +434,7 @@ def make_solvent_box(
         instructions.extend(solute_instr)
 
     # regions carve volume out of the bulk and get their own PACKMOL constraints
-    _validate_regions(regions, volume)
+    _validate_regions(regions, (0.0, 0.0, 0.0) + tuple(volume))
     region_volume_A3 = sum(fr.region.volume() for fr in (regions or []))
     outside_lines = [fr.region.packmol_line("outside") for fr in (regions or [])]
 
@@ -383,39 +447,9 @@ def make_solvent_box(
             if n > 0:
                 instructions.append([sp.to_universe(), n, "box", None, outside_lines])
 
-    # region fills
+    # region fills (recursive - each region may itself contain nested regions)
     for fr in (regions or []):
-        if fr.conmodel is not None:
-            raise ValueError(
-                "conmodel is not yet supported inside a region; "
-                "use it only at the top-level add_solvent() call."
-            )
-
-        r_nsolute = fr.nsolute
-        if fr.concentration is not None:
-            r_nsolute = _concentration_to_nsolute(fr.concentration, fr.region.volume())
-
-        if fr.solute is not None and r_nsolute is not None:
-            for cc, sp in enumerate(fr.solute):
-                n = r_nsolute if isinstance(r_nsolute, int) else r_nsolute[cc]
-                if n > 0:
-                    instructions.append((sp.to_universe(), n, "region", fr.region))
-
-        if fr.solvent is None:
-            r_solvents = []
-        elif isinstance(fr.solvent, (list, tuple)):
-            r_solvents = list(fr.solvent)
-        else:
-            r_solvents = [fr.solvent]
-
-        if r_solvents:
-            r_volume_cm3 = 1e-24 * fr.region.volume()
-            r_counts = _compute_solvent_counts(
-                r_solvents, fr.density, fr.nsolvent, fr.ratio, r_volume_cm3
-            )
-            for sp, n in zip(r_solvents, r_counts):
-                if n > 0:
-                    instructions.append((sp.to_universe(), n, "region", fr.region))
+        instructions.extend(_region_instructions(fr, (0.0, 0.0, 0.0) + tuple(volume)))
 
     universe = populate_box(volume, instructions, tolerance=tolerance)
 

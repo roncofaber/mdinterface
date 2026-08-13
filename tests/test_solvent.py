@@ -259,3 +259,54 @@ class TestMakeSolventBoxRegions:
                 nsolute=None, concentration=None, conmodel=None, solute_pos=None,
                 nsolvent=None, regions=[r1.fill(na, nsolvent=1), r2.fill(na, nsolvent=1)],
             )
+
+    def test_nested_region_species_present(self, water, na, cl):
+        from mdinterface.build.solvent import make_solvent_box
+
+        outer = Sphere(center=(10.0, 10.0, 15.0), radius=6.0)
+        inner = Sphere(center=(10.0, 10.0, 15.0), radius=2.0)
+        outer_fr = outer.fill(na, nsolvent=3, regions=[inner.fill(cl, nsolvent=2)])
+        universe = make_solvent_box(
+            species=[water.to_universe(), na.to_universe(), cl.to_universe()],
+            solvent=water, solute=None, volume=[20.0, 20.0, 30.0], density=1.0,
+            nsolute=None, concentration=None, conmodel=None, solute_pos=None,
+            nsolvent=None, regions=[outer_fr],
+        )
+        assert universe is not None
+        resnames = {res.resname for res in universe.residues}
+        assert water.resname in resnames
+        assert na.resname in resnames
+        assert cl.resname in resnames
+
+    def test_nested_region_confined_to_inner_bounds(self, water, na, cl):
+        from mdinterface.build.solvent import make_solvent_box
+
+        outer = Sphere(center=(10.0, 10.0, 15.0), radius=6.0)
+        inner = Sphere(center=(10.0, 10.0, 15.0), radius=2.0)
+        outer_fr = outer.fill(na, nsolvent=3, regions=[inner.fill(cl, nsolvent=2)])
+        universe = make_solvent_box(
+            species=[water.to_universe(), na.to_universe(), cl.to_universe()],
+            solvent=water, solute=None, volume=[20.0, 20.0, 30.0], density=1.0,
+            nsolute=None, concentration=None, conmodel=None, solute_pos=None,
+            nsolvent=None, regions=[outer_fr],
+        )
+        cl_atoms = universe.select_atoms(f"resname {cl.resname}")
+        assert len(cl_atoms) == 2
+        for pos in cl_atoms.positions:
+            dist = sum((pos[i] - inner.center[i]) ** 2 for i in range(3)) ** 0.5
+            assert dist <= inner.radius + 0.2
+
+    def test_nested_region_out_of_bounds_raises(self, water, na, cl):
+        from mdinterface.build.solvent import make_solvent_box
+
+        outer = Sphere(center=(10.0, 10.0, 15.0), radius=4.0)
+        # inner radius 5 centered at the outer's own center - extends past the outer's own bbox
+        inner = Sphere(center=(10.0, 10.0, 15.0), radius=5.0)
+        outer_fr = outer.fill(na, nsolvent=1, regions=[inner.fill(cl, nsolvent=1)])
+        with pytest.raises(ValueError, match="extends outside"):
+            make_solvent_box(
+                species=[water.to_universe(), na.to_universe(), cl.to_universe()],
+                solvent=water, solute=None, volume=[20.0, 20.0, 30.0], density=1.0,
+                nsolute=None, concentration=None, conmodel=None, solute_pos=None,
+                nsolvent=None, regions=[outer_fr],
+            )
