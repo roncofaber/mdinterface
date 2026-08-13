@@ -91,6 +91,20 @@ simbox.add_solvent(
 )
 ```
 
+A `FilledRegion` can itself carry `regions=[...]` for further nested sub-regions, to arbitrary depth - e.g. a neon bubble nested inside the CO2 pocket:
+
+```python
+pocket = Sphere(center=(12.5, 12.5, 15.0), radius=6.0)
+bubble = Sphere(center=(12.5, 12.5, 15.0), radius=1.0)
+
+simbox.add_solvent(
+    water,
+    zdim=30,
+    density=1.0,
+    regions=[pocket.fill(co2, density=0.8, regions=[bubble.fill(ne, density=0.1)])],
+)
+```
+
 `Region.fill()` accepts the same content parameters as `add_solvent` itself (`solvent`, `solute`,
 `nsolute`, `density`, `nsolvent`, `concentration`, `ratio`), minus `zdim`/`xysize` since the
 region defines its own extent. `conmodel` is not yet supported inside a region. The bulk solvent's

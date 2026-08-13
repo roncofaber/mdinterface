@@ -9,6 +9,14 @@ All notable changes to mdinterface are documented here.
   constrained PACKMOL placement, and `Region.fill()` to pair a region with content
 - `SimCell.add_solvent(regions=...)` for spatially-heterogeneous solvent layers (e.g. a gas
   pocket embedded in the bulk solvent)
+- `Region.fill(regions=...)` / `FilledRegion.regions` for pockets nested inside pockets, to
+  arbitrary depth - `make_solvent_box` flattens the whole tree into one PACKMOL call per layer via
+  the new `_region_instructions` helper
+
+### Changed
+- `SimCell._layers` now holds typed `Compartment` objects (`SlabCompartment`, `SolventCompartment`,
+  `VacuumCompartment` in the new `mdinterface.build.compartment`) instead of per-layer-type dicts -
+  internal only, `add_slab`/`add_prebuilt`/`add_solvent`/`add_vacuum`'s signatures are unchanged
 
 ### Deprecated
 - `add_solvent(solute_pos="left"/"right")` - pass an equivalent `Region` (e.g.
