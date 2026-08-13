@@ -112,3 +112,18 @@ class TestFill:
         assert fr.concentration is None
         assert fr.conmodel is None
         assert fr.ratio is None
+
+
+class TestNestedRegions:
+
+    def test_fill_regions_default_empty(self):
+        b = Box(center=(0, 0, 0), size=(1, 1, 1))
+        fr = b.fill()
+        assert fr.regions == []
+
+    def test_fill_regions_stored(self):
+        outer = Box(center=(0, 0, 0), size=(10, 10, 10))
+        inner = Sphere(center=(0, 0, 0), radius=1.0)
+        inner_fr = inner.fill(solvent="CO2")
+        outer_fr = outer.fill(solvent="H2O", regions=[inner_fr])
+        assert outer_fr.regions == [inner_fr]

@@ -10,7 +10,7 @@ bulk solvent) - see SimCell.add_solvent's `regions` parameter.
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple
 
 
@@ -36,17 +36,20 @@ class Region:
     def fill(self, solvent: Optional[Any] = None, solute: Optional[List[Any]] = None,
               nsolute=None, density: Optional[float] = None, nsolvent=None,
               concentration: Optional[float] = None, conmodel: Optional[dict] = None,
-              ratio: Optional[List[float]] = None) -> "FilledRegion":
+              ratio: Optional[List[float]] = None,
+              regions: Optional[List["FilledRegion"]] = None) -> "FilledRegion":
         """
         Bundle this region with the content that should fill it.
 
         Parameters mirror SimCell.add_solvent's content parameters, minus
-        zdim/xysize since the region defines its own extent.
+        zdim/xysize since the region defines its own extent. `regions` lets
+        this region's own fill carve out further nested sub-regions (e.g. a
+        bubble inside a pocket), to arbitrary depth.
         """
         return FilledRegion(
             region=self, solvent=solvent, solute=solute, nsolute=nsolute,
             density=density, nsolvent=nsolvent, concentration=concentration,
-            conmodel=conmodel, ratio=ratio,
+            conmodel=conmodel, ratio=ratio, regions=regions or [],
         )
 
     @staticmethod
@@ -67,6 +70,7 @@ class FilledRegion:
     concentration: Optional[float] = None
     conmodel: Optional[dict] = None
     ratio: Optional[List[float]] = None
+    regions: List["FilledRegion"] = field(default_factory=list)
 
 
 class Sphere(Region):
