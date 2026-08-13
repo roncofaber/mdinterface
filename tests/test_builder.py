@@ -8,6 +8,7 @@ import numpy as np
 from mdinterface import SimCell
 from mdinterface.utils.logger import set_verbosity
 from mdinterface.database import Water, Ion
+from mdinterface.build.compartment import SlabCompartment, SolventCompartment, VacuumCompartment
 
 
 # ---------------------------------------------------------------------------
@@ -106,24 +107,24 @@ class TestLayerAccumulation:
 
     def test_vacuum_layer_stored(self, builder):
         builder.add_vacuum(zdim=10)
-        vac = [lay for lay in builder._layers if lay["type"] == "vacuum"]
+        vac = [lay for lay in builder._layers if isinstance(lay, VacuumCompartment)]
         assert len(vac) == 1
-        assert vac[0]["zdim"] == 10
+        assert vac[0].zdim == 10
 
     def test_solvent_layer_stored(self, builder, water):
         builder.add_solvent(water, zdim=30, density=1.0)
-        solv = [lay for lay in builder._layers if lay["type"] == "solvent"]
+        solv = [lay for lay in builder._layers if isinstance(lay, SolventCompartment)]
         assert len(solv) == 1
-        assert solv[0]["zdim"] == 30
+        assert solv[0].zdim == 30
 
     def test_solvent_solute_stored(self, builder, water, na, cl):
         builder.add_solvent(water, solute=[na, cl], nsolute=[3, 3], zdim=25, density=1.0)
-        assert len(builder._layers[0]["solute"]) == 2
+        assert len(builder._layers[0].solute) == 2
 
     def test_multiple_solvent_layers(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0)
         builder.add_solvent(water, zdim=20, density=1.0)
-        solvs = [lay for lay in builder._layers if lay["type"] == "solvent"]
+        solvs = [lay for lay in builder._layers if isinstance(lay, SolventCompartment)]
         assert len(solvs) == 2
 
     def test_add_solvent_requires_zdim(self, builder, water):
@@ -162,8 +163,8 @@ class TestSoluteOnlyLayer:
     def test_solute_only_layer_accepted(self, builder, na, cl):
         builder.add_solvent(None, solute=[na, cl], nsolute=[3, 3], zdim=20)
         solv = builder._layers[0]
-        assert solv["solvent"] == []
-        assert len(solv["solute"]) == 2
+        assert solv.solvent == []
+        assert len(solv.solute) == 2
 
     def test_solute_only_registered(self, builder, na, cl):
         builder.add_solvent(None, solute=[na, cl], nsolute=[2, 2], zdim=20)
@@ -181,11 +182,11 @@ class TestDilate:
 
     def test_dilate_stored(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0, dilate=1.5)
-        assert builder._layers[0]["dilate"] == 1.5
+        assert builder._layers[0].dilate == 1.5
 
     def test_dilate_default_is_one(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0)
-        assert builder._layers[0]["dilate"] == 1.0
+        assert builder._layers[0].dilate == 1.0
 
     def test_dilate_zero_raises(self, builder, water):
         with pytest.raises(ValueError, match="dilate"):
@@ -204,11 +205,11 @@ class TestPackmolTolerance:
 
     def test_tolerance_stored(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0, packmol_tolerance=1.5)
-        assert builder._layers[0]["packmol_tolerance"] == 1.5
+        assert builder._layers[0].packmol_tolerance == 1.5
 
     def test_tolerance_default(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0)
-        assert builder._layers[0]["packmol_tolerance"] == 2.0
+        assert builder._layers[0].packmol_tolerance == 2.0
 
     def test_tolerance_zero_raises(self, builder, water):
         with pytest.raises(ValueError, match="packmol_tolerance"):
@@ -229,27 +230,27 @@ class TestMultiSolvent:
         """A list of solvents is stored as a list, not wrapped in another list."""
         builder.add_solvent([water, na], zdim=20, nsolvent=[10, 5])
         solv = builder._layers[0]
-        assert isinstance(solv["solvent"], list)
-        assert len(solv["solvent"]) == 2
+        assert isinstance(solv.solvent, list)
+        assert len(solv.solvent) == 2
 
     def test_single_solvent_stored_as_list(self, builder, water):
         """A single Specie is normalised to a 1-element list."""
         builder.add_solvent(water, zdim=20, density=1.0)
         solv = builder._layers[0]
-        assert isinstance(solv["solvent"], list)
-        assert len(solv["solvent"]) == 1
+        assert isinstance(solv.solvent, list)
+        assert len(solv.solvent) == 1
 
     def test_ratio_stored(self, builder, water, na):
         builder.add_solvent([water, na], zdim=20, ratio=[3, 1], density=1.0)
-        assert builder._layers[0]["ratio"] == [3, 1]
+        assert builder._layers[0].ratio == [3, 1]
 
     def test_ratio_none_by_default(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0)
-        assert builder._layers[0]["ratio"] is None
+        assert builder._layers[0].ratio is None
 
     def test_nsolvent_list_stored(self, builder, water, na):
         builder.add_solvent([water, na], zdim=20, nsolvent=[50, 10])
-        assert builder._layers[0]["nsolvent"] == [50, 10]
+        assert builder._layers[0].nsolvent == [50, 10]
 
     def test_multi_solvent_registers_all(self, builder, water, na, cl):
         builder.add_solvent([water, na, cl], zdim=20, nsolvent=[100, 5, 5])
@@ -267,12 +268,12 @@ class TestRegions:
 
         pocket = Sphere(center=(10.0, 10.0, 15.0), radius=4.0)
         builder.add_solvent(water, zdim=20, density=1.0, regions=[pocket.fill(na, nsolvent=2)])
-        assert len(builder._layers[0]["regions"]) == 1
-        assert builder._layers[0]["regions"][0].region is pocket  # shared, not copied
+        assert len(builder._layers[0].regions) == 1
+        assert builder._layers[0].regions[0].region is pocket  # shared, not copied
 
     def test_regions_default_empty(self, builder, water):
         builder.add_solvent(water, zdim=20, density=1.0)
-        assert builder._layers[0]["regions"] == []
+        assert builder._layers[0].regions == []
 
     def test_region_species_registered(self, builder, water, na):
         from mdinterface.build.regions import Sphere
@@ -339,9 +340,9 @@ class TestSlabSuffixes:
         b = SimCell(xysize=[20, 20])
         b.add_slab(water)
         b.add_slab(water)
-        slabs = [lay for lay in b._layers if lay["type"] == "slab"]
-        label0 = slabs[0]["species"]._stype[0].label
-        label1 = slabs[1]["species"]._stype[0].label
+        slabs = [lay for lay in b._layers if isinstance(lay, SlabCompartment)]
+        label0 = slabs[0].species._stype[0].label
+        label1 = slabs[1].species._stype[0].label
         assert label0.endswith("_s0")
         assert label1.endswith("_s1")
 

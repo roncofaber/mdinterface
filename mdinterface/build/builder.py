@@ -15,8 +15,10 @@ from mdinterface.utils.auxiliary import find_smallest_missing, label_to_element
 from mdinterface.io.lammpswriter import DATAWriter, write_lammps_coefficients
 from mdinterface.io.gromacswriter import write_gromacs_itp, write_gromacs_top
 from mdinterface.build.box import make_interface_slab, add_component
-from mdinterface.build.solvent import make_solvent_box
 from mdinterface.build.regions import FilledRegion
+from mdinterface.build.compartment import (
+    Compartment, SlabCompartment, SolventCompartment, VacuumCompartment,
+)
 
 import ase
 import MDAnalysis as mda
@@ -60,6 +62,22 @@ def _log_layer_result(n_atoms, dims, zdim, layer_zdim, extra_lines=()):
     for line in extra_lines:
         logger.info("  >> %s", line)
     logger.info("  >> layer z: +%.2f Å  |  total z: %.2f Å", layer_zdim, zdim)
+
+
+def _collect_region_species(fr: FilledRegion) -> List[Any]:
+    """Flatten a FilledRegion's own species plus every nested region's species."""
+    species: List[Any] = []
+    if fr.solvent is None:
+        pass
+    elif isinstance(fr.solvent, (list, tuple)):
+        species.extend(fr.solvent)
+    else:
+        species.append(fr.solvent)
+    if fr.solute:
+        species.extend(fr.solute)
+    for child in fr.regions:
+        species.extend(_collect_region_species(child))
+    return species
 
 
 class SimCell:
@@ -110,7 +128,7 @@ class SimCell:
         xsize, ysize = self._validate_xysize(xysize)
         self._xsize = xsize
         self._ysize = ysize
-        self._layers: List[dict] = []
+        self._layers: List[Compartment] = []
         self._all_species: List[Any] = []
         self._universe: Optional[mda.Universe] = None
         
@@ -133,13 +151,12 @@ class SimCell:
             Number of unit-cell layers to stack along Z.
         """
         slab_sp = species.copy()
-        slab_idx = sum(1 for lay in self._layers if lay["type"] == "slab")
+        slab_idx = sum(1 for lay in self._layers if isinstance(lay, SlabCompartment))
         suffix = f"_s{slab_idx}"
         for atom in slab_sp._stype:
             atom.set_label(atom.label + suffix)
         self._register(slab_sp)
-        self._layers.append({"type": "slab", "label": "slab",
-                              "species": slab_sp, "nlayers": nlayers})
+        self._layers.append(SlabCompartment(species=slab_sp, nlayers=nlayers, label="slab"))
         logger.info("  + slab     %s,  %d layer(s)",
                     getattr(slab_sp, "resname", "?"), nlayers)
 
@@ -163,13 +180,12 @@ class SimCell:
             Number of repeat units to stack along Z (usually 1).
         """
         slab_sp = species.copy()
-        slab_idx = sum(1 for lay in self._layers if lay["type"] == "slab")
+        slab_idx = sum(1 for lay in self._layers if isinstance(lay, SlabCompartment))
         suffix = f"_s{slab_idx}"
         for atom in slab_sp._stype:
             atom.set_label(atom.label + suffix)
         self._register(slab_sp)
-        self._layers.append({"type": "slab", "label": "prebuilt",
-                              "species": slab_sp, "nlayers": nlayers})
+        self._layers.append(SlabCompartment(species=slab_sp, nlayers=nlayers, label="prebuilt"))
         logger.info("  + prebuilt %s,  %d layer(s)",
                     getattr(slab_sp, "resname", "?"), nlayers)
 
@@ -257,33 +273,25 @@ class SimCell:
         region_copies = [self._copy_filled_region(fr) for fr in (regions or [])]
         region_species: List[Any] = []
         for fr in region_copies:
-            if fr.solvent is None:
-                pass
-            elif isinstance(fr.solvent, (list, tuple)):
-                region_species.extend(fr.solvent)
-            else:
-                region_species.append(fr.solvent)
-            if fr.solute:
-                region_species.extend(fr.solute)
+            region_species.extend(_collect_region_species(fr))
 
         self._register(*solv_copies, *solute_copies, *region_species)
 
-        self._layers.append({
-            "type":               "solvent",
-            "solvent":            solv_copies,
-            "solute":             solute_copies,
-            "nsolute":            nsolute,
-            "zdim":               zdim,
-            "density":            density,
-            "nsolvent":           nsolvent,
-            "concentration":      concentration,
-            "conmodel":           conmodel,
-            "solute_pos":         solute_pos,
-            "dilate":             dilate,
-            "packmol_tolerance":  packmol_tolerance,
-            "ratio":              ratio,
-            "regions":            region_copies,
-        })
+        self._layers.append(SolventCompartment(
+            solvent=solv_copies,
+            solute=solute_copies,
+            nsolute=nsolute,
+            zdim=zdim,
+            density=density,
+            nsolvent=nsolvent,
+            concentration=concentration,
+            conmodel=conmodel,
+            solute_pos=solute_pos,
+            dilate=dilate,
+            packmol_tolerance=packmol_tolerance,
+            ratio=ratio,
+            regions=region_copies,
+        ))
         solv_str = "+".join(getattr(s, "resname", "?") for s in solv_copies) or "ions"
         rho_str  = (f"ρ={density:.2f} g/cm³" if density is not None
                     else f"nsolvent={nsolvent}" if nsolvent is not None else "density=?")
@@ -304,7 +312,7 @@ class SimCell:
         zdim : float
             Thickness of the vacuum gap in Angstroms.
         """
-        self._layers.append({"type": "vacuum", "zdim": zdim})
+        self._layers.append(VacuumCompartment(zdim=zdim))
         logger.info("  + vacuum   zdim=%.1f Å", zdim)
 
     # ------------------------------------------------------------------
@@ -649,27 +657,27 @@ class SimCell:
         xsize, ysize : float
             Final XY dimensions in Å.
         """
-        slab_layers = [l for l in self._layers if l["type"] == "slab"]
+        slab_layers = [l for l in self._layers if isinstance(l, SlabCompartment)]
         if slab_layers:
             log_subheader(logger, "Slab tiling")
 
         slab_dims = []
         for layer in self._layers:
-            if layer["type"] != "slab":
+            if not isinstance(layer, SlabCompartment):
                 continue
             tslab = make_interface_slab(
-                layer["species"], xsize, ysize, layers=layer["nlayers"]
+                layer.species, xsize, ysize, layers=layer.nlayers
             )
-            layer["_slab"] = tslab
+            layer._slab = tslab
             if tslab is None:
                 continue
             xi = np.dot([1, 0, 0], tslab.atoms.cell @ [1, 0, 0])
             yi = np.dot([0, 1, 0], tslab.atoms.cell @ [0, 1, 0])
             zi = np.dot([0, 0, 1], tslab.atoms.cell @ [0, 0, 1])
             slab_dims.append((xi, yi))
-            layer["_native_xy"] = (xi, yi)
+            layer._native_xy = (xi, yi)
             logger.info("  >> %s:  %.3f x %.3f x %.3f Å,  %d atoms",
-                        getattr(layer["species"], "resname", "?"),
+                        getattr(layer.species, "resname", "?"),
                         xi, yi, zi, len(tslab.atoms))
 
         if slab_dims:
@@ -709,21 +717,18 @@ class SimCell:
         n_layers = len(self._layers)
 
         for ii, layer in enumerate(self._layers):
-            ltype = layer["type"]
             tag = f"[{ii + 1}/{n_layers}]"
 
-            if ltype == "slab":
-                name  = getattr(layer["species"], "resname", "?")
-                label = layer.get("label", "slab")
+            if isinstance(layer, SlabCompartment):
+                name  = getattr(layer.species, "resname", "?")
                 log_subheader(logger, f"Layer {tag}")
-                logger.info("  >> %s: %s,  %d layer(s)", label, name, layer["nlayers"])
-                slab_u = layer["_slab"].to_universe(
-                    layered=layered, match_cell=do_match, xydim=[xsize, ysize]
-                )
+                logger.info("  >> %s: %s,  %d layer(s)", layer.label, name, layer.nlayers)
+                slab_u = layer.build(xsize, ysize, all_sp_univs,
+                                     layered=layered, do_match=do_match)
                 zdim_before = zdim
                 system, zdim = add_component(system, slab_u, zdim, padding=padding)
                 sx, sy, sz = slab_u.dimensions[:3]
-                native_xi, native_yi = layer.get("_native_xy", (sx, sy))
+                native_xi, native_yi = layer._native_xy or (sx, sy)
                 layer_zdim = zdim - zdim_before
                 stretched = (do_match and not
                              (np.isclose(native_xi, sx, rtol=1e-2) and
@@ -733,15 +738,15 @@ class SimCell:
                 _log_layer_result(len(slab_u.atoms), (sx, sy, sz),
                                   zdim, layer_zdim, extra_lines=extras)
 
-            elif ltype == "solvent":
+            elif isinstance(layer, SolventCompartment):
                 solv_names = " + ".join(
-                    getattr(s, "resname", "?") for s in layer["solvent"]
+                    getattr(s, "resname", "?") for s in layer.solvent
                 ) or "ions"
                 log_subheader(logger, f"Layer {tag}")
                 logger.info("  >> solvent: %s", solv_names)
-                if layer["density"] is not None:
-                    logger.info("  >> density: %.2f g/cm³", layer["density"])
-                solv_box = self._build_solvent_layer(layer, xsize, ysize, all_sp_univs)
+                if layer.density is not None:
+                    logger.info("  >> density: %.2f g/cm³", layer.density)
+                solv_box = layer.build(xsize, ysize, all_sp_univs)
                 if solv_box is not None:
                     zdim_before = zdim
                     system, zdim = add_component(system, solv_box, zdim, padding=padding)
@@ -749,7 +754,7 @@ class SimCell:
                     svx, svy, svz = solv_box.dimensions[:3]
                     mol_counts = Counter(res.resname for res in solv_box.residues)
                     # one line listing every species (solvent + solute) with counts
-                    all_sp = list(layer["solvent"]) + list(layer["solute"])
+                    all_sp = list(layer.solvent) + list(layer.solute)
                     mol_line = ",  ".join(
                         f"{getattr(s, 'resname', '?')} ({mol_counts.get(getattr(s, 'resname', '?'), 0)} mol)"
                         for s in all_sp
@@ -762,8 +767,8 @@ class SimCell:
                     logger.warning("  >> empty; check packmol.log")
                     system, zdim = add_component(system, solv_box, zdim, padding=padding)
 
-            elif ltype == "vacuum":
-                layer_zdim = layer["zdim"]
+            elif isinstance(layer, VacuumCompartment):
+                layer_zdim = layer.zdim
                 zdim += layer_zdim
                 log_subheader(logger, f"Layer {tag}")
                 logger.info("  >> vacuum: %.1f Å", layer_zdim)
@@ -773,46 +778,6 @@ class SimCell:
                 first_layer_zdim = zdim
 
         return system, zdim, first_layer_zdim
-
-    def _build_solvent_layer(
-        self,
-        layer: dict,
-        xsize: float,
-        ysize: float,
-        all_sp_univs: list,
-    ) -> Optional[mda.Universe]:
-        """
-        Build one solvent layer via PACKMOL.
-
-        Applies dilation if requested and delegates to :func:`make_solvent_box`.
-        """
-        dilate   = layer["dilate"]
-        eff_zdim = layer["zdim"] * dilate
-        eff_rho  = layer["density"] / dilate if layer["density"] is not None else None
-
-        if dilate != 1.0:
-            logger.info(
-                "  >> dilation x%.2f: packing %.1f Å at %.3f g/cm³  (target: %.1f Å)",
-                dilate, eff_zdim,
-                eff_rho if eff_rho is not None else float("nan"),
-                layer["zdim"],
-            )
-
-        return make_solvent_box(
-            species=all_sp_univs,
-            solvent=layer["solvent"] or None,
-            solute=layer["solute"] or None,
-            volume=[xsize, ysize, eff_zdim],
-            density=eff_rho,
-            nsolute=layer["nsolute"],
-            concentration=layer["concentration"],
-            conmodel=layer["conmodel"],
-            solute_pos=layer["solute_pos"],
-            nsolvent=layer["nsolvent"],
-            tolerance=layer["packmol_tolerance"],
-            ratio=layer["ratio"],
-            regions=layer["regions"],
-        )
 
     @staticmethod
     def _resolve_match_cell(match_cell):
@@ -926,7 +891,7 @@ class SimCell:
 
     @staticmethod
     def _copy_filled_region(fr: FilledRegion) -> FilledRegion:
-        """Deep-copy a FilledRegion's species (region geometry is immutable, shared as-is)."""
+        """Deep-copy a FilledRegion's species and nested regions (region geometry is immutable, shared as-is)."""
         if fr.solvent is None:
             solvent_copy = None
         elif isinstance(fr.solvent, (list, tuple)):
@@ -944,6 +909,7 @@ class SimCell:
             concentration=fr.concentration,
             conmodel=fr.conmodel,
             ratio=fr.ratio,
+            regions=[SimCell._copy_filled_region(child) for child in fr.regions],
         )
 
     def _update_topology_indexes(self) -> None:
