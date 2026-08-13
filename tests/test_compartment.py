@@ -49,3 +49,35 @@ class TestSlabCompartment:
     def test_native_xy_defaults_to_none(self, water):
         slab = SlabCompartment(species=water, nlayers=1)
         assert slab._native_xy is None
+
+
+class TestSolventCompartmentBuild:
+
+    def test_build_calls_make_solvent_box(self, water):
+        solv = SolventCompartment(
+            solvent=[water], solute=[], nsolute=None, zdim=20.0, density=1.0,
+            nsolvent=None, concentration=None, conmodel=None, solute_pos=None,
+            dilate=1.0, packmol_tolerance=2.0, ratio=None,
+        )
+        universe = solv.build(15.0, 15.0, [water.to_universe()])
+        assert universe is not None
+        assert {res.resname for res in universe.residues} == {water.resname}
+
+    def test_build_applies_dilation(self, water):
+        solv = SolventCompartment(
+            solvent=[water], solute=[], nsolute=None, zdim=20.0, density=1.0,
+            nsolvent=None, concentration=None, conmodel=None, solute_pos=None,
+            dilate=2.0, packmol_tolerance=2.0, ratio=None,
+        )
+        universe = solv.build(15.0, 15.0, [water.to_universe()])
+        assert universe is not None
+        # dilated pack targets zdim * dilate = 40.0 Å, not the requested 20.0 Å
+        assert universe.dimensions[2] == pytest.approx(40.0, abs=0.5)
+
+    def test_regions_default_empty(self, water):
+        solv = SolventCompartment(
+            solvent=[water], solute=[], nsolute=None, zdim=20.0, density=1.0,
+            nsolvent=None, concentration=None, conmodel=None, solute_pos=None,
+            dilate=1.0, packmol_tolerance=2.0, ratio=None,
+        )
+        assert solv.regions == []
