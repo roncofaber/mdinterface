@@ -83,7 +83,7 @@ from mdinterface.build.regions import Sphere
 from mdinterface.database import Argon
 
 argon  = Argon()
-bubble = Sphere(center=(12.5, 12.5, 15.0), radius=6.0)
+bubble = Sphere(center=(7.5, 7.5, 15.0), radius=5.0)
 
 simbox.add_solvent(
     water,
@@ -101,8 +101,8 @@ from mdinterface.database import Argon, Neon
 
 argon  = Argon()
 neon   = Neon()
-pocket = Sphere(center=(12.5, 12.5, 15.0), radius=6.0)
-bubble = Sphere(center=(12.5, 12.5, 15.0), radius=1.0)
+pocket = Sphere(center=(7.5, 7.5, 15.0), radius=5.0)
+bubble = Sphere(center=(7.5, 7.5, 15.0), radius=1.0)
 
 simbox.add_solvent(
     water,
