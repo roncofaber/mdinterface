@@ -18,6 +18,10 @@ All notable changes to mdinterface are documented here.
   `VacuumCompartment` in the new `mdinterface.build.compartment`) instead of per-layer-type dicts -
   internal only, `add_slab`/`add_prebuilt`/`add_solvent`/`add_vacuum`'s signatures are unchanged
 
+### Fixed
+- Spurious "no reference attributes to guess types/masses from" warnings from `Specie.to_universe()`'s intermediate `mda.Universe(...)` call (now passes `to_guess=()`) and `build.box.populate_box()`'s PACKMOL-output read-back (same fix)
+- `Specie.to_universe()` now also sets the `elements` TopologyAttr (previously only `names`), so `mda.Merge()` doesn't fall back to guessing it
+
 ### Deprecated
 - `add_solvent(solute_pos="left"/"right")` - pass an equivalent `Region` (e.g.
   `Box.from_bounds(...)`) instead

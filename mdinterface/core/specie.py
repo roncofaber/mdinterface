@@ -553,14 +553,15 @@ class Specie(object):
         top = mda.core.topology.Topology(n_atoms=len(self.atoms))
         
         # empty universe
-        uni = mda.Universe(top, self.atoms.get_positions())
+        uni = mda.Universe(top, self.atoms.get_positions(), to_guess=())
         
         # add some stuff
         uni.add_TopologyAttr("masses", self.atoms.get_masses())
         uni.add_TopologyAttr("resnames", [self.resname])
         # add atom symbols
-        atom_symbols = self.atoms.get_chemical_symbols()  # Assuming this method exists
+        atom_symbols = self.atoms.get_chemical_symbols()
         uni.add_TopologyAttr("names", atom_symbols)
+        uni.add_TopologyAttr("elements", atom_symbols)
         
         # generate type
         types, indexes = self.get_atom_types(return_index=True)

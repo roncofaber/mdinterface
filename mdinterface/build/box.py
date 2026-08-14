@@ -145,7 +145,7 @@ def populate_box(
             logger.debug("  >> PACKMOL converged")
 
         try:
-            universe = mda.Universe(output_file)
+            universe = mda.Universe(output_file, to_guess=())
             logger.debug("  >> PACKMOL output: %d atoms", len(universe.atoms))
         except Exception:
             logger.warning("  >> Could not load PACKMOL output; temp files kept at: %s", tmpdir)
