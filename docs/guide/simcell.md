@@ -155,6 +155,20 @@ simbox.add_solvent(
 region defines its own extent. `conmodel` is not yet supported inside a region. The bulk solvent's
 molecule count automatically accounts for the volume carved out by each region.
 
+A region's `center` can be `"random"` instead of a coordinate tuple, to have a non-overlapping
+placement chosen automatically within its parent volume (rejection-sampled against the parent's
+bounds and any sibling regions). Pass `seed` to `add_solvent` to make the placement reproducible:
+
+```python
+simbox.add_solvent(
+    water,
+    zdim=30,
+    density=1.0,
+    regions=[Sphere(center="random", radius=3.0).fill(argon, density=0.8)],
+    seed=42,
+)
+```
+
 **Key parameters:**
 
 | Parameter | Description |
@@ -168,6 +182,7 @@ molecule count automatically accounts for the volume carved out by each region.
 | `nsolute` | Molecule count per solute species |
 | `solute_pos` | Placement region: `None`, `"center"`, or a `Region` instance. `"left"`/`"right"` strings are deprecated - pass an equivalent `Box` instead (e.g. `Box.from_bounds(...)`) |
 | `regions` | List of `FilledRegion` (from `SomeRegion(...).fill(...)`) for spatially heterogeneous sub-regions within the layer |
+| `seed` | RNG seed for resolving `center="random"` regions, for reproducible placement |
 | `dilate` | Expand the PACKMOL box by this fraction to help convergence |
 | `packmol_tolerance` | PACKMOL distance tolerance in Angstroms (default 2.0) |
 
@@ -188,7 +203,7 @@ simbox.build(padding=0.5, center=False, stack_axis="z")
 | Parameter | Description |
 |-----------|-------------|
 | `padding` | Extra space (Angstroms) added above/below each PACKMOL region |
-| `center` | Shift the system so the center of the first layer falls on the periodic boundary (z=0). Standard convention for electrode/electrolyte slabs. |
+| `center` | Shift the system so the center of the first layer falls in the middle of the box, keeping it intact. Whatever ends up opposite it (typically a vacuum gap, if present) absorbs the periodic seam instead. |
 | `layered` | Keep per-layer residue numbering instead of merging |
 | `match_cell` | `True` (default): stretch all slabs to the largest XY cell, ensuring a consistent solid/liquid interface. `False`: each slab keeps its natural tiled XY. A `Specie`: lock XY to that species' cell and stretch everything else to match — useful when a pre-relaxed slab or polymer defines the cell. |
 | `hijack` | Replace positions and cell with a prebuilt `ase.Atoms` object |

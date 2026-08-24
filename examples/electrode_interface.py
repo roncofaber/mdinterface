@@ -52,7 +52,7 @@ simbox.add_vacuum(zdim=5)
 
 simbox.build(
     padding=0.5,
-    center=True,   # set True to center the first slab in the box
+    center=False,   # set True to center the first slab in the box
     layered=False,  # set True to tag each slab layer with a unique mol-id
     # hijack=atoms, # override positions + cell from an external ase.Atoms
     #               # (e.g. a pre-relaxed slab); topology is preserved

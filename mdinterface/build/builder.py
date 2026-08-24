@@ -204,6 +204,7 @@ class SimCell:
         packmol_tolerance: float = 2.0,
         ratio: Optional[List[float]] = None,
         regions: Optional[List[FilledRegion]] = None,
+        seed: Optional[int] = None,
     ) -> None:
         """
         Add a solvent (liquid) layer, optionally with dissolved species.
@@ -251,7 +252,12 @@ class SimCell:
             Spatially-heterogeneous sub-regions within this layer (e.g. a gas
             pocket embedded in the bulk solvent). Build with
             ``SomeRegion(...).fill(solvent=..., density=...)`` — see
-            :mod:`mdinterface.build.regions`.
+            :mod:`mdinterface.build.regions`. A region's ``center`` may be
+            ``"random"`` to have a non-overlapping placement chosen
+            automatically within its parent volume.
+        seed : int, optional
+            Seed for the RNG used to resolve ``center="random"`` regions.
+            Pass the same seed to reproduce an identical placement.
         """
         if zdim is None:
             raise ValueError("'zdim' is required for add_solvent()")
@@ -291,6 +297,7 @@ class SimCell:
             packmol_tolerance=packmol_tolerance,
             ratio=ratio,
             regions=region_copies,
+            seed=seed,
         ))
         solv_str = "+".join(getattr(s, "resname", "?") for s in solv_copies) or "ions"
         rho_str  = (f"ρ={density:.2f} g/cm³" if density is not None
@@ -337,9 +344,10 @@ class SimCell:
             Spacing (Å) inserted between adjacent layers.
         center : bool
             If True, shift the system so the center of the first layer falls
-            on the periodic boundary (z=0).  This is the standard convention
-            for electrode/electrolyte slabs where one electrode straddles the
-            cell edge.
+            in the middle of the box (z=zdim/2), keeping it intact instead of
+            straddling the periodic boundary. Whatever ends up opposite it
+            (typically a vacuum gap, if present) absorbs the periodic seam
+            instead.
         layered : bool
             Assign distinct molecule indices to each slab layer for LAMMPS.
         match_cell : bool or Specie
@@ -397,7 +405,7 @@ class SimCell:
             logger.info("  >> %s", ",  ".join(parts[i:i + 3]))
 
         if center:
-            shift = zdim - first_layer_zdim / 2
+            shift = (zdim - first_layer_zdim) / 2
             system.atoms.translate([0, 0, shift])
             _ = system.atoms.wrap()
             logger.info("  >> system centered on first layer (shift %.2f Å)", shift)

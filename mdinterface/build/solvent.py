@@ -11,6 +11,7 @@ orchestration lives in ``box.py`` (``populate_box``).
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import warnings
+from dataclasses import replace
 
 import numpy as np
 import MDAnalysis as mda
@@ -113,7 +114,7 @@ def _place_conmodel(solute, conmodel, volume):
             if new_coord is not None:
                 coords.append(new_coord)
                 radii.append(sp.estimate_specie_radius())
-                instructions.append((sp.to_universe(), new_coord, "fixed"))
+                instructions.append((sp, new_coord, "fixed"))
     return instructions
 
 
@@ -162,7 +163,7 @@ def populate_solutes(solute, nsolute, volume, solute_pos=None, conmodel=None):
     if solute_pos == "center":
         coord = list(volume / 2)
         return [
-            (sp.to_universe(), coord, "fixed")
+            (sp, coord, "fixed")
             for cc, sp in enumerate(solute)
             for _ in range(nsolute if isinstance(nsolute, int) else nsolute[cc])
         ]
@@ -206,7 +207,7 @@ def populate_solutes(solute, nsolute, volume, solute_pos=None, conmodel=None):
     if region is not None:
         return [
             (
-                sp.to_universe(),
+                sp,
                 nsolute if isinstance(nsolute, int) else nsolute[cc],
                 "region",
                 region,
@@ -216,7 +217,7 @@ def populate_solutes(solute, nsolute, volume, solute_pos=None, conmodel=None):
 
     return [
         (
-            sp.to_universe(),
+            sp,
             nsolute if isinstance(nsolute, int) else nsolute[cc],
             "box",
             box,
@@ -292,7 +293,53 @@ def _bboxes_overlap(a, b):
     return ax0 < bx1 and ax1 > bx0 and ay0 < by1 and ay1 > by0 and az0 < bz1 and az1 > bz0
 
 
-def _region_instructions(fr, parent_bounds):
+def _resolve_random_regions(regions, bounds, rng, max_attempts=100):
+    """Replace `center="random"` on each region with a concrete center via rejection sampling.
+
+    Candidates are drawn uniformly within `bounds` (inset by the region's own
+    half-extents so it never crosses the boundary) and rejected if their
+    bounding box overlaps a fixed sibling or an already-resolved random one.
+    Returns a new list of FilledRegion; regions without a random center are
+    passed through unchanged, and no input Region is mutated.
+    """
+    if not regions:
+        return regions
+    xmin, ymin, zmin, xmax, ymax, zmax = bounds
+    placed_bboxes = [fr.region.bounding_box() for fr in regions if not fr.region.is_random]
+
+    resolved = []
+    for fr in regions:
+        if not fr.region.is_random:
+            resolved.append(fr)
+            continue
+
+        hx, hy, hz = fr.region._half_extents()
+        lo = (xmin + hx, ymin + hy, zmin + hz)
+        hi = (xmax - hx, ymax - hy, zmax - hz)
+        if lo[0] > hi[0] or lo[1] > hi[1] or lo[2] > hi[2]:
+            raise ValueError(
+                f"Region {fr.region!r} is too large to place randomly inside its parent volume."
+            )
+
+        for _ in range(max_attempts):
+            candidate = tuple(rng.uniform(lo, hi))
+            candidate_region = fr.region._with_center(candidate)
+            bbox = candidate_region.bounding_box()
+            if not any(_bboxes_overlap(bbox, other) for other in placed_bboxes):
+                break
+        else:
+            raise ValueError(
+                f"Could not find a non-overlapping random placement for {fr.region!r} "
+                f"after {max_attempts} attempts."
+            )
+
+        placed_bboxes.append(bbox)
+        resolved.append(replace(fr, region=candidate_region))
+
+    return resolved
+
+
+def _region_instructions(fr, parent_bounds, rng):
     """
     Recursively build PACKMOL instructions for one FilledRegion and its nested regions.
 
@@ -308,11 +355,12 @@ def _region_instructions(fr, parent_bounds):
             "use it only at the top-level add_solvent() call."
         )
 
-    _validate_regions(fr.regions, fr.region.bounding_box())
+    children = _resolve_random_regions(fr.regions, fr.region.bounding_box(), rng)
+    _validate_regions(children, fr.region.bounding_box())
 
     instructions = []
-    child_outside = [child.region.packmol_line("outside") for child in fr.regions]
-    child_volume_A3 = sum(child.region.volume() for child in fr.regions)
+    child_outside = [child.region.packmol_line("outside") for child in children]
+    child_volume_A3 = sum(child.region.volume() for child in children)
 
     r_nsolute = fr.nsolute
     if fr.concentration is not None:
@@ -324,7 +372,7 @@ def _region_instructions(fr, parent_bounds):
         for cc, sp in enumerate(fr.solute):
             n = r_nsolute if isinstance(r_nsolute, int) else r_nsolute[cc]
             if n > 0:
-                instructions.append((sp.to_universe(), n, "region", fr.region, child_outside))
+                instructions.append((sp, n, "region", fr.region, child_outside))
 
     if fr.solvent is None:
         r_solvents = []
@@ -340,12 +388,30 @@ def _region_instructions(fr, parent_bounds):
         )
         for sp, n in zip(r_solvents, r_counts):
             if n > 0:
-                instructions.append((sp.to_universe(), n, "region", fr.region, child_outside))
+                instructions.append((sp, n, "region", fr.region, child_outside))
 
-    for child in fr.regions:
-        instructions.extend(_region_instructions(child, fr.region.bounding_box()))
+    for child in children:
+        instructions.extend(_region_instructions(child, fr.region.bounding_box(), rng))
 
     return instructions
+
+
+def _iter_packed_residues(packed):
+    """Yield (resname, positions) for each residue in a PACKMOL-packed ase.Atoms object.
+
+    PACKMOL's ``resnumbers 2`` directive assigns strictly increasing residue
+    numbers across the whole output, so a change in residue number always
+    marks a new molecule instance.
+    """
+    resnames = packed.arrays["residuenames"]
+    resnums = packed.arrays["residuenumbers"]
+    positions = packed.positions
+    n = len(packed)
+    start = 0
+    for i in range(1, n + 1):
+        if i == n or resnums[i] != resnums[start]:
+            yield resnames[start], positions[start:i]
+            start = i
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +432,7 @@ def make_solvent_box(
     tolerance: float = 2.0,
     ratio: Optional[List[float]] = None,
     regions: Optional[List["FilledRegion"]] = None,
+    seed: Optional[int] = None,
 ) -> Optional[mda.Universe]:
     """
     Build a solvent box with optional dissolved species.
@@ -403,7 +470,12 @@ def make_solvent_box(
         gas pocket). Each is a Region (Sphere/Box/Cylinder) paired with its
         own content via Region.fill(). A FilledRegion may itself carry
         `regions=[...]` for further nested sub-regions, to arbitrary depth.
+        A region's `center` may be `"random"`, resolved here via rejection
+        sampling against the parent volume and sibling regions.
         See SimCell.add_solvent's `regions` parameter.
+    seed : int or None
+        Seed for the RNG used to resolve `center="random"` regions.
+        Pass the same seed to reproduce an identical placement.
 
     Returns
     -------
@@ -434,9 +506,11 @@ def make_solvent_box(
         instructions.extend(solute_instr)
 
     # regions carve volume out of the bulk and get their own PACKMOL constraints
+    rng = np.random.default_rng(seed)
+    regions = _resolve_random_regions(regions or [], (0.0, 0.0, 0.0) + tuple(volume), rng)
     _validate_regions(regions, (0.0, 0.0, 0.0) + tuple(volume))
-    region_volume_A3 = sum(fr.region.volume() for fr in (regions or []))
-    outside_lines = [fr.region.packmol_line("outside") for fr in (regions or [])]
+    region_volume_A3 = sum(fr.region.volume() for fr in regions)
+    outside_lines = [fr.region.packmol_line("outside") for fr in regions]
 
     # solvents
     if solvents:
@@ -445,25 +519,24 @@ def make_solvent_box(
 
         for sp, n in zip(solvents, counts):
             if n > 0:
-                instructions.append([sp.to_universe(), n, "box", None, outside_lines])
+                instructions.append([sp, n, "box", None, outside_lines])
 
     # region fills (recursive - each region may itself contain nested regions)
-    for fr in (regions or []):
-        instructions.extend(_region_instructions(fr, (0.0, 0.0, 0.0) + tuple(volume)))
+    for fr in regions:
+        instructions.extend(_region_instructions(fr, (0.0, 0.0, 0.0) + tuple(volume), rng))
 
-    universe = populate_box(volume, instructions, tolerance=tolerance)
+    packed = populate_box(volume, instructions, tolerance=tolerance)
 
-    if universe is None:
+    if packed is None:
         return None
 
     species_dict = {specie.residues.resnames[0]: specie for specie in species}
 
     alist = []
-    for res in universe.residues:
-        resname = res.resname
+    for resname, positions in _iter_packed_residues(packed):
         if resname in species_dict:
             nmol = species_dict[resname].copy()
-            nmol.atoms.positions = res.atoms.positions
+            nmol.atoms.positions = positions
             alist.append(nmol.atoms)
 
     solution = mda.Merge(*alist)

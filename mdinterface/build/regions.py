@@ -9,9 +9,10 @@ for spatially heterogeneous solvent layers (e.g. a gas pocket embedded in a
 bulk solvent) - see SimCell.add_solvent's `regions` parameter.
 """
 
+import copy
 import math
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 
 class Region:
@@ -32,6 +33,36 @@ class Region:
 
     def bounding_box(self) -> Tuple[float, float, float, float, float, float]:
         raise NotImplementedError
+
+    @staticmethod
+    def _validate_center(center: Union[Tuple[float, float, float], str]):
+        """Accept a numeric (x, y, z) tuple, or the sentinel `"random"`."""
+        if isinstance(center, str):
+            if center != "random":
+                raise ValueError(f"center must be a coordinate tuple or 'random', got {center!r}")
+            return center
+        return tuple(float(c) for c in center)
+
+    @property
+    def is_random(self) -> bool:
+        """True if this region's center hasn't been resolved from `"random"` yet."""
+        return self.center == "random"
+
+    def _half_extents(self) -> Tuple[float, float, float]:
+        """Per-axis half-extent of bounding_box(), independent of center."""
+        original = self.center
+        self.center = (0.0, 0.0, 0.0)
+        try:
+            xmin, ymin, zmin, xmax, ymax, zmax = self.bounding_box()
+        finally:
+            self.center = original
+        return ((xmax - xmin) / 2, (ymax - ymin) / 2, (zmax - zmin) / 2)
+
+    def _with_center(self, center: Tuple[float, float, float]) -> "Region":
+        """Return a shallow copy of this region with a concrete `center`, leaving the original untouched."""
+        new = copy.copy(self)
+        new.center = center
+        return new
 
     def fill(self, solvent: Optional[Any] = None, solute: Optional[List[Any]] = None,
               nsolute=None, density: Optional[float] = None, nsolvent=None,
@@ -74,12 +105,18 @@ class FilledRegion:
 
 
 class Sphere(Region):
-    """A spherical region centered at `center` with the given `radius`."""
+    """A spherical region centered at `center` with the given `radius`.
 
-    def __init__(self, center: Tuple[float, float, float], radius: float):
+    `center` may be `"random"` instead of a coordinate tuple, to have a
+    non-overlapping placement chosen automatically within the parent volume
+    when the region is used - see SimCell.add_solvent's `regions`/`seed`
+    parameters.
+    """
+
+    def __init__(self, center: Union[Tuple[float, float, float], str], radius: float):
         if radius <= 0:
             raise ValueError(f"radius must be positive, got {radius}")
-        self.center = tuple(float(c) for c in center)
+        self.center = self._validate_center(center)
         self.radius = float(radius)
 
     def volume(self) -> float:
@@ -100,12 +137,16 @@ class Sphere(Region):
 
 
 class Box(Region):
-    """An axis-aligned box region centered at `center` with the given `size`."""
+    """An axis-aligned box region centered at `center` with the given `size`.
 
-    def __init__(self, center: Tuple[float, float, float], size: Tuple[float, float, float]):
+    `center` may be `"random"` instead of a coordinate tuple - see
+    :class:`Sphere`.
+    """
+
+    def __init__(self, center: Union[Tuple[float, float, float], str], size: Tuple[float, float, float]):
         if any(s <= 0 for s in size):
             raise ValueError(f"size components must be positive, got {size}")
-        self.center = tuple(float(c) for c in center)
+        self.center = self._validate_center(center)
         self.size = tuple(float(s) for s in size)
 
     @classmethod
@@ -137,11 +178,14 @@ class Cylinder(Region):
     A cylindrical region centered at `center`, with the given `radius` and
     `height`, extending along `axis`. `height` is centered on `center` along
     `axis` (the cylinder spans center[axis] - height/2 to center[axis] + height/2).
+
+    `center` may be `"random"` instead of a coordinate tuple - see
+    :class:`Sphere`.
     """
 
     _AXES = {"x": 0, "y": 1, "z": 2}
 
-    def __init__(self, center: Tuple[float, float, float], radius: float,
+    def __init__(self, center: Union[Tuple[float, float, float], str], radius: float,
                   height: float, axis: str = "z"):
         if radius <= 0:
             raise ValueError(f"radius must be positive, got {radius}")
@@ -149,7 +193,7 @@ class Cylinder(Region):
             raise ValueError(f"height must be positive, got {height}")
         if axis not in self._AXES:
             raise ValueError(f"axis must be 'x', 'y', or 'z', got {axis!r}")
-        self.center = tuple(float(c) for c in center)
+        self.center = self._validate_center(center)
         self.radius = float(radius)
         self.height = float(height)
         self.axis = axis

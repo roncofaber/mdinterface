@@ -74,6 +74,7 @@ class SolventCompartment(Compartment):
     packmol_tolerance: float
     ratio: Optional[List[float]]
     regions: List[FilledRegion] = field(default_factory=list)
+    seed: Optional[int] = None
 
     def build(self, xsize, ysize, all_sp_univs, layered=False, do_match=True):
         eff_zdim = self.zdim * self.dilate
@@ -101,4 +102,5 @@ class SolventCompartment(Compartment):
             tolerance=self.packmol_tolerance,
             ratio=self.ratio,
             regions=self.regions,
+            seed=self.seed,
         )

@@ -310,3 +310,84 @@ class TestMakeSolventBoxRegions:
                 nsolute=None, concentration=None, conmodel=None, solute_pos=None,
                 nsolvent=None, regions=[outer_fr],
             )
+
+
+class TestResolveRandomRegions:
+
+    def test_places_within_bounds(self):
+        from mdinterface.build.solvent import _resolve_random_regions
+
+        region = Sphere(center="random", radius=3.0)
+        fr = region.fill(density=1.0)
+        rng = np.random.default_rng(0)
+        resolved = _resolve_random_regions([fr], (0.0, 0.0, 0.0, 20.0, 20.0, 30.0), rng)
+
+        assert len(resolved) == 1
+        assert resolved[0].region.center != "random"
+        assert fr.region.center == "random"  # original untouched
+        xmin, ymin, zmin, xmax, ymax, zmax = resolved[0].region.bounding_box()
+        assert xmin >= 0.0 and ymin >= 0.0 and zmin >= 0.0
+        assert xmax <= 20.0 and ymax <= 20.0 and zmax <= 30.0
+
+    def test_avoids_sibling_overlap(self):
+        from mdinterface.build.solvent import _resolve_random_regions
+        from mdinterface.build.solvent import _bboxes_overlap
+
+        fixed = Sphere(center=(5.0, 5.0, 5.0), radius=3.0)
+        random_region = Sphere(center="random", radius=3.0)
+        frs = [fixed.fill(density=1.0), random_region.fill(density=1.0)]
+        rng = np.random.default_rng(1)
+        resolved = _resolve_random_regions(frs, (0.0, 0.0, 0.0, 20.0, 20.0, 30.0), rng)
+
+        fixed_bbox = resolved[0].region.bounding_box()
+        random_bbox = resolved[1].region.bounding_box()
+        assert not _bboxes_overlap(fixed_bbox, random_bbox)
+
+    def test_raises_when_no_space(self):
+        from mdinterface.build.solvent import _resolve_random_regions
+
+        region = Sphere(center="random", radius=15.0)
+        fr = region.fill(density=1.0)
+        rng = np.random.default_rng(0)
+        with pytest.raises(ValueError, match="too large"):
+            _resolve_random_regions([fr], (0.0, 0.0, 0.0, 20.0, 20.0, 30.0), rng)
+
+    def test_seed_reproducible(self):
+        from mdinterface.build.solvent import _resolve_random_regions
+
+        rng1 = np.random.default_rng(42)
+        rng2 = np.random.default_rng(42)
+        fr1 = Sphere(center="random", radius=3.0).fill(density=1.0)
+        fr2 = Sphere(center="random", radius=3.0).fill(density=1.0)
+
+        resolved1 = _resolve_random_regions([fr1], (0.0, 0.0, 0.0, 20.0, 20.0, 30.0), rng1)
+        resolved2 = _resolve_random_regions([fr2], (0.0, 0.0, 0.0, 20.0, 20.0, 30.0), rng2)
+
+        assert resolved1[0].region.center == resolved2[0].region.center
+
+    def test_no_regions_returns_empty(self):
+        from mdinterface.build.solvent import _resolve_random_regions
+
+        rng = np.random.default_rng(0)
+        assert _resolve_random_regions([], (0.0, 0.0, 0.0, 20.0, 20.0, 30.0), rng) == []
+
+
+class TestMakeSolventBoxRandomRegion:
+
+    def test_random_region_places_content_in_bounds(self, water, na):
+        from mdinterface.build.solvent import make_solvent_box
+
+        pocket = Sphere(center="random", radius=3.0)
+        universe = make_solvent_box(
+            species=[water.to_universe(), na.to_universe()],
+            solvent=water, solute=None, volume=[20.0, 20.0, 30.0], density=1.0,
+            nsolute=None, concentration=None, conmodel=None, solute_pos=None,
+            nsolvent=None, regions=[pocket.fill(na, nsolvent=3)], seed=7,
+        )
+        na_atoms = universe.select_atoms(f"resname {na.resname}")
+        assert len(na_atoms) == 3
+        assert pocket.center == "random"  # original region untouched
+        for pos in na_atoms.positions:
+            assert 0.0 <= pos[0] <= 20.0
+            assert 0.0 <= pos[1] <= 20.0
+            assert 0.0 <= pos[2] <= 30.0

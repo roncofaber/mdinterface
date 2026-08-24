@@ -16,6 +16,8 @@ import os
 import shutil
 import tempfile
 import MDAnalysis as mda
+import ase.io
+from ase import Atoms
 
 import numpy as np
 import subprocess
@@ -28,29 +30,36 @@ def _indent_constraints(lines):
     return "\n".join(f"    {line}" for line in lines)
 
 
+def _write_packmol_template(specie, path):
+    """Write a Specie's positions/resname to a PDB template for a PACKMOL structure block."""
+    atoms = specie.atoms.copy()
+    atoms.set_array("residuenames", np.array([specie.resname] * len(atoms), dtype=object))
+    ase.io.write(path, atoms, format="proteindatabank")
+
+
 def populate_box(
     volume: List[float],
     instructions: List[Tuple[Any, Union[int, List[float]], str]],
     tolerance: float = 2.0
-) -> Optional[mda.Universe]:
+) -> Optional[Atoms]:
     """
-    Run PACKMOL to pack molecules into a box and return the result as a Universe.
+    Run PACKMOL to pack molecules into a box and return the result as an ASE Atoms object.
 
     Each instruction tuple describes one molecule type to place:
 
-    - ``(universe, count, "box")`` -- pack *count* copies anywhere in the box.
-    - ``(universe, count, "box", bounds)`` -- restrict placement to a
+    - ``(specie, count, "box")`` -- pack *count* copies anywhere in the box.
+    - ``(specie, count, "box", bounds)`` -- restrict placement to a
       sub-region ``[xmin, ymin, zmin, xmax, ymax, zmax]``.
-    - ``(universe, count, "box", None, extra_constraints)`` -- pack *count* copies
+    - ``(specie, count, "box", None, extra_constraints)`` -- pack *count* copies
       in the full box with additional PACKMOL constraint lines (e.g., to exclude a region).
       *extra_constraints* is a list of raw PACKMOL constraint strings.
-    - ``(universe, count, "region", region_obj)`` -- pack *count* copies constrained to
+    - ``(specie, count, "region", region_obj)`` -- pack *count* copies constrained to
       a Region object's interior (using its ``packmol_line("inside")`` method).
-    - ``(universe, count, "region", region_obj, extra_constraints)`` -- as above, plus
+    - ``(specie, count, "region", region_obj, extra_constraints)`` -- as above, plus
       additional raw PACKMOL constraint lines (e.g. to exclude a nested sub-region).
-    - ``(universe, coords, "fixed")`` -- place a single molecule at fixed
+    - ``(specie, coords, "fixed")`` -- place a single molecule at fixed
       fractional coordinates *coords*.
-    - ``(universe, coords, "zfixed")`` -- place a single molecule at fixed
+    - ``(specie, coords, "zfixed")`` -- place a single molecule at fixed
       fractional XY coordinates with Z placement in a thin bin near the center of mass.
 
     Parameters
@@ -65,9 +74,10 @@ def populate_box(
 
     Returns
     -------
-    mda.Universe or None
-        The packed system as an MDAnalysis Universe, or ``None`` if the
-        instructions list is empty or PACKMOL fails to write an output file.
+    ase.Atoms or None
+        The packed system with ``residuenames``/``residuenumbers`` arrays set,
+        or ``None`` if the instructions list is empty or PACKMOL fails to
+        write an output file.
     """
     if not instructions:
         return None
@@ -126,12 +136,11 @@ def populate_box(
                     tbox[5] = tbox[5] + mol.estimate_specie_radius()
                     lines = ["inside box " + " ".join(map(str, tbox))]
                     fout.write(structure_place.format(cc, 1, _indent_constraints(lines)))
-                    mol = mol.to_universe()
 
                 else:
                     raise ValueError("Wrong instructions")
 
-                mol.atoms.write(os.path.join(tmpdir, "mol_{}.pdb".format(cc)))
+                _write_packmol_template(mol, os.path.join(tmpdir, "mol_{}.pdb".format(cc)))
 
         # run packmol
         logger.debug("  >> Running PACKMOL (tolerance=%.1f Å, %d molecule type(s))",
@@ -145,15 +154,15 @@ def populate_box(
             logger.debug("  >> PACKMOL converged")
 
         try:
-            universe = mda.Universe(output_file, to_guess=())
-            logger.debug("  >> PACKMOL output: %d atoms", len(universe.atoms))
+            packed = ase.io.read(output_file, format="proteindatabank")
+            logger.debug("  >> PACKMOL output: %d atoms", len(packed))
         except Exception:
             logger.warning("  >> Could not load PACKMOL output; temp files kept at: %s", tmpdir)
             return None
 
         # success -- clean up
         shutil.rmtree(tmpdir, ignore_errors=True)
-        return universe
+        return packed
 
     except Exception:
         logger.warning("  >> PACKMOL failed; temp files kept at: %s", tmpdir)

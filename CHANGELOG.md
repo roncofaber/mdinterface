@@ -12,15 +12,20 @@ All notable changes to mdinterface are documented here.
 - `Region.fill(regions=...)` / `FilledRegion.regions` for pockets nested inside pockets, to
   arbitrary depth - `make_solvent_box` flattens the whole tree into one PACKMOL call per layer via
   the new `_region_instructions` helper
+- `Sphere`/`Box`/`Cylinder` accept `center="random"` to have a non-overlapping placement chosen
+  automatically within the parent volume via rejection sampling; `SimCell.add_solvent(seed=...)`
+  makes the placement reproducible
 
 ### Changed
 - `SimCell._layers` now holds typed `Compartment` objects (`SlabCompartment`, `SolventCompartment`,
   `VacuumCompartment` in the new `mdinterface.build.compartment`) instead of per-layer-type dicts -
   internal only, `add_slab`/`add_prebuilt`/`add_solvent`/`add_vacuum`'s signatures are unchanged
+- `build.box.populate_box()` instructions now take raw `Specie` objects instead of `mda.Universe`, and it returns an `ase.Atoms` instead of an `mda.Universe` - PACKMOL's PDB templates are now written/read via `ase.io` instead of MDAnalysis, eliminating the PDB-completeness warnings (`altLocs`, `chainIDs`, `occupancies`, etc.) that MDAnalysis's `PDBWriter`/`PDBParser` raised for these throwaway files
 
 ### Fixed
 - Spurious "no reference attributes to guess types/masses from" warnings from `Specie.to_universe()`'s intermediate `mda.Universe(...)` call (now passes `to_guess=()`) and `build.box.populate_box()`'s PACKMOL-output read-back (same fix)
 - `Specie.to_universe()` now also sets the `elements` TopologyAttr (previously only `names`), so `mda.Merge()` doesn't fall back to guessing it
+- `SimCell.build(center=True)` centered the first layer on the periodic boundary (z=0), splitting it in two across the box edge, instead of centering it in the middle of the box (`builder.py`'s `shift` computation)
 
 ### Deprecated
 - `add_solvent(solute_pos="left"/"right")` - pass an equivalent `Region` (e.g.
