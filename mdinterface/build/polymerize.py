@@ -173,7 +173,7 @@ def start_chain(monomer):
     # is_connected[end_idx] = True
     monomer.new_array("is_connected", is_connected)
     
-    mon_idx = int(np.where(monomer.arrays["polymerize"] == 1)[0])
+    mon_idx = int(np.where(monomer.arrays["polymerize"] == 1)[0][0])
     monomer.arrays["is_connected"][mon_idx] = -1
     
     # mark monomer index
@@ -189,8 +189,8 @@ def attach_to_chain(oligomer, monomer, final=False):
     monomer  = monomer.copy()
 
     # Find indexes of atoms that will be polymerized (H atoms)
-    oli_idx = int(np.where(oligomer.arrays["polymerize"] == 2)[0])
-    mon_idx = int(np.where(monomer.arrays["polymerize"] == 1)[0])
+    oli_idx = int(np.where(oligomer.arrays["polymerize"] == 2)[0][0])
+    mon_idx = int(np.where(monomer.arrays["polymerize"] == 1)[0][0])
 
     # Find atoms connected to X (most likely C atoms)
     ini_idx = ase.build.connected_indices(oligomer, oli_idx)[1]
@@ -203,7 +203,7 @@ def attach_to_chain(oligomer, monomer, final=False):
     oligomer.arrays["is_connected"][ini_idx] = 2
     
     if final:
-        fin_idx = int(np.where(monomer.arrays["polymerize"] == 2)[0])
+        fin_idx = int(np.where(monomer.arrays["polymerize"] == 2)[0][0])
         monomer.arrays["is_connected"][fin_idx] = -2
         
     # mark monomer index

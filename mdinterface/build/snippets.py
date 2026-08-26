@@ -82,8 +82,8 @@ def make_snippet(polymer, center, Nmax, ending="H", preserve_rings=True):
     
     # fix distances for ligpargen
     for cc, (a1, a2) in enumerate(atom_pairs):
-        idx1 = int(np.where(snippet_idxs == a1)[0])
-        idx2 = int(np.where(snippet_idxs == a2)[0])
+        idx1 = int(np.where(snippet_idxs == a1)[0][0])
+        idx2 = int(np.where(snippet_idxs == a2)[0][0])
         snippet.set_distance(idx1, idx2, distances[cc], fix=0)
 
     return snippet, snippet_idxs
