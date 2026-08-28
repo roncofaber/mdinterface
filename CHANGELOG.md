@@ -12,6 +12,7 @@ All notable changes to mdinterface are documented here.
 - Reproducible automatic region placement through `center="random"` and `SimCell.add_solvent(seed=...)`
 
 ### Changed
+- Minimum supported Python version is now 3.9
 - `SimCell._layers` now stores typed `Compartment` objects internally; public layer-building signatures are unchanged
 - `build.box.populate_box()` now accepts `Specie` objects and returns `ase.Atoms`
 - PACKMOL templates now use ASE instead of MDAnalysis, eliminating PDB-completeness warnings for temporary files

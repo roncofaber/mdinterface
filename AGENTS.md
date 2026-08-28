@@ -4,7 +4,7 @@
 
 - Package: `mdinterface`
 - Main branch: `main`
-- Supported Python: 3.8+
+- Supported Python: 3.9+
 - License: Apache-2.0
 - Core stack: ASE, MDAnalysis, NetworkX, NumPy, and the external PACKMOL executable
 - Main pipeline: `SimCell` to PACKMOL to `ase.Atoms` or `MDAnalysis.Universe` to `write_lammps()` or `write_gromacs()`

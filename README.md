@@ -68,7 +68,7 @@ pip install fairchem-core
 
 ## Installation
 
-- **Python** 3.8+
+- **Python** 3.9+
 - **PACKMOL** (see above)
 
 ```bash

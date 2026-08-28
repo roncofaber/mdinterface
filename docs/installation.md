@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Python** 3.8+
+- **Python** 3.9+
 - **PACKMOL** (see below)
 
 Core Python dependencies are handled automatically by `pip`, see [requirements.txt](https://github.com/roncofaber/mdinterface/blob/main/requirements.txt).
