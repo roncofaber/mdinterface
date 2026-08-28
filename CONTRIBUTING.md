@@ -2,16 +2,10 @@
 
 ## Development setup
 
-Create and activate a Python environment, then install the package in editable mode with pytest:
+Create and activate a Python environment, then install the package in editable mode with pytest. This also installs the upstream PACKMOL package and executable:
 
 ```bash
 pip install -e . pytest
-```
-
-PACKMOL must be installed and available on `PATH` for packing workflows:
-
-```bash
-conda install -c conda-forge packmol
 ```
 
 Install optional dependencies only when working on the corresponding feature:

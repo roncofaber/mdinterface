@@ -24,13 +24,7 @@
 
 ## Requirements
 
-Mandatory Python dependencies are declared in [pyproject.toml](pyproject.toml). `pip install mdinterface` installs them automatically; [requirements.txt](requirements.txt) is a convenience list of the same core dependencies.
-
-You also need `packmol` installed and on your `PATH`:
-
-```bash
-conda install -c conda-forge packmol
-```
+Mandatory dependencies are declared in [pyproject.toml](pyproject.toml). `pip install mdinterface` installs them automatically, including the upstream PACKMOL package and executable; [requirements.txt](requirements.txt) is a convenience list of the same core dependencies.
 
 ### Optional packages
 
@@ -68,8 +62,7 @@ pip install fairchem-core
 
 ## Installation
 
-- **Python** 3.9+
-- **PACKMOL** (see above)
+- **Python** 3.10+
 
 ```bash
 # Stable release

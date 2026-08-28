@@ -2,18 +2,9 @@
 
 ## Requirements
 
-- **Python** 3.9+
-- **PACKMOL** (see below)
+- **Python** 3.10+
 
-Core Python dependencies are handled automatically by `pip`, see [requirements.txt](https://github.com/roncofaber/mdinterface/blob/main/requirements.txt).
-
-## Installing PACKMOL
-
-PACKMOL must be installed separately and available on your `PATH`:
-
-```bash
-conda install -c conda-forge packmol
-```
+Core dependencies are handled automatically by `pip`, including the upstream PACKMOL package and executable. See [requirements.txt](https://github.com/roncofaber/mdinterface/blob/main/requirements.txt).
 
 ## Installing mdinterface
 

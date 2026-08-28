@@ -4,9 +4,9 @@
 
 - Package: `mdinterface`
 - Main branch: `main`
-- Supported Python: 3.9+
+- Supported Python: 3.10+
 - License: Apache-2.0
-- Core stack: ASE, MDAnalysis, NetworkX, NumPy, and the external PACKMOL executable
+- Core stack: ASE, MDAnalysis, NetworkX, NumPy, and PACKMOL
 - Main pipeline: `SimCell` to PACKMOL to `ase.Atoms` or `MDAnalysis.Universe` to `write_lammps()` or `write_gromacs()`
 
 ## Working agreements
@@ -49,7 +49,7 @@ pytest -q
 mkdocs build --strict
 ```
 
-PACKMOL must be available on `PATH` for packing workflows and tests that exercise them. Install it with `conda install -c conda-forge packmol` when needed. Optional RESP and AIMD dependencies are heavy and should only be installed for work involving those features.
+The editable install provides the upstream PACKMOL package and executable used by packing workflows and tests. Optional RESP and AIMD dependencies are heavy and should only be installed for work involving those features.
 
 ## Documentation map
 
