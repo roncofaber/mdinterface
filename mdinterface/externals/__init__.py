@@ -14,9 +14,9 @@ from .obabel import run_OBChargeModel
 from .pyscf import calculate_RESP_charges
 from .optimization import relax_structure
 
-# Optional fairchem-dependent imports
-try:
-    from .aimd import run_aimd
-except ImportError:
-    # Fairchem not available, aimd functionality will not be available
-    pass
+
+def run_aimd(*args, **kwargs):
+    """Run AIMD while importing the optional FAIRChem integration on demand."""
+    from .aimd import run_aimd as _run_aimd
+
+    return _run_aimd(*args, **kwargs)

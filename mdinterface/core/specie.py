@@ -13,7 +13,6 @@ import logging
 
 import ase
 import ase.build
-import ase.visualize
 from ase.data import vdw_radii
 from ase.data.colors import jmol_colors
 import MDAnalysis as mda
@@ -30,13 +29,10 @@ from mdinterface.externals import run_ligpargen, run_OBChargeModel, calculate_RE
     
 from mdinterface.utils.graphs import molecule_to_graph, find_unique_paths_of_length,\
     find_improper_idxs,find_relevant_distances, find_atom_types
-from mdinterface.utils.draw import draw_bond_markers
 
 import copy
 import numpy as np
 import networkx as nx
-
-import matplotlib.pyplot as plt
 
 #%%
 
@@ -692,7 +688,9 @@ class Specie(object):
         return (3 * volume / (4 * np.pi)) ** (1/3)
     
     def view(self):
-        ase.visualize.view(self.atoms)
+        from ase.visualize import view
+
+        view(self.atoms)
         return
 
     def _type2id(self, attribute, types):
@@ -742,6 +740,10 @@ class Specie(object):
         return unique_pairs_list
 
     def plot_graph(self, show_bonds=False):
+        import matplotlib.pyplot as plt
+
+        from mdinterface.utils.draw import draw_bond_markers
+
         
         colors = [jmol_colors[a.number] for a in self.atoms]
         
@@ -976,4 +978,3 @@ class Specie(object):
 
     def _get_rings_containing_atoms(self, atom_indices, max_ring_size=8):
         return get_rings_containing_atoms(self.graph, atom_indices, max_ring_size=max_ring_size)
-

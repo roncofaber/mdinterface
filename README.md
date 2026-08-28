@@ -48,6 +48,8 @@ BOSSdir = /path/to/boss          # native directory
 # BOSSdir = boss-container:latest  # Docker image
 ```
 
+The configuration file is read when LigParGen is invoked. An existing `BOSSdir` environment variable takes precedence over the file value.
+
 BOSS is a 32-bit binary that can be awkward to run on modern systems. The [boss-container](https://github.com/roncofaber/boss-container) repo provides a ready-to-build Docker/Apptainer image that handles the 32-bit library setup.
 
 #### RESP charges with PySCF

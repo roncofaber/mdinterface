@@ -36,6 +36,8 @@ Follow the instructions on the [LigParGen GitHub](https://github.com/Isra3l/ligp
 
 LigParGen requires [BOSS](http://zarbi.chem.yale.edu/software.html), a 32-bit binary. Point `mdinterface` to it via `BOSSdir` in the config file. Three modes are supported depending on how BOSS is available:
 
+The configuration file is read when LigParGen is invoked. An existing `BOSSdir` environment variable takes precedence over the file value.
+
 === "Apptainer / Singularity (HPC)"
 
     Build the container with [boss-container](https://github.com/roncofaber/boss-container), then:

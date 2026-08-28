@@ -239,6 +239,11 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     """
 
     if "BOSSdir" not in os.environ:
+        from mdinterface.config import load_config
+
+        load_config()
+
+    if "BOSSdir" not in os.environ:
         mdint = os.environ.get("MDINT_CONFIG_DIR", "~/.config/mdinterface")
         logger.warning(
             "BOSSdir is not set. Set it to one of:\n"

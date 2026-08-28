@@ -14,6 +14,7 @@ All notable changes to mdinterface are documented here.
 ### Changed
 - Minimum supported Python version is now 3.10
 - PACKMOL is now installed automatically from its upstream PyPI package
+- Importing `mdinterface` no longer loads optional AIMD and plotting dependencies or reads user configuration
 - `SimCell._layers` now stores typed `Compartment` objects internally; public layer-building signatures are unchanged
 - `build.box.populate_box()` now accepts `Specie` objects and returns `ase.Atoms`
 - PACKMOL templates now use ASE instead of MDAnalysis, eliminating PDB-completeness warnings for temporary files

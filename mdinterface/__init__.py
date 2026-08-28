@@ -17,6 +17,9 @@ from .core.specie import Specie
 from .core.polymer import Polymer
 from .utils.logger import set_verbosity
 
-# load configuration file
-from .config import load_config
-load_config()
+
+def load_config():
+    """Load user configuration without performing configuration I/O during import."""
+    from .config import load_config as _load_config
+
+    return _load_config()
