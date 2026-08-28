@@ -58,7 +58,13 @@ all = [
 ]
 
 [tool.setuptools]
-packages = {find = {}}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["mdinterface*"]
+
+[tool.setuptools.package-data]
+mdinterface = ["config.ini"]
 
 [tool.setuptools.dynamic]
 version = {attr = "mdinterface.__version__"}

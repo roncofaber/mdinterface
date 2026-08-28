@@ -5,7 +5,9 @@
 !assets/mdinterface.png
 !docs/assets/mdinterface.png
 
-# Claude Code superpowers scaffold (local working docs, not project history)
+# Local agent working documents
+.agent-work/
+# Legacy local working documents
 docs/superpowers/
 
 ## AUTO GENERATED

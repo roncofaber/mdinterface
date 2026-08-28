@@ -17,23 +17,33 @@ jobs:
       version: ${{ steps.resolve.outputs.version }}
       tag: ${{ steps.resolve.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Resolve tag and version
         id: resolve
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            TAG="${{ github.event.inputs.tag }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
           else
-            TAG="${GITHUB_REF#refs/tags/}"
+            TAG="$REF_NAME"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: invalid release tag '$TAG'"
+            exit 1
           fi
           VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Verify tag matches package version
         run: |
@@ -50,25 +60,17 @@ jobs:
 
   test:
     needs: preflight
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install package
-        run: pip install -e . pytest
-
-      - name: Run tests
-        run: pytest
+    uses: ./.github/workflows/tests.yml
+    with:
+      ref: ${{ needs.preflight.outputs.tag }}
 
   build:
-    needs: test
+    needs: [preflight, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
 
       - uses: actions/setup-python@v5
         with:
@@ -78,6 +80,9 @@ jobs:
         run: |
           pip install build
           python -m build
+
+      - name: Verify distribution contents
+        run: python scripts/verify_distribution_contents.py dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -109,6 +114,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.preflight.outputs.tag }}
           fetch-depth: 0
 
       - uses: actions/setup-python@v5

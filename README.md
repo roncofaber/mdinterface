@@ -24,7 +24,7 @@
 
 ## Requirements
 
-Check [requirements.txt](requirements.txt) for mandatory dependencies. `pip install mdinterface` handles them automatically.
+Mandatory Python dependencies are declared in [pyproject.toml](pyproject.toml). `pip install mdinterface` installs them automatically; [requirements.txt](requirements.txt) is a convenience list of the same core dependencies.
 
 You also need `packmol` installed and on your `PATH`:
 
@@ -33,6 +33,14 @@ conda install -c conda-forge packmol
 ```
 
 ### Optional packages
+
+#### Molecular volume estimation
+
+`Specie.estimate_specie_volume()` and `Specie.estimate_specie_radius()` require `libarvo`:
+
+```bash
+pip install libarvo
+```
 
 #### LigParGen (automatic OPLS-AA parameters)
 
@@ -50,7 +58,7 @@ BOSS is a 32-bit binary that can be awkward to run on modern systems. The [boss-
 
 #### RESP charges with PySCF
 
-Install [PySCF](https://github.com/pyscf/pyscf) and [PyMBXAS](https://gitlab.com/roncofaber/pymbxas). RESP fitting currently requires [gpu4pyscf](https://github.com/pyscf/gpu4pyscf).
+Install the `resp` extra for PySCF and PyMBXAS. RESP fitting currently also requires the platform-specific [gpu4pyscf](https://github.com/pyscf/gpu4pyscf), which is not installed by the extra.
 
 #### AIMD with FAIRChem
 
@@ -80,6 +88,8 @@ pip install mdinterface[resp]   # RESP charge analysis
 pip install mdinterface[aimd]   # FAIRChem AIMD
 pip install mdinterface[all]    # everything
 ```
+
+The `resp` and `all` extras do not install `gpu4pyscf`; install the compatible build separately when using RESP fitting.
 
 ## Quick start
 
@@ -126,6 +136,8 @@ More complete scripts are in the [examples/](examples/) directory:
 | `polymer/polymer_piperion.py` | Co-polymer membrane box with explicit hydration number |
 
 Full API reference and user guide: [roncofaber.github.io/mdinterface](https://roncofaber.github.io/mdinterface)
+
+Development setup and contribution guidance are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 The legacy `SimulationBox` API is still available and unchanged; see [examples/legacy/](examples/legacy/).
 

@@ -1,0 +1,40 @@
+name: Test suite
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to test
+        required: true
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install PACKMOL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y packmol
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest
+
+      - name: Run tests
+        run: pytest -q

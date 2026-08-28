@@ -10,6 +10,7 @@ used by :func:`~mdinterface.build.box.populate_box` to generate PACKMOL ``.in`` 
 
 header = """\
 tolerance {}
+precision 0.001
 output    {}
 nloop     100
 seed      {}

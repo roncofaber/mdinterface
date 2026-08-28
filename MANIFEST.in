@@ -1,17 +1,20 @@
 # Include important files
 include README.md
 include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
 include requirements.txt
 include pyproject.toml
 
 # Include package data
 recursive-include mdinterface *.py
-recursive-include mdinterface/database *.json *.txt *.dat
-recursive-include mdinterface/examples *.py
-recursive-include mdinterface/config *.ini
+include mdinterface/config.ini
 
-# Include documentation and assets if they exist
+# Include development material in the source distribution
 recursive-include docs *
+recursive-include examples *
+recursive-include scripts *.py
+recursive-include tests *.py
 include assets/*
 
 # Exclude unwanted files
@@ -24,3 +27,4 @@ recursive-exclude * *.py[co]
 recursive-exclude * .git*
 recursive-exclude * .tox*
 recursive-exclude * .pytest_cache*
+prune docs/superpowers

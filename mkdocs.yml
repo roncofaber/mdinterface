@@ -67,3 +67,5 @@ nav:
       - Database: api/database.md
       - Externals: api/externals.md
       - I/O: api/io.md
+  - Development:
+      - Releasing: development/releasing.md

@@ -5,31 +5,27 @@ All notable changes to mdinterface are documented here.
 ## [Unreleased]
 
 ### Added
-- `mdinterface.build.regions`: `Sphere`, `Box`, `Cylinder` region primitives for spatially
-  constrained PACKMOL placement, and `Region.fill()` to pair a region with content
-- `SimCell.add_solvent(regions=...)` for spatially-heterogeneous solvent layers (e.g. a gas
-  pocket embedded in the bulk solvent)
-- `Region.fill(regions=...)` / `FilledRegion.regions` for pockets nested inside pockets, to
-  arbitrary depth - `make_solvent_box` flattens the whole tree into one PACKMOL call per layer via
-  the new `_region_instructions` helper
-- `Sphere`/`Box`/`Cylinder` accept `center="random"` to have a non-overlapping placement chosen
-  automatically within the parent volume via rejection sampling; `SimCell.add_solvent(seed=...)`
-  makes the placement reproducible
+- `Sphere`, `Box`, and `Cylinder` regions for spatially constrained PACKMOL placement
+- `Region.fill()` for assigning content to a region
+- `SimCell.add_solvent(regions=...)` for spatially heterogeneous solvent layers
+- Nested regions through `Region.fill(regions=...)`
+- Reproducible automatic region placement through `center="random"` and `SimCell.add_solvent(seed=...)`
 
 ### Changed
-- `SimCell._layers` now holds typed `Compartment` objects (`SlabCompartment`, `SolventCompartment`,
-  `VacuumCompartment` in the new `mdinterface.build.compartment`) instead of per-layer-type dicts -
-  internal only, `add_slab`/`add_prebuilt`/`add_solvent`/`add_vacuum`'s signatures are unchanged
-- `build.box.populate_box()` instructions now take raw `Specie` objects instead of `mda.Universe`, and it returns an `ase.Atoms` instead of an `mda.Universe` - PACKMOL's PDB templates are now written/read via `ase.io` instead of MDAnalysis, eliminating the PDB-completeness warnings (`altLocs`, `chainIDs`, `occupancies`, etc.) that MDAnalysis's `PDBWriter`/`PDBParser` raised for these throwaway files
+- `SimCell._layers` now stores typed `Compartment` objects internally; public layer-building signatures are unchanged
+- `build.box.populate_box()` now accepts `Specie` objects and returns `ase.Atoms`
+- PACKMOL templates now use ASE instead of MDAnalysis, eliminating PDB-completeness warnings for temporary files
 
 ### Fixed
-- Spurious "no reference attributes to guess types/masses from" warnings from `Specie.to_universe()`'s intermediate `mda.Universe(...)` call (now passes `to_guess=()`) and `build.box.populate_box()`'s PACKMOL-output read-back (same fix)
-- `Specie.to_universe()` now also sets the `elements` TopologyAttr (previously only `names`), so `mda.Merge()` doesn't fall back to guessing it
-- `SimCell.build(center=True)` centered the first layer on the periodic boundary (z=0), splitting it in two across the box edge, instead of centering it in the middle of the box (`builder.py`'s `shift` computation)
+- Spurious MDAnalysis topology-guessing warnings in `Specie.to_universe()` and `build.box.populate_box()`
+- Missing `elements` topology data in universes created by `Specie.to_universe()`
+- Incorrect first-layer centering in `SimCell.build(center=True)`
+- Region-constrained PACKMOL placements exceeding requested boundaries because of loose default solver precision
+- Wheels including repository documentation, examples, tests, and local planning files because package discovery was not limited to `mdinterface`
+- Missing `mdinterface/config.ini` in wheels, which broke the default configuration fallback after installation
 
 ### Deprecated
-- `add_solvent(solute_pos="left"/"right")` - pass an equivalent `Region` (e.g.
-  `Box.from_bounds(...)`) instead
+- `add_solvent(solute_pos="left"/"right")` - pass an equivalent `Region`, such as `Box.from_bounds(...)`, instead
 
 ---
 
