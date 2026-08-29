@@ -172,7 +172,7 @@ def make_interface_slab(interface_uc, xsize, ysize, layers=1):
     """
     Tile a unit-cell Specie into a surface slab of the requested XY size.
 
-    The unit cell is replicated in X and Y using the nearest integer repeat
+    The unit cell is replicated in X and Y using the smallest integer repeat
     counts that cover *xsize* x *ysize* Angstroms, then repeated *layers*
     times along Z.
 
@@ -195,19 +195,22 @@ def make_interface_slab(interface_uc, xsize, ysize, layers=1):
     """
     if layers == 0 or interface_uc is None:
         return None
-    
-    xrep = int(np.round(xsize/interface_uc.atoms.get_cell()[0][0]))
-    yrep = int(np.round(ysize/interface_uc.atoms.get_cell()[1][1]))
+
+    if xsize <= 0 or ysize <= 0:
+        raise ValueError(f"Slab target dimensions must be positive, got [{xsize}, {ysize}].")
+
+    cell = interface_uc.atoms.get_cell()
+    xperiod = float(cell[0][0])
+    yperiod = float(cell[1][1])
+    if xperiod <= 0 or yperiod <= 0:
+        raise ValueError("Slab cell must have positive X and Y lattice-vector projections.")
+    if not np.allclose(cell, np.diag(np.diag(cell))):
+        logger.warning("Non-orthogonal slab cell will be converted to an orthogonal cell during tiling.")
+
+    xrep = max(1, int(np.ceil(xsize / xperiod)))
+    yrep = max(1, int(np.ceil(ysize / yperiod)))
     
     slab = interface_uc.copy()
-    
-    if not np.isclose(np.dot(slab.atoms.cell[0], [1,0,0]), slab.atoms.cell[0][0]):
-        xrep += 1
-        logger.warning("Non-orthogonal cell along X ; check interface pattern")
-
-    if not np.isclose(np.dot(slab.atoms.cell[1], [0,1,0]), slab.atoms.cell[1][1]):
-        yrep += 1
-        logger.warning("Non-orthogonal cell along Y ; check interface pattern")
     
     if not (xrep, yrep, 1) == (1,1,1):
         slab.repeat((xrep, yrep, 1), make_cubic=True)

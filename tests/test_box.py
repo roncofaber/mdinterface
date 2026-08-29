@@ -2,8 +2,11 @@
 """Unit tests for mdinterface.build.box.populate_box, focused on the region-aware constraint paths."""
 
 import pytest
+import numpy as np
+from ase import Atoms
 
-from mdinterface.build.box import populate_box
+from mdinterface import Specie
+from mdinterface.build.box import make_interface_slab, populate_box
 from mdinterface.build.regions import Sphere
 from mdinterface.database import Ion
 
@@ -50,3 +53,55 @@ class TestPopulateBoxRegion:
     def test_unknown_instruction_type_raises(self, na):
         with pytest.raises(ValueError, match="Wrong instructions"):
             populate_box([20.0, 20.0, 20.0], [(na, 1, "diagonal")])
+
+
+class TestMakeInterfaceSlab:
+
+    @staticmethod
+    def specie_with_cell(cell):
+        return Specie(Atoms("He", positions=[[0.0, 0.0, 0.0]], cell=cell, pbc=True))
+
+    @pytest.mark.parametrize(
+        ("target", "expected_cell", "expected_atoms"),
+        [
+            ((2.0, 1.0), (4.0, 3.0), 1),
+            ((8.0, 6.0), (8.0, 6.0), 4),
+            ((8.1, 6.1), (12.0, 9.0), 9),
+        ],
+    )
+    def test_tiling_covers_target(self, target, expected_cell, expected_atoms):
+        slab = make_interface_slab(
+            self.specie_with_cell([4.0, 3.0, 5.0]),
+            *target,
+        )
+
+        assert np.allclose(slab.atoms.cell.lengths()[:2], expected_cell)
+        assert len(slab.atoms) == expected_atoms
+        assert slab.atoms.cell.lengths()[0] >= target[0]
+        assert slab.atoms.cell.lengths()[1] >= target[1]
+
+    def test_nonorthogonal_cell_is_tiled_and_orthogonalized(self, caplog):
+        with caplog.at_level("WARNING", logger="mdinterface.build.box"):
+            slab = make_interface_slab(
+                self.specie_with_cell([[4.0, 0.0, 0.0], [1.0, 3.0, 0.0], [0.0, 0.0, 5.0]]),
+                8.1,
+                6.1,
+            )
+
+        assert np.allclose(slab.atoms.cell.lengths(), [12.0, 9.0, 5.0])
+        assert np.allclose(slab.atoms.cell.angles(), [90.0, 90.0, 90.0])
+        assert len(slab.atoms) == 9
+        assert "converted to an orthogonal cell" in caplog.text
+
+    @pytest.mark.parametrize("target", [(0.0, 5.0), (5.0, -1.0)])
+    def test_nonpositive_target_raises(self, target):
+        with pytest.raises(ValueError, match="target dimensions must be positive"):
+            make_interface_slab(self.specie_with_cell([4.0, 3.0, 5.0]), *target)
+
+    def test_nonpositive_cell_projection_raises(self):
+        with pytest.raises(ValueError, match="positive X and Y"):
+            make_interface_slab(
+                self.specie_with_cell([[0.0, 4.0, 0.0], [3.0, 0.0, 0.0], [0.0, 0.0, 5.0]]),
+                5.0,
+                5.0,
+            )

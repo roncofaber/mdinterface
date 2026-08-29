@@ -20,6 +20,7 @@ All notable changes to mdinterface are documented here.
 - PACKMOL templates now use ASE instead of MDAnalysis, eliminating PDB-completeness warnings for temporary files
 
 ### Fixed
+- Slab tiling producing cells smaller than the requested XY dimensions when the nearest repeat count rounded down
 - Spurious MDAnalysis topology-guessing warnings in `Specie.to_universe()` and `build.box.populate_box()`
 - Missing `elements` topology data in universes created by `Specie.to_universe()`
 - Incorrect first-layer centering in `SimCell.build(center=True)`
