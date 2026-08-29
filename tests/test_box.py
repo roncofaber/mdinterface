@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Unit tests for mdinterface.build.box.populate_box, focused on the region-aware constraint paths."""
+"""Unit tests for mdinterface.build.box."""
 
-import pytest
-import numpy as np
+from pathlib import Path
+import subprocess
+
 from ase import Atoms
+import numpy as np
+import pytest
 
-from mdinterface import Specie
+from mdinterface import PackmolError, Specie
 from mdinterface.build.box import make_interface_slab, populate_box
 from mdinterface.build.regions import Sphere
 from mdinterface.database import Ion
@@ -53,6 +56,112 @@ class TestPopulateBoxRegion:
     def test_unknown_instruction_type_raises(self, na):
         with pytest.raises(ValueError, match="Wrong instructions"):
             populate_box([20.0, 20.0, 20.0], [(na, 1, "diagonal")])
+
+
+class TestPopulateBoxFailures:
+
+    @staticmethod
+    def use_tempdir(monkeypatch, tmp_path):
+        workdir = tmp_path / "packmol"
+        workdir.mkdir()
+        monkeypatch.setattr(
+            "mdinterface.build.box.tempfile.mkdtemp",
+            lambda prefix: str(workdir),
+        )
+        return workdir
+
+    def test_missing_executable_raises_packmol_error(self, na, monkeypatch, tmp_path):
+        workdir = self.use_tempdir(monkeypatch, tmp_path)
+
+        def executable_missing(*args, **kwargs):
+            raise FileNotFoundError("packmol")
+
+        monkeypatch.setattr("mdinterface.build.box.subprocess.run", executable_missing)
+
+        with pytest.raises(PackmolError, match="executable was not found") as error:
+            populate_box([20.0, 20.0, 20.0], [(na, 1, "box")])
+
+        assert error.value.tempdir == str(workdir)
+        assert error.value.log_path == str(workdir / "packmol.log")
+        assert error.value.returncode is None
+        assert workdir.exists()
+
+    def test_nonzero_exit_raises_packmol_error(self, na, monkeypatch, tmp_path):
+        workdir = self.use_tempdir(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            "mdinterface.build.box.subprocess.run",
+            lambda *args, **kwargs: subprocess.CompletedProcess(["packmol"], 17),
+        )
+
+        with pytest.raises(PackmolError, match="return code: 17") as error:
+            populate_box([20.0, 20.0, 20.0], [(na, 1, "box")])
+
+        assert error.value.returncode == 17
+        assert workdir.exists()
+
+    def test_missing_output_raises_packmol_error(self, na, monkeypatch, tmp_path):
+        workdir = self.use_tempdir(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            "mdinterface.build.box.subprocess.run",
+            lambda *args, **kwargs: subprocess.CompletedProcess(["packmol"], 0),
+        )
+
+        with pytest.raises(PackmolError, match="did not create the expected output"):
+            populate_box([20.0, 20.0, 20.0], [(na, 1, "box")])
+
+        assert workdir.exists()
+
+    def test_unreadable_output_raises_packmol_error(self, na, monkeypatch, tmp_path):
+        workdir = self.use_tempdir(monkeypatch, tmp_path)
+
+        def create_output(*args, **kwargs):
+            Path(kwargs["cwd"], "system.pdb").write_text("invalid")
+            return subprocess.CompletedProcess(["packmol"], 0)
+
+        monkeypatch.setattr("mdinterface.build.box.subprocess.run", create_output)
+        monkeypatch.setattr(
+            "mdinterface.build.box.ase.io.read",
+            lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("invalid PDB")),
+        )
+
+        with pytest.raises(PackmolError, match="output could not be read"):
+            populate_box([20.0, 20.0, 20.0], [(na, 1, "box")])
+
+        assert workdir.exists()
+
+    def test_success_removes_temporary_files(self, na, monkeypatch, tmp_path):
+        workdir = self.use_tempdir(monkeypatch, tmp_path)
+
+        def create_output(*args, **kwargs):
+            Path(kwargs["cwd"], "system.pdb").write_text("output")
+            return subprocess.CompletedProcess(["packmol"], 0)
+
+        monkeypatch.setattr("mdinterface.build.box.subprocess.run", create_output)
+        monkeypatch.setattr("mdinterface.build.box.ase.io.read", lambda *args, **kwargs: Atoms("Na"))
+
+        packed = populate_box([20.0, 20.0, 20.0], [(na, 1, "box")])
+
+        assert len(packed) == 1
+        assert not workdir.exists()
+
+    @pytest.mark.parametrize(
+        ("volume", "error", "message"),
+        [
+            ("20,20,20", TypeError, "list, tuple, or numpy array"),
+            ([20.0, 20.0], ValueError, "exactly three"),
+            ([20.0, "wide", 20.0], TypeError, "must be numeric"),
+            ([20.0, 0.0, 20.0], ValueError, "finite and positive"),
+            ([20.0, np.nan, 20.0], ValueError, "finite and positive"),
+        ],
+    )
+    def test_invalid_volume_raises_before_creating_tempdir(self, na, monkeypatch, volume, error, message):
+        monkeypatch.setattr(
+            "mdinterface.build.box.tempfile.mkdtemp",
+            lambda *args, **kwargs: pytest.fail("temporary directory should not be created"),
+        )
+
+        with pytest.raises(error, match=message):
+            populate_box(volume, [(na, 1, "box")])
 
 
 class TestMakeInterfaceSlab:

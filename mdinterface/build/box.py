@@ -25,6 +25,20 @@ import subprocess
 logger = logging.getLogger(__name__)
 
 
+class PackmolError(RuntimeError):
+    """PACKMOL execution or output-processing failure."""
+
+    def __init__(self, message, tempdir, log_path, returncode=None):
+        self.tempdir = tempdir
+        self.log_path = log_path
+        self.returncode = returncode
+        details = [message]
+        if returncode is not None:
+            details.append(f"return code: {returncode}")
+        details.extend([f"temporary files: {tempdir}", f"log: {log_path}"])
+        super().__init__("; ".join(details))
+
+
 def _indent_constraints(lines):
     """Join PACKMOL constraint lines, each indented for the .in file."""
     return "\n".join(f"    {line}" for line in lines)
@@ -76,17 +90,35 @@ def populate_box(
     -------
     ase.Atoms or None
         The packed system with ``residuenames``/``residuenumbers`` arrays set,
-        or ``None`` if the instructions list is empty or PACKMOL fails to
-        write an output file.
+        or ``None`` if the instructions list is empty.
+
+    Raises
+    ------
+    TypeError
+        If *volume* is not a numeric three-element sequence.
+    ValueError
+        If *volume* contains non-finite or non-positive dimensions.
+    PackmolError
+        If PACKMOL cannot be started, exits unsuccessfully, or produces
+        missing or unreadable output. Temporary files are retained and their
+        location is included in the exception.
     """
     if not instructions:
         return None
 
-    # check volume
-    assert len(volume) == 3, "Check volume!"
+    if not isinstance(volume, (list, tuple, np.ndarray)):
+        raise TypeError("volume must be a list, tuple, or numpy array with three dimensions.")
+    if len(volume) != 3:
+        raise ValueError(f"volume must contain exactly three dimensions, got {len(volume)}.")
+    try:
+        volume = np.asarray(volume, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise TypeError("volume dimensions must be numeric.") from exc
+    if not np.all(np.isfinite(volume)) or np.any(volume <= 0):
+        raise ValueError(f"volume dimensions must be finite and positive, got {volume.tolist()}.")
 
     # generate box boundaries with 1 AA padding
-    box = np.concatenate(([1,1,1], np.asarray(volume)-1)).tolist()
+    box = np.concatenate(([1,1,1], volume-1)).tolist()
 
     # all PACKMOL files go in a temp dir; kept on failure for inspection
     tmpdir = tempfile.mkdtemp(prefix="packmol_")
@@ -146,26 +178,56 @@ def populate_box(
         logger.debug("  >> Running PACKMOL (tolerance=%.1f Å, %d molecule type(s))",
                      tolerance, len(instructions))
         with open(input_file, "r") as stdin_f, open(log_file, "w") as stdout_f:
-            result = subprocess.run(["packmol"], stdin=stdin_f, stdout=stdout_f, cwd=tmpdir)
+            try:
+                result = subprocess.run(
+                    ["packmol"],
+                    stdin=stdin_f,
+                    stdout=stdout_f,
+                    stderr=subprocess.STDOUT,
+                    cwd=tmpdir,
+                )
+            except FileNotFoundError as exc:
+                raise PackmolError(
+                    "PACKMOL executable was not found on PATH",
+                    tmpdir,
+                    log_file,
+                ) from exc
 
         if result.returncode != 0:
-            logger.warning("  >> PACKMOL may not have converged - check %s", tmpdir)
-        else:
-            logger.debug("  >> PACKMOL converged")
+            raise PackmolError(
+                "PACKMOL exited unsuccessfully",
+                tmpdir,
+                log_file,
+                returncode=result.returncode,
+            )
+
+        logger.debug("  >> PACKMOL converged")
+
+        if not os.path.isfile(output_file):
+            raise PackmolError(
+                f"PACKMOL did not create the expected output file {output_file}",
+                tmpdir,
+                log_file,
+                returncode=result.returncode,
+            )
 
         try:
             packed = ase.io.read(output_file, format="proteindatabank")
             logger.debug("  >> PACKMOL output: %d atoms", len(packed))
-        except Exception:
-            logger.warning("  >> Could not load PACKMOL output; temp files kept at: %s", tmpdir)
-            return None
+        except Exception as exc:
+            raise PackmolError(
+                f"PACKMOL output could not be read from {output_file}",
+                tmpdir,
+                log_file,
+                returncode=result.returncode,
+            ) from exc
 
         # success -- clean up
         shutil.rmtree(tmpdir, ignore_errors=True)
         return packed
 
     except Exception:
-        logger.warning("  >> PACKMOL failed; temp files kept at: %s", tmpdir)
+        logger.error("  >> PACKMOL failed; temporary files kept at: %s", tmpdir)
         raise
 
 def make_interface_slab(interface_uc, xsize, ysize, layers=1):

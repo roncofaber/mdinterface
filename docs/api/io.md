@@ -1,5 +1,9 @@
 # I/O
 
+## PACKMOL
+
+::: mdinterface.build.box.PackmolError
+
 ## Reading structures
 
 ::: mdinterface.io.read.read_lammps_data_file
