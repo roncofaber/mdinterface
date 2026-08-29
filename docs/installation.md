@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Python** 3.10+
+- **Python** 3.10-3.14
 
 Core dependencies are handled automatically by `pip`, including the upstream PACKMOL package and executable. See [requirements.txt](https://github.com/roncofaber/mdinterface/blob/main/requirements.txt).
 

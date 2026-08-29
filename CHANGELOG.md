@@ -13,6 +13,7 @@ All notable changes to mdinterface are documented here.
 
 ### Changed
 - Minimum supported Python version is now 3.10
+- Supported Python versions are now tested through Python 3.14
 - PACKMOL is now installed automatically from its upstream PyPI package
 - Importing `mdinterface` no longer loads optional AIMD and plotting dependencies or reads user configuration
 - PACKMOL execution and output failures now raise `PackmolError` with retained diagnostic file locations instead of returning `None`

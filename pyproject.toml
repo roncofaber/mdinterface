@@ -19,6 +19,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Chemistry",
     "Topic :: Scientific/Engineering :: Physics",
@@ -50,6 +52,10 @@ resp = [
 aimd = [
     "fairchem-core",
 ]
+test = [
+    "pytest>=7",
+    "pytest-cov>=4",
+]
 all = [
     "pyscf>=2.0.0",
     "pymbxas",
@@ -73,3 +79,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "integration: tests that execute external tools such as PACKMOL",
+]

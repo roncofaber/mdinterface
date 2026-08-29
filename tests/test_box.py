@@ -21,6 +21,7 @@ def na():
 
 class TestPopulateBoxRegion:
 
+    @pytest.mark.integration
     def test_region_instruction_packs_inside_sphere(self, na):
         sphere = Sphere(center=(10.0, 10.0, 10.0), radius=4.0)
         packed = populate_box(
@@ -33,6 +34,7 @@ class TestPopulateBoxRegion:
             dist = ((pos[0] - 10.0) ** 2 + (pos[1] - 10.0) ** 2 + (pos[2] - 10.0) ** 2) ** 0.5
             assert dist <= 4.1
 
+    @pytest.mark.integration
     def test_box_with_extra_outside_constraint(self, na):
         # Pack into the full box but exclude a sphere in the middle - no atom
         # should land inside the excluded sphere.
@@ -47,6 +49,7 @@ class TestPopulateBoxRegion:
             dist = ((pos[0] - 10.0) ** 2 + (pos[1] - 10.0) ** 2 + (pos[2] - 10.0) ** 2) ** 0.5
             assert dist >= 4.9
 
+    @pytest.mark.integration
     def test_box_without_extra_constraints_unchanged(self, na):
         # 3-tuple form (no bounds, no extra constraints) still works exactly as before.
         packed = populate_box([20.0, 20.0, 20.0], [(na, 3, "box")])

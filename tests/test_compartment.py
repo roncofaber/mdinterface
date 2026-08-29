@@ -53,6 +53,7 @@ class TestSlabCompartment:
 
 class TestSolventCompartmentBuild:
 
+    @pytest.mark.integration
     def test_build_calls_make_solvent_box(self, water):
         solv = SolventCompartment(
             solvent=[water], solute=[], nsolute=None, zdim=20.0, density=1.0,
@@ -63,6 +64,7 @@ class TestSolventCompartmentBuild:
         assert universe is not None
         assert {res.resname for res in universe.residues} == {water.resname}
 
+    @pytest.mark.integration
     def test_build_applies_dilation(self, water):
         solv = SolventCompartment(
             solvent=[water], solute=[], nsolute=None, zdim=20.0, density=1.0,

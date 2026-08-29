@@ -4,7 +4,7 @@
 
 - Package: `mdinterface`
 - Main branch: `main`
-- Supported Python: 3.10+
+- Supported Python: 3.10-3.14
 - License: Apache-2.0
 - Core stack: ASE, MDAnalysis, NetworkX, NumPy, and PACKMOL
 - Main pipeline: `SimCell` to PACKMOL to `ase.Atoms` or `MDAnalysis.Universe` to `write_lammps()` or `write_gromacs()`
@@ -32,7 +32,7 @@
 Install the core package and test dependency:
 
 ```bash
-pip install -e . pytest
+pip install -e .[test]
 ```
 
 Install and preview the documentation:
@@ -46,10 +46,11 @@ Verify a change with the relevant subset first, then run the complete checks whe
 
 ```bash
 pytest -q
+pytest -q -m integration
 mkdocs build --strict
 ```
 
-The editable install provides the upstream PACKMOL package and executable used by packing workflows and tests. Optional RESP and AIMD dependencies are heavy and should only be installed for work involving those features.
+The editable install provides the upstream PACKMOL package and executable used by packing workflows and tests. Tests that execute PACKMOL use the `integration` marker. Optional RESP and AIMD dependencies are heavy and should only be installed for work involving those features.
 
 ## Documentation map
 

@@ -2,10 +2,10 @@
 
 ## Development setup
 
-Create and activate a Python environment, then install the package in editable mode with pytest. This also installs the upstream PACKMOL package and executable:
+Create and activate a Python environment, then install the package with its test dependencies in editable mode. This also installs the upstream PACKMOL package and executable:
 
 ```bash
-pip install -e . pytest
+pip install -e .[test]
 ```
 
 Install optional dependencies only when working on the corresponding feature:
@@ -28,7 +28,9 @@ pytest -q tests/test_builder.py
 pytest -q
 ```
 
-Some tests and examples require PACKMOL. Changes to LAMMPS output should verify section structure and counts, and should load the generated data with LAMMPS when that executable is available.
+Tests marked `integration` execute PACKMOL. Run only unit tests with `pytest -q -m "not integration"` or only integration tests with `pytest -q -m integration`. Changes to LAMMPS output should verify section structure and counts, and should load the generated data with LAMMPS when that executable is available.
+
+Generate an informational coverage report with `pytest -q --cov=mdinterface --cov-report=term-missing`. The project does not currently enforce a coverage threshold.
 
 ## Documentation
 

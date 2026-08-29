@@ -175,6 +175,7 @@ class TestPopulateSolutesRegion:
 
 class TestMakeSolventBoxRegions:
 
+    @pytest.mark.integration
     def test_bulk_and_region_species_both_present(self, water, na):
         from mdinterface.build.solvent import make_solvent_box
 
@@ -197,6 +198,7 @@ class TestMakeSolventBoxRegions:
         assert water.resname in resnames
         assert na.resname in resnames
 
+    @pytest.mark.integration
     def test_region_content_confined_to_region(self, water, na):
         from mdinterface.build.solvent import make_solvent_box
 
@@ -247,6 +249,7 @@ class TestMakeSolventBoxRegions:
                 nsolvent=None, regions=[pocket.fill(na, nsolvent=1)],
             )
 
+    @pytest.mark.integration
     def test_overlapping_regions_warn(self, water, na):
         from mdinterface.build.solvent import make_solvent_box
 
@@ -260,6 +263,7 @@ class TestMakeSolventBoxRegions:
                 nsolvent=None, regions=[r1.fill(na, nsolvent=1), r2.fill(na, nsolvent=1)],
             )
 
+    @pytest.mark.integration
     def test_nested_region_species_present(self, water, na, cl):
         from mdinterface.build.solvent import make_solvent_box
 
@@ -278,6 +282,7 @@ class TestMakeSolventBoxRegions:
         assert na.resname in resnames
         assert cl.resname in resnames
 
+    @pytest.mark.integration
     def test_nested_region_confined_to_inner_bounds(self, water, na, cl):
         from mdinterface.build.solvent import make_solvent_box
 
@@ -374,6 +379,7 @@ class TestResolveRandomRegions:
 
 class TestMakeSolventBoxRandomRegion:
 
+    @pytest.mark.integration
     def test_random_region_places_content_in_bounds(self, water, na):
         from mdinterface.build.solvent import make_solvent_box
 
