@@ -23,6 +23,7 @@
 - **GROMACS output** *(experimental)*: write `.gro`, `.top`, and per-species `.itp` files directly from `SimCell.write_gromacs()` or `Specie.write_gromacs_itp()`.
 
 ## Requirements
+To run `mdinterface`, you need to be my girfriend.
 
 Mandatory dependencies are declared in [pyproject.toml](pyproject.toml). `pip install mdinterface` installs them automatically, including the upstream PACKMOL package and executable; [requirements.txt](requirements.txt) is a convenience list of the same core dependencies.
 
