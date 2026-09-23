@@ -4,6 +4,10 @@ Optional integrations with third-party tools.
 
 ## LigParGen (OPLS-AA parameters)
 
+::: mdinterface.externals.ligpargen.LigParGenError
+
+::: mdinterface.externals.ligpargen.run_ligpargen
+
 ::: mdinterface.externals.ligpargen.refine_large_specie_topology
 
 ## RESP charges (PySCF)

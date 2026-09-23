@@ -9,10 +9,11 @@ Initially developed to construct electrolyte/electrode interfaces, it is also we
 __version__ = '1.5.4'
 __date__ = '12 Aug. 2026'
 __author__ = 'Fabrice Roncoroni'
-__all__ = ['SimulationBox', 'SimCell', 'BoxBuilder', "Specie", "Polymer", "PackmolError"]
+__all__ = ['SimulationBox', 'SimCell', 'BoxBuilder', "Specie", "Polymer", "PackmolError", "LigParGenError"]
 
 from .simulationbox import SimulationBox
 from .build.box import PackmolError
+from .externals import LigParGenError
 from .build.builder import SimCell, BoxBuilder
 from .core.specie import Specie
 from .core.polymer import Polymer

@@ -17,6 +17,7 @@ All notable changes to mdinterface are documented here.
 - PACKMOL is now installed automatically from its upstream PyPI package
 - Importing `mdinterface` no longer loads optional AIMD and plotting dependencies or reads user configuration
 - PACKMOL execution and output failures now raise `PackmolError` with retained diagnostic file locations instead of returning `None`
+- LigParGen setup, execution, and output failures now raise `LigParGenError` with actionable installation or configuration guidance and retained diagnostic file locations
 - `SimCell._layers` now stores typed `Compartment` objects internally; public layer-building signatures are unchanged
 - `build.box.populate_box()` now accepts `Specie` objects and returns `ase.Atoms`
 - PACKMOL templates now use ASE instead of MDAnalysis, eliminating PDB-completeness warnings for temporary files

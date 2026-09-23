@@ -38,7 +38,16 @@ pip install libarvo
 
 #### LigParGen (automatic OPLS-AA parameters)
 
-Follow the instructions on the [LigParGen GitHub](https://github.com/Isra3l/ligpargen) (or try [this fork](https://github.com/roncofaber/ligpargen) if you hit installation issues). Point `mdinterface` to your BOSS backend via `config.ini`:
+Install the [mdinterface-compatible LigParGen fork](https://github.com/roncofaber/ligpargen) in the same environment and verify that `ligpargen -h` works:
+
+```bash
+python -m pip install "git+https://github.com/roncofaber/ligpargen.git"
+conda install -c conda-forge openbabel
+ligpargen -h
+obabel -V
+```
+
+Point `mdinterface` to your BOSS backend via `config.ini`:
 
 ```ini
 # ~/.config/mdinterface/config.ini  (path is OS-dependent)
@@ -51,6 +60,19 @@ BOSSdir = /path/to/boss          # native directory
 The configuration file is read when LigParGen is invoked. An existing `BOSSdir` environment variable takes precedence over the file value.
 
 BOSS is a 32-bit binary that can be awkward to run on modern systems. The [boss-container](https://github.com/roncofaber/boss-container) repo provides a ready-to-build Docker/Apptainer image that handles the 32-bit library setup.
+
+The container recipe does not distribute BOSS. Each licensed user builds a private image from their own BOSS installation. The resulting Docker image or Apptainer file contains BOSS and must not be published or shared beyond what the BOSS license permits.
+
+#### Full parameterization development environment
+
+The reproducible development environment combines mdinterface, LigParGen, Open Babel, AmberTools, and the CPU-only OpenFF stack. It uses Python 3.12 and NumPy 1.x to satisfy the current AmberTools dependency stack; the core package still supports Python 3.10-3.14.
+
+```bash
+mamba env create -f environment-full.yml
+mamba activate mdinterface-full
+```
+
+OpenFF-to-mdinterface parameter import has been validated on Python 3.14, but OpenFF is not yet exposed as a supported `Specie` parameterization backend. The environment exists for developing and testing that integration. The normal mdinterface installation remains pip-installable and does not require OpenFF.
 
 #### RESP charges with PySCF
 
@@ -86,6 +108,8 @@ pip install mdinterface[all]    # everything
 
 The `resp` and `all` extras do not install `gpu4pyscf`; install the compatible build separately when using RESP fitting.
 
+Contributors working on every parameterization backend can instead create the full environment described above with `mamba env create -f environment-full.yml`.
+
 ## Quick start
 
 ```python
@@ -100,7 +124,7 @@ simbox.add_slab(gold, nlayers=3)
 simbox.add_solvent(water, zdim=20, density=1.0)
 simbox.build()
 
-atoms = simbox.to_ase()    # ase.Atoms — ready for AIMD, ML-MD, or any other tool
+atoms = simbox.to_ase()    # ase.Atoms, ready for AIMD, ML-MD, or any other tool
 ```
 
 For LAMMPS, add ions and call `write_lammps()` instead:

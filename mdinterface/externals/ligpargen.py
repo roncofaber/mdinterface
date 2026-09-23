@@ -24,6 +24,24 @@ from ase.data import atomic_numbers, covalent_radii
 
 logger = logging.getLogger(__name__)
 
+
+class LigParGenError(RuntimeError):
+    """LigParGen configuration, execution, or output-processing failure."""
+
+    def __init__(self, message, tempdir=None, log_path=None, returncode=None):
+        self.tempdir = tempdir
+        self.log_path = log_path
+        self.returncode = returncode
+        details = [message]
+        if returncode is not None:
+            details.append(f"return code: {returncode}")
+        if tempdir is not None:
+            details.append(f"temporary files: {tempdir}")
+        if log_path is not None:
+            details.append(f"log: {log_path}")
+        super().__init__("; ".join(details))
+
+
 #%%
 
 # ---------------------------------------------------------------------------
@@ -228,42 +246,70 @@ def _make_capped_segment(specie, seg_indices, cut_edges, ending="H"):
     return capped, n_real
 
 def run_ligpargen(system, charge=None, is_snippet=False):
+    """Generate OPLS-AA parameters by running LigParGen.
+
+    Parameters
+    ----------
+    system : ase.Atoms
+        Atomic system to parameterize.
+    charge : int or None, default None
+        Total molecular charge. LigParGen detects it when omitted.
+    is_snippet : bool, default False
+        Whether the system is a capped molecular snippet.
+
+    Returns
+    -------
+    tuple
+        Parameterized system, atom types, bonds, angles, dihedrals, and impropers.
+
+    Raises
+    ------
+    LigParGenError
+        If LigParGen or BOSS is not configured, execution fails, or the output
+        is missing or unreadable.
     """
-    Runs the ligpargen command for the given xyz file.
 
-    Parameters:
-    system (ase.Atoms): The atoms system to be processed.
+    ligpargen_executable = shutil.which("ligpargen")
+    if ligpargen_executable is None:
+        raise LigParGenError(
+            "LigParGen executable was not found on PATH. Install it in the active "
+            "environment with `python -m pip install "
+            "\"git+https://github.com/roncofaber/ligpargen.git\"` and verify "
+            "the installation with `ligpargen -h`"
+        )
 
-    Returns:
-    tuple: Containing system, atoms, bonds, angles, dihedrals, impropers.
-    """
+    if shutil.which("obabel") is None:
+        raise LigParGenError(
+            "Open Babel executable `obabel` was not found on PATH. LigParGen "
+            "requires it to read mdinterface's XYZ input. Install it with "
+            "`conda install -c conda-forge openbabel` and verify the installation "
+            "with `obabel -V`"
+        )
 
-    if "BOSSdir" not in os.environ:
+    if not os.environ.get("BOSSdir"):
         from mdinterface.config import load_config
 
         load_config()
 
-    if "BOSSdir" not in os.environ:
+    if not os.environ.get("BOSSdir"):
         mdint = os.environ.get("MDINT_CONFIG_DIR", "~/.config/mdinterface")
-        logger.warning(
-            "BOSSdir is not set. Set it to one of:\n"
-            "  - a BOSS installation directory  (native, requires csh on host)\n"
-            "  - a path to a .sif image         (Apptainer/Singularity)\n"
-            "  - a Docker image name            (Docker)\n"
-            "Add it to [settings] in %s/config.ini or export it before running.",
-            mdint,
+        config_file = os.path.join(os.path.expanduser(mdint), "config.ini")
+        raise LigParGenError(
+            "BOSSdir is not configured. Export BOSSdir or set it under [settings] "
+            f"in {config_file}"
         )
 
     # all ligpargen files go in a temp dir; kept on failure for inspection
     tmpdir   = tempfile.mkdtemp(prefix="ligpargen_")
     mol_name = os.path.basename(tmpdir)
     xyz_file = os.path.join(tmpdir, f"{mol_name}.xyz")
+    log_file = os.path.join(tmpdir, "ligpargen.log")
 
     ase.io.write(xyz_file, system)
 
     # use relative filenames and cwd=tmpdir -- ligpargen does not accept
     # absolute paths for -i
-    ligpargen_command = ["ligpargen", "-i", f"{mol_name}.xyz", "-p", tmpdir,
+    ligpargen_command = [ligpargen_executable, "-i", f"{mol_name}.xyz", "-p", tmpdir,
                          "-debug", "-o", "0", "-cgen", "CM1A"]
     if charge is not None:
         ligpargen_command.extend(["-c", str(charge)])
@@ -271,23 +317,56 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     try:
         result = subprocess.run(ligpargen_command, check=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                cwd=tmpdir)
+                                cwd=tmpdir, text=True, encoding="utf-8",
+                                errors="replace")
+        with open(log_file, "w") as fh:
+            fh.write("STDOUT:\n" + result.stdout + "\n")
+            fh.write("STDERR:\n" + result.stderr + "\n")
         logger.debug("ligpargen completed successfully")
-        logger.debug("ligpargen stdout:\n%s", result.stdout.decode())
+        logger.debug("ligpargen stdout:\n%s", result.stdout)
 
     except subprocess.CalledProcessError as e:
-        # write stdout/stderr into the temp dir for inspection, then keep it
-        error_log = os.path.join(tmpdir, "error_log.txt")
-        with open(error_log, "w") as fh:
-            fh.write("STDOUT:\n" + e.stdout.decode() + "\n")
-            fh.write("STDERR:\n" + e.stderr.decode() + "\n")
+        with open(log_file, "w") as fh:
+            fh.write("STDOUT:\n" + (e.stdout or "") + "\n")
+            fh.write("STDERR:\n" + (e.stderr or "") + "\n")
         logger.error("ligpargen failed; temp files kept at: %s", tmpdir)
-        logger.debug("ligpargen stderr:\n%s", e.stderr.decode())
-        raise
+        logger.debug("ligpargen stderr:\n%s", e.stderr)
+        raise LigParGenError(
+            "LigParGen exited unsuccessfully",
+            tmpdir,
+            log_file,
+            returncode=e.returncode,
+        ) from e
+    except OSError as e:
+        raise LigParGenError(
+            f"LigParGen could not be started: {e}",
+            tmpdir,
+            log_file,
+        ) from e
 
-    # read result
-    system, atoms, bonds, angles, dihedrals, impropers = read_lammps_data_file(
-        os.path.join(tmpdir, f"{mol_name}.lammps.lmp"), is_snippet=is_snippet)
+    output_file = os.path.join(tmpdir, f"{mol_name}.lammps.lmp")
+    if not os.path.isfile(output_file):
+        diagnostic = (result.stderr or result.stdout).strip()
+        message = f"LigParGen did not create the expected output file {output_file}"
+        if diagnostic:
+            message += f". LigParGen output: {diagnostic[-500:]}"
+        raise LigParGenError(
+            message,
+            tmpdir,
+            log_file,
+            returncode=result.returncode,
+        )
+
+    try:
+        system, atoms, bonds, angles, dihedrals, impropers = read_lammps_data_file(
+            output_file, is_snippet=is_snippet)
+    except Exception as e:
+        raise LigParGenError(
+            f"LigParGen output could not be read from {output_file}",
+            tmpdir,
+            log_file,
+            returncode=result.returncode,
+        ) from e
 
     # success -- clean up
     shutil.rmtree(tmpdir, ignore_errors=True)

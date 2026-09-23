@@ -45,11 +45,17 @@ methanol = Specie("CH3OH", ligpargen=True)
 
 This requires a working LigParGen installation and the `BOSSdir` configured in `config.ini` (see [Installation](../installation.md)).
 
-**Large molecules (>200 atoms):** LigParGen's input limit is 200 atoms. When `ligpargen=True` and the molecule exceeds this limit, `mdinterface` automatically splits it into segments along clean backbone bonds, runs LigParGen independently on each segment, and then refines the parameters at every junction using a local snippet — all transparently. No extra configuration is needed.
+Missing LigParGen, Open Babel, or BOSS configuration and failed LigParGen runs raise `LigParGenError` with actionable setup guidance. Failed runs retain their temporary directory and `ligpargen.log` for inspection.
+
+**Large molecules (>200 atoms):** LigParGen's input limit is 200 atoms. When `ligpargen=True` and the molecule exceeds this limit, `mdinterface` automatically splits it into segments along clean backbone bonds, runs LigParGen independently on each segment, and then refines the parameters at every junction using a local snippet, all transparently. No extra configuration is needed.
+
+## OpenFF status
+
+OpenFF-to-LAMMPS export and re-import into `Specie` have been validated, but OpenFF is not yet a supported parameterization backend. The LAMMPS data file preserves numeric coefficients but does not encode every required convention, including Fourier torsion style, mixing rules, switching behavior, and 1-4 scaling. Until mdinterface carries this metadata through system assembly and output, do not treat OpenFF-generated coefficients as OPLS coefficients or mix OpenFF and LigParGen molecular species without an independent force-field compatibility analysis.
 
 ## Polymers
 
-`Polymer` extends `Specie` to build linear chains from one or more monomer units — including co-polymers with arbitrary sequences. See the dedicated [Polymer guide](polymer.md) for the full workflow.
+`Polymer` extends `Specie` to build linear chains from one or more monomer units, including co-polymers with arbitrary sequences. See the dedicated [Polymer guide](polymer.md) for the full workflow.
 
 ## Inspecting a Specie
 

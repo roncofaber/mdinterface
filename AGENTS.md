@@ -35,6 +35,13 @@ Install the core package and test dependency:
 pip install -e .[test]
 ```
 
+Create the full parameterization development environment when working on LigParGen, BOSS, or OpenFF:
+
+```bash
+mamba env create -f environment-full.yml
+mamba activate mdinterface-full
+```
+
 Install and preview the documentation:
 
 ```bash
@@ -72,6 +79,9 @@ The editable install provides the upstream PACKMOL package and executable used b
 - `Specie` combines `ase.Atoms` with optional LAMMPS topology and force-field data. A bare `Specie(atoms)` is valid for workflows that do not write LAMMPS data.
 - Database entries such as `Water`, `Ion`, and `Metal111` are pre-built `Specie` objects or factories, not a separate domain type.
 - PACKMOL is the only packing backend. `mdinterface/build/box.py::populate_box` runs it in a temporary directory.
+- LigParGen is the supported automatic OPLS-AA/CM1A parameterization backend. Preserve `ligpargen=True` compatibility when introducing a backend-neutral API.
+- OpenFF-to-LAMMPS export and re-import have been validated, but OpenFF is not yet a supported `Specie` backend. The current topology and GROMACS paths assume OPLS-style torsions, while OpenFF LAMMPS export uses Fourier proper torsions and CVFF impropers.
+- Any OpenFF integration must preserve bond, angle, dihedral, and improper styles together with mixing rules, switching behavior, and van der Waals and Coulomb 1-4 scaling. Do not silently combine molecular species with incompatible global LAMMPS conventions.
 - LAMMPS atom types and bonded interaction types use independent numbering paths. Atom labels are renumbered in `DATAWriter._write_atoms`, while bonded type IDs originate in `_update_topology_indexes`. Output code must renumber against the interactions present in the assembled universe rather than assume stored IDs are contiguous LAMMPS type numbers.
 
 ## Testing risks
@@ -91,5 +101,8 @@ Follow `docs/development/releasing.md` for releases. Do not commit, push, tag, p
 ## Optional integrations
 
 - LigParGen requires a BOSS backend configured through the platform-specific `mdinterface` configuration directory.
+- `environment-full.yml` provides the reproducible Python 3.12 and NumPy 1.x development stack required by the current AmberTools dependencies for LigParGen and OpenFF work. The core package separately supports Python 3.10-3.14. The environment installs the public LigParGen fork, AmberTools, Open Babel, OpenFF Toolkit and Interchange, and CPU-only NAGL and PyTorch, but never BOSS.
+- The `boss-container` repository distributes build recipes only. User-built images contain the user's licensed BOSS files and must not be treated as redistributable project artifacts.
+- OpenFF packages are currently distributed through conda-forge rather than PyPI. Keep OpenFF optional and do not add it to the core pip dependency set.
 - RESP work requires PySCF, PyMBXAS, and gpu4pyscf. The GPU package is platform-specific and is not installed by the `resp` extra.
 - AIMD work requires `fairchem-core` through the `aimd` extra.
