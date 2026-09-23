@@ -8,6 +8,8 @@ Add slabs, solvent regions, and vacuum gaps one step at a time, then call
 """
 
 import logging
+import json
+from pathlib import Path
 from collections import Counter
 from typing import List, Optional, Union, Tuple, Any
 
@@ -430,6 +432,7 @@ class SimCell:
         filename: str = "data.lammps",
         atom_style: str = "full",
         write_coeff: bool = True,
+        metadata: Optional[str] = None,
     ) -> None:
         """
         Write a LAMMPS data file (and optional force-field coefficients).
@@ -448,10 +451,25 @@ class SimCell:
             LAMMPS atom style (``"full"`` or ``"atomic"``).
         write_coeff : bool
             Whether to write force-field coefficient blocks.
+        metadata : str, optional
+            Path for a schema-versioned JSON description of the final export.
+            Includes exported IDs, species, topology, coefficients and checksum.
+            Requires elements and, for full style, charges. Does not select MD settings.
 
         """
         if self._universe is None:
             raise RuntimeError("Call build() before write_lammps().")
+        if metadata is not None:
+            if Path(metadata).resolve() == Path(filename).resolve():
+                raise ValueError("Metadata and LAMMPS data paths must differ.")
+            if Path(metadata).exists():
+                raise FileExistsError(metadata)
+            if atom_style not in {"full", "atomic"}:
+                raise ValueError("Metadata supports full or atomic exports.")
+            if not hasattr(self._universe.atoms, "elements"):
+                raise ValueError("Metadata requires explicit atom elements.")
+            if atom_style == "full" and not hasattr(self._universe.atoms, "charges"):
+                raise ValueError("Full-style metadata requires atom charges.")
 
         log_header(logger, "Output")
         logger.info("  >> LAMMPS data file: %s  (style=%s,  coeff=%s)", filename, atom_style, write_coeff)
@@ -482,6 +500,12 @@ class SimCell:
                         write_lammps_coefficients(system, sorted_attrs, fout=tfile)
                     tfile.write(fl)
             shutil.move(temp_file, filename)
+
+        if metadata is not None:
+            from mdinterface.io.structure_metadata import lammps_metadata
+
+            description = lammps_metadata(filename, system, atom_style, _get_mdi_version())
+            Path(metadata).write_text(json.dumps(description, indent=2, allow_nan=False) + "\n")
 
         try:
             nbonds = len(system.atoms.bonds)

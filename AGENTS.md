@@ -22,6 +22,8 @@
 
 ## Instruction portability
 
+For machine-readable LAMMPS handoffs, use optional `SimCell.write_lammps(metadata=...)` as documented in `docs/guide/simcell.md`. Record final exported IDs and file checksums, not assumed internal type numbers. Structural metadata must not silently select constraints, force-field styles, boundary conditions or simulation protocols for consumers.
+
 - `AGENTS.md` is the canonical source for repository-wide agent guidance.
 - Tool-specific instruction files may exist only as minimal adapters that import or direct the tool to `AGENTS.md`.
 - Do not duplicate shared instructions in tool-specific files because duplicated guidance will drift.

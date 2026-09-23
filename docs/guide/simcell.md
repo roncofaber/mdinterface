@@ -221,6 +221,18 @@ This is a coordinate permutation applied after assembly, but the build process i
 
 ## Output
 
+Export optional machine-readable structural metadata alongside LAMMPS data:
+
+```python
+simbox.write_lammps("data.lammps", metadata="structure.json")
+```
+
+`structure.json` uses schema `mdinterface.structure`, version 1. It records the final exported atom, molecule and type IDs, element/species labels, masses, charges, coordinates, species groups, all exported bonded connectivity, cell bounds/tilts, coefficient tokens/annotations, mdinterface version and the SHA-256 checksum of `data.lammps`. IDs and numerical values follow the written file, including type renumbering and output rounding. Check the schema and checksum before consuming it. Molecule ID zero is a valid exported ID; it is not remapped in JSON.
+
+The optional export requires explicit elements and charges for `full` style. `atomic` style records molecule IDs and charges as null because those fields are not exported. `write_coeff=False` describes only what remains in the resulting file, not omitted topology or coefficients. Metadata paths must differ from the data path and must not already exist. Omitting `metadata` preserves existing behavior.
+
+Coefficient arrays preserve native tokens because their meaning depends on the force-field style. Units follow the writer's real-unit convention. Full parameter provenance and boundary conditions are null when not known from this export. Do not infer them from an element or filename. Pair style, mixing, constraints and ensemble are deliberately unset: a simulation application must select and validate them. In particular, O-H connectivity is structural information; SHAKE is a protocol decision. No cluster paths or scheduler configuration are stored.
+
 ```python
 # LAMMPS data file
 simbox.write_lammps("data.lammps", atom_style="full", write_coeff=True)

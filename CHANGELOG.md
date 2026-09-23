@@ -5,6 +5,7 @@ All notable changes to mdinterface are documented here.
 ## [Unreleased]
 
 ### Added
+- `SimCell.write_lammps(metadata=...)` optionally exports versioned structural JSON with final atom/type IDs, species groups, connectivity, coefficients and a data-file checksum, without choosing simulation settings.
 - `Sphere`, `Box`, and `Cylinder` regions for spatially constrained PACKMOL placement
 - `Region.fill()` for assigning content to a region
 - `SimCell.add_solvent(regions=...)` for spatially heterogeneous solvent layers
