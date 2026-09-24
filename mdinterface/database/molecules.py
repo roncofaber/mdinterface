@@ -3,7 +3,7 @@
 """
 Pre-parameterised small-molecule species: water models and diatomic gases.
 
-Water models available: SPC/E (``"ewald"``), CHARMM TIP3P (``"charmm"``),
+Water models available: modified TIP3P for Ewald (``"ewald"``), CHARMM TIP3P (``"charmm"``),
 and SPC/E (``"spce"``).  Diatomic species (O2, H2, N2) use parameters from
 Lim et al., J. Chem. Theory Comput. 2021, 17, 821.
 """
@@ -22,7 +22,7 @@ class Water(Specie):
     model : str, default ``"ewald"``
         Water model to use:
 
-        - ``"ewald"``  -- SPC/E with Ewald-compatible charges
+        - ``"ewald"``  -- modified TIP3P for long-range Ewald electrostatics
           (q_O=-0.83, q_H=0.415)
         - ``"charmm"`` -- CHARMM TIP3P
           (q_O=-0.834, q_H=0.417)

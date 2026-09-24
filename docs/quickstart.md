@@ -34,7 +34,7 @@ Species are the building blocks. They can come from the built-in database or be 
 from mdinterface import SimCell
 from mdinterface.database import Water, Ion, Metal111
 
-water = Water(model="ewald")          # SPC/E water with Ewald-compatible charges
+water = Water(model="ewald")          # modified TIP3P water for Ewald electrostatics
 na    = Ion("Na", ffield="Cheatham")
 cl    = Ion("Cl", ffield="Cheatham")
 gold  = Metal111("Au")                # FCC Au (111) surface

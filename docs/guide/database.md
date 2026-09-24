@@ -20,8 +20,8 @@ copper  = Metal111("Cu")
 ```python
 from mdinterface.database import Water
 
-water_spce  = Water(model="ewald") # modified tip3p model
-water_tip4p = Water(model="spce")  # SPC/E water
+water_tip3p = Water(model="ewald") # modified TIP3P for Ewald electrostatics
+water_spce  = Water(model="spce")  # SPC/E water
 ```
 
 ## Ions

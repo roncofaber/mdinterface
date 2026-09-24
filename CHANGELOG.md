@@ -24,6 +24,7 @@ All notable changes to mdinterface are documented here.
 - PACKMOL templates now use ASE instead of MDAnalysis, eliminating PDB-completeness warnings for temporary files
 
 ### Fixed
+- Water model documentation now describes `Water(model="ewald")` as modified TIP3P for Ewald electrostatics (its parameters were always TIP3P-Ewald, not SPC/E) and no longer swaps variable names in the database guide
 - Slab tiling producing cells smaller than the requested XY dimensions when the nearest repeat count rounded down
 - Spurious MDAnalysis topology-guessing warnings in `Specie.to_universe()` and `build.box.populate_box()`
 - Missing `elements` topology data in universes created by `Specie.to_universe()`
