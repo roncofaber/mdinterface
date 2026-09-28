@@ -14,6 +14,8 @@ from mdinterface.build.polymerize import build_polymer
 from mdinterface.build.snippets import make_snippet, remap_snippet_topology
 
 # import random
+from mdinterface.utils.auxiliary import _clean_charge
+
 import numpy as np
 import logging
 
@@ -238,7 +240,7 @@ class Polymer(Specie):
 
         # get charges and connection elements
         charges = self.charges
-        initial_charge = float(charges.sum())
+        initial_charge = _clean_charge(charges.sum())
         pairs = self.junction_bonds
 
 
@@ -253,12 +255,12 @@ class Polymer(Specie):
         if not np.isfinite(charges).all():
             raise ValueError("Junction refinement returned nonfinite partial charges.")
         target = int(self.atoms.arrays["nominal_charge"].sum())
-        refined_charge = float(charges.sum())
-        residual = refined_charge - target
+        refined_charge = _clean_charge(charges.sum())
+        residual = _clean_charge(refined_charge - target)
         correction = 0.0
         logger.info("Polymer charge after junction refinement: %.8f e; formal: %d e; residual: %+.8f e",
-                    charges.sum(), target, residual)
-        if charge_correction == "uniform":
+                    refined_charge, target, residual)
+        if charge_correction == "uniform" and residual != 0:
             correction = -residual / len(charges)
             logger.info("Applying uniform partial-charge correction: %+.8f e per atom", correction)
             charges += correction
@@ -270,6 +272,6 @@ class Polymer(Specie):
             "refined_charge": refined_charge,
             "residual": residual,
             "correction_per_atom": correction,
-            "final_charge": float(charges.sum()),
+            "final_charge": _clean_charge(charges.sum()),
             "junctions": len(pairs),
         }

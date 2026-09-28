@@ -13,6 +13,8 @@ from mdinterface.io.read import read_lammps_data_file
 import logging
 import math
 import copy
+from mdinterface.utils.auxiliary import _clean_charge
+
 import numpy as np
 import os
 import ase
@@ -398,7 +400,7 @@ def refine_large_specie_topology(specie, snippet_radius=12, cap_element="H",
     if cap_element not in {"H", "F", "Cl", "Br", "I"}:
         raise ValueError("cap_element must be a neutral monovalent element.")
     staged, attributes = specie._parameterization_copy()
-    initial = float(staged.charges.sum())
+    initial = _clean_charge(staged.charges.sum())
     target = staged._resolve_charge(None)
     if len(staged.atoms) <= segment_size:
         result, atom_types, bonds, angles, dihedrals, impropers = run_ligpargen(staged.atoms, charge=target)
@@ -412,13 +414,13 @@ def refine_large_specie_topology(specie, snippet_radius=12, cap_element="H",
     charges = staged.charges
     if not np.isfinite(charges).all():
         raise ValueError("Parameterization returned nonfinite partial charges.")
-    refined = float(charges.sum())
-    residual = refined - target
-    correction = -residual / len(charges) if charge_correction == "uniform" else 0.0
+    refined = _clean_charge(charges.sum())
+    residual = _clean_charge(refined - target)
+    correction = -residual / len(charges) if charge_correction == "uniform" and residual != 0 else 0.0
     staged.atoms.set_initial_charges(charges + correction)
     report = dict(formal_charge=target, initial_charge=initial, refined_charge=refined,
                   residual=residual, correction_per_atom=correction,
-                  final_charge=float(staged.charges.sum()), junctions=junctions)
+                  final_charge=_clean_charge(staged.charges.sum()), junctions=junctions)
     staged.validate_force_field()
     specie._apply_parameterization(staged, attributes)
     logger.info("Parameterization charge audit: %s", report)

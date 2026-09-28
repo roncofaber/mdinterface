@@ -52,6 +52,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[test]
 
+      - name: Install molecular dynamics engines
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gromacs lammps
+
       - name: Run complete suite with coverage
         run: pytest -q --cov=mdinterface --cov-report=term-missing --cov-report=xml
 

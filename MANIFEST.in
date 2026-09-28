@@ -17,6 +17,7 @@ recursive-include docs *
 recursive-include examples *
 recursive-include scripts *.py
 recursive-include tests *.py
+recursive-include tests/data *.json *.md
 include assets/*
 
 # Exclude unwanted files

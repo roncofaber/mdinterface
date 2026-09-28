@@ -96,7 +96,7 @@ report = cation.parameterize(charge_correction="none")
 cation.validate_force_field()
 ```
 
-Coordinates stay unchanged. The charge audit reports the initial, raw refined and final totals, formal target, residual, correction per atom and number of junctions. Charge correction is always explicit: `"none"` is the default, and `"uniform"` distributes the residual over all atoms. `ligpargen=True` uses this same parameterization path.
+Coordinates stay unchanged. The charge audit reports the initial, raw refined and final totals, formal target, residual, correction per atom and number of junctions. Charge correction is always explicit: `"none"` is the default, and `"uniform"` distributes the residual over all atoms. `ligpargen=True` uses this same parameterization path. Charge-audit totals and residuals within `1e-12 e` of zero are reported as `0.0`, without applying a numerical-noise correction or changing individual atomic partial charges.
 
 **Large molecules (>200 atoms):** `parameterize()` splits the molecule into chemically valid capped segments and refines the junctions. `segment_size` counts caps and cannot exceed 200. All segments and expanded junction snippets are checked before any LigParGen calculation. If the molecule cannot be split safely or a junction remains too large, parameterization fails with guidance rather than sending an oversized structure to BOSS. `snippet_radius` controls junction extent, and `cap_element` selects a neutral monovalent cap. All calculations and validation must succeed before parameters are applied. `refine_large_topology()` delegates to the same workflow with the same options and report.
 

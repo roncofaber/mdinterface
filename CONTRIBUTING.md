@@ -65,3 +65,7 @@ Update the relevant guide when changing a documented public API or workflow. API
 Add every user-visible change to `CHANGELOG.md` under `Unreleased`, grouped under `Added`, `Changed`, `Fixed`, or `Deprecated`. Write one concise, unwrapped sentence per bullet and describe one observable change. Omit internal refactoring, agent instructions, contributor-only documentation, CI maintenance, and release-process changes unless they affect what package users install or receive.
 
 See `docs/development/releasing.md` for the release process.
+
+### GROMACS conversion checks
+
+`pytest -q tests/test_gromacswriter.py` checks topology structure, parameter validation, molecule ordering, and unit conversions. With `gmx_d` (preferred), or `gmx`, and `lmp` on `PATH`, it also runs GROMACS preprocessing and compares single-point energies and forces against LAMMPS. Engine-dependent tests use the `integration` marker and skip when the executables are unavailable. Hosted integration CI installs both engines. `GMX_BINARY` can select a specific GROMACS executable; the packed electrolyte force comparison requires double precision. Frozen common-molecule fixtures avoid a BOSS dependency in CI. These tests use matched coordinates and explicit OPLS settings; they do not select production simulation protocols.

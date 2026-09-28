@@ -6,7 +6,7 @@ Initially developed to construct electrolyte/electrode interfaces, it is also we
 
 """
 
-__version__ = '2.0.0'
+__version__ = '2.0.1'
 __date__ = '28 Sep. 2026'
 __author__ = 'Fabrice Roncoroni'
 __all__ = ['SimCell', "Specie", "Polymer", "PackmolError", "LigParGenError"]

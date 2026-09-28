@@ -955,7 +955,7 @@ class Specie(object):
         
         return
     
-    def write_gromacs_itp(self, filename=None):
+    def write_gromacs_itp(self, filename=None, *, include_atomtypes=True):
         """
         Write a GROMACS include topology (.itp) file for this species.
 
@@ -966,12 +966,16 @@ class Specie(object):
         ----------
         filename : str, optional
             Output filename. Defaults to ``{resname}.itp``.
+        include_atomtypes : bool, default True
+            Include atom types in this file. For multi-species exports, use
+            False and supply ``species`` to ``write_gromacs_top`` to define
+            all atom types before all molecule definitions.
         """
         logger.warning(
             "write_gromacs_itp is experimental -- verify output before production use."
         )
         from mdinterface.io.gromacswriter import write_gromacs_itp
-        write_gromacs_itp(self, filename=filename)
+        write_gromacs_itp(self, filename=filename, include_atomtypes=include_atomtypes)
 
     def validate_force_field(self):
         """Raise if molecular parameters required for classical export are missing.

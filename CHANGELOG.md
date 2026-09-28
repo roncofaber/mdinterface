@@ -4,6 +4,18 @@ All notable changes to mdinterface are documented here.
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-28
+
+Fixes GROMACS topology generation and validation for single- and multi-species systems, with LAMMPS/GROMACS energy and force regression coverage. Charge audits now report numerical noise near zero as `0.0` without changing atomic partial charges.
+
+### Fixed
+- Parameterization and polymer charge audits normalize numerical noise within `1e-12 e` of zero without altering atomic partial charges.
+- GROMACS exports restore scaled 1-4 interactions using explicit pairs derived from bond connectivity, including zero-valued torsions.
+- `SimCell.write_gromacs()` writes shared atom types before molecule definitions so mixed-species topologies can be preprocessed.
+- GROMACS system topologies preserve consecutive molecule order to match the coordinate file.
+- GROMACS exports reject incomplete or unsupported parameters and conflicting species definitions before writing files.
+- `SimCell.write_gromacs()` rejects assembled residues whose atom types, charges, masses, or atom counts differ from their species definitions.
+
 ## [2.0.0] - 2026-09-28
 
 Makes `SimCell` the sole system builder, removing the deprecated `SimulationBox` and `BoxBuilder` APIs and adding spatially constrained solvent regions and optional LAMMPS structural metadata. This major release also changes explicit centering behavior, requires Python 3.10 or newer, and adds RDKit molecular preparation, atomic force-field parameterization, export validation, and improved external-tool diagnostics.

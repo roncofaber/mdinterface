@@ -1,0 +1,5 @@
+# Common molecule conversion fixtures
+
+Benzene, ethanol, and methane were constructed from SMILES with RDKit seed 42 and parameterized with the configured BOSS backend through LigParGen fork commit `ad78036842318f166531be41cfcbc3563d7c5476`. Each JSON records its input SMILES, geometry, connectivity, partial charges and OPLS-AA parameters. These are frozen molecular parameter fixtures; tests do not require BOSS or LigParGen. Water and ions use the package database.
+
+The engine comparisons use identical coordinates at GRO precision, unconstrained harmonic bonds and angles, geometric LJ mixing, 0.5 LJ/Coulomb 1-4 scaling, and unshifted 10 angstrom LJ/Coulomb cutoffs without long-range corrections. They are single-point conversion checks, not equilibrated simulation examples. Tests prefer `gmx_d` when available, or an executable selected with `GMX_BINARY`; the packed electrolyte force comparison requires a double-precision executable because mixed-precision rounding can exceed the componentwise tolerance for small forces.

@@ -230,3 +230,32 @@ def test_export_does_not_clobber_fixed_temporary_filename(tmp_path, monkeypatch)
     box.write_lammps('export.data')
     assert original.read_text() == 'user file'
     assert not list(tmp_path.glob('.mdinterface-*.lammps'))
+
+
+@pytest.mark.parametrize('residual', [0.0, 5e-13, -5e-13, 5e-9])
+@pytest.mark.parametrize('policy', ['none', 'uniform'])
+def test_charge_audit_normalizes_roundoff_without_erasing_partial_charges(monkeypatch, residual, policy):
+    specie = Specie(smiles='C')
+    charges = np.array([0.1, 0.2, -0.3, 0, residual])
+    specie.atoms.set_initial_charges(charges)
+
+    def parameterize(atoms, **kwargs):
+        result = parameterize_mock(atoms, **kwargs)
+        result[0].set_initial_charges(charges)
+        return result
+
+    monkeypatch.setattr('mdinterface.externals.ligpargen.run_ligpargen', parameterize)
+    report = specie.parameterize(charge_correction=policy)
+    if abs(residual) <= 1e-12:
+        for key in ('initial_charge', 'refined_charge', 'residual', 'final_charge', 'correction_per_atom'):
+            assert report[key] == 0.0
+            assert not np.signbit(report[key])
+        np.testing.assert_array_equal(specie.charges, charges)
+    else:
+        assert report['residual'] == pytest.approx(residual, abs=1e-16)
+        if policy == 'none':
+            assert report['final_charge'] != 0
+            np.testing.assert_array_equal(specie.charges, charges)
+        else:
+            assert report['final_charge'] == 0
+            assert report['correction_per_atom'] != 0

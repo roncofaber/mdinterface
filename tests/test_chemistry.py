@@ -138,7 +138,7 @@ def test_refinement_does_not_reuse_stale_charge_cache(monkeypatch):
     assert report['correction_per_atom'] == 0
     assert report['junctions'] == 1
     report = chain.refine_junctions(charge_correction="uniform")
-    assert report['final_charge'] == pytest.approx(0, abs=1e-12)
+    assert report['final_charge'] == 0.0
     assert report['correction_per_atom'] * len(chain.atoms) == pytest.approx(-report['residual'])
     assert calls == [0, 0]
     assert chain.charges.sum() == pytest.approx(0, abs=1e-12)
@@ -420,3 +420,16 @@ def test_repeat_scales_ionic_charge_and_keeps_original_atom_maps():
     np.testing.assert_array_equal(specie.atoms.arrays['atom_map'][:len(original_maps)], original_maps)
     assert len(set(specie.atoms.arrays['atom_map'])) == len(specie.atoms)
     assert len(Chem.GetMolFrags(mol)) == 2
+
+
+def test_polymer_charge_audit_normalizes_roundoff(monkeypatch):
+    chain = Polymer(ethane_monomer(), nrep=2)
+    charges = np.zeros(len(chain.atoms))
+    charges[:3] = [0.1, 0.2, -0.3]
+    chain.atoms.set_initial_charges(charges)
+    monkeypatch.setattr(Polymer, '_update_connection', lambda *args, **kwargs: None)
+    report = chain.refine_junctions(charge_correction='uniform')
+    for key in ('initial_charge', 'refined_charge', 'residual', 'final_charge', 'correction_per_atom'):
+        assert report[key] == 0.0
+        assert not np.signbit(report[key])
+    np.testing.assert_array_equal(chain.charges, charges)

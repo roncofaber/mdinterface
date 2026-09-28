@@ -192,3 +192,9 @@ def round_list_to_sum(lst, target_sum, decimals=3):
             difference -= adjustment
     
     return rounded_list
+
+
+def _clean_charge(value):
+    """Normalize charge-report roundoff within 1e-12 e without rounding charges."""
+    value = float(value)
+    return 0.0 if abs(value) <= 1e-12 else value
