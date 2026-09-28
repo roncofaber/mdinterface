@@ -326,8 +326,7 @@ class Improper(Topology):
                 self._a1.split('_')[0] == other._a1.split('_')[0])
     
     def __eq_strict__(self, other):
-        return (self.values == other.values and
-                self._a1.split('_')[0] == other._a1.split('_')[0])
+        return self.values == other.values and self.symbols == other.symbols
 
     def __bool__(self):
         return any([bool(val) for val in self.values])

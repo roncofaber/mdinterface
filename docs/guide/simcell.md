@@ -150,14 +150,11 @@ simbox.add_solvent(
 )
 ```
 
-`Region.fill()` accepts the same content parameters as `add_solvent` itself (`solvent`, `solute`,
-`nsolute`, `density`, `nsolvent`, `concentration`, `ratio`), minus `zdim`/`xysize` since the
-region defines its own extent. `conmodel` is not yet supported inside a region. The bulk solvent's
-molecule count automatically accounts for the volume carved out by each region.
+`Region.fill()` accepts the same content parameters as `add_solvent` itself (`solvent`, `solute`, `nsolute`, `density`, `nsolvent`, `concentration`, `ratio`), minus `zdim`/`xysize` since the region defines its own extent. Content parameters are validated at every nesting level: count lists must match the species lists, mixtures require per-species counts or a mixing ratio, and `nsolute` and `concentration` are mutually exclusive. `conmodel` is not supported inside a region.
 
-A region's `center` can be `"random"` instead of a coordinate tuple, to have a non-overlapping
-placement chosen automatically within its parent volume (rejection-sampled against the parent's
-bounds and any sibling regions). Pass `seed` to `add_solvent` to make the placement reproducible:
+Both bulk solvent and bulk solute stay outside the top-level regions. Density and concentration use the remaining bulk volume; nested fills likewise subtract their children's volumes. Explicit molecule counts are unchanged. Combining `regions` with `conmodel` or `solute_pos="center"` raises an error because these fixed placements cannot enforce pocket exclusions; use `Region.fill(solute=..., nsolute=...)` for confined solutes. Sibling regions should not intersect: overlapping bounding boxes produce a warning, and volume accounting assumes disjoint regions.
+
+Every nested region must fit inside its parent's actual shape, not just its bounding box. A region's `center` can be `"random"` to choose a placement inside its parent while avoiding sibling bounding boxes. Pass `seed` to `add_solvent` to reproduce the region placement; it does not seed PACKMOL's molecular coordinates:
 
 ```python
 simbox.add_solvent(
@@ -203,11 +200,13 @@ simbox.build(padding=0.5, center=False, stack_axis="z")
 | Parameter | Description |
 |-----------|-------------|
 | `padding` | Extra space (Angstroms) added above/below each PACKMOL region |
-| `center` | Shift the system so the center of the first layer falls in the middle of the box, keeping it intact. Whatever ends up opposite it (typically a vacuum gap, if present) absorbs the periodic seam instead. |
+| `center` | Default `False`. If `True`, translate the first layer to the box midpoint using its allocated thickness, then wrap individual atoms into the box. |
 | `layered` | Keep per-layer residue numbering instead of merging |
 | `match_cell` | `True` (default): stretch all slabs to the largest XY cell, ensuring a consistent solid/liquid interface. `False`: each slab keeps its natural tiled XY. A `Specie`: lock XY to that species' cell and stretch everything else to match — useful when a pre-relaxed slab or polymer defines the cell. |
 | `hijack` | Replace positions and cell with a prebuilt `ase.Atoms` object |
 | `stack_axis` | Stacking direction: `"z"` (default), `"x"`, or `"y"` |
+
+Starting in 2.0.0, `center=True` places the first layer at the box midpoint. In 1.5.4 it placed that layer across the periodic boundary. For a 100 Å box whose first layer is 20 Å thick, the layer now occupies 40-60 Å instead of 90-100 Å and 0-10 Å. Update coordinate-based selections, restraints, and analysis bins accordingly. `center=False` is unchanged. Centering does not guarantee that the periodic seam falls in vacuum, and atom-wise wrapping can split other molecules across the boundary. `stack_axis` moves the centering behavior to the selected axis; `hijack` overrides the centered coordinates.
 
 ### Stacking axis
 
@@ -278,3 +277,11 @@ mdinterface.set_verbosity(0)         # quiet
 ```
 
 See the [Logging guide](logging.md) for details.
+
+## Validate classical exports
+
+`write_lammps(write_coeff=True)` validates parameters for species present in the assembled system before opening the output file. Missing pair or bonded parameters and nonfinite charges or coefficients raise an error. This distinguishes a chemically valid structure from a parameterized classical model. Explicit zero-valued coefficients are retained. Molecular completeness uses stored chemistry or bonded topology; it does not invent bonded interactions for nonbonded solids or infer universally required improper terms.
+
+Use `write_lammps("data.lammps", expected_charge=0.0)` when the assembled system must be neutral, or provide a nonzero expected total for an intentionally charged system. The absolute tolerance is `1e-5` elementary charges. Omitting `expected_charge` imposes no neutrality condition. Geometry-only workflows can continue to use `to_ase()`; exports without coefficient blocks do not require complete force-field coefficients.
+
+Imported LAMMPS bond connectivity is retained when coordinates are replaced from a trajectory, reordered with ASE, or repeated through `Specie.repeat()`, rather than being inferred again from interatomic distances.

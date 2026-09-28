@@ -4,7 +4,17 @@ All notable changes to mdinterface are documented here.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-28
+
+Makes `SimCell` the sole system builder, removing the deprecated `SimulationBox` and `BoxBuilder` APIs and adding spatially constrained solvent regions and optional LAMMPS structural metadata. This major release also changes explicit centering behavior, requires Python 3.10 or newer, and adds RDKit molecular preparation, atomic force-field parameterization, export validation, and improved external-tool diagnostics.
+
 ### Added
+- `Specie.parameterize()` applies complete LigParGen results atomically and returns a charge audit for direct or segmented parameterization.
+- `Specie.mark_attachment_sites()` selects validated polymer leaving atoms using atom maps.
+- `Specie.validate_force_field()` and coefficient-bearing LAMMPS exports check parameter completeness, with optional `expected_charge` validation at export.
+- `Specie.generate_conformer()` and `minimize_geometry()`, inherited by `Polymer`, provide separate or combined RDKit embedding and MMFF94 minimization while preserving simulation parameters.
+- A mapped-SMILES polymer example prepares and parameterizes a charged chain and exports it with counterions.
+- `Specie(smiles=...)` and RDKit molecule inputs preserve chemical graphs, formal charges, stereochemistry, and atom maps, with `to_rdkit()` and `to_smiles()` conversion.
 - `SimCell.write_lammps(metadata=...)` optionally exports versioned structural JSON with final atom/type IDs, species groups, connectivity, coefficients and a data-file checksum, without choosing simulation settings.
 - `Sphere`, `Box`, and `Cylinder` regions for spatially constrained PACKMOL placement
 - `Region.fill()` for assigning content to a region
@@ -13,22 +23,46 @@ All notable changes to mdinterface are documented here.
 - Reproducible automatic region placement through `center="random"` and `SimCell.add_solvent(seed=...)`
 
 ### Changed
+- `Polymer` inherits force-field parameters from `Specie` monomers with distinct labels per repeat unless explicit topology overrides are supplied.
+- Large-molecule parameterization uses explicit charge-correction options and checks capped segment and expanded junction sizes before running LigParGen.
+- `Polymer.refine_junctions(snippet_radius=..., charge_correction=..., cap_element=...)` replaces `refine_polymer_topology()` and returns a charge audit, with public `junction_bonds` for connectivity.
+- The piperion example prepares geometry with RDKit and prints the refinement charge audit instead of recommending a neutral-charge ML relaxation for an ionic chain.
+- RDKit is now a required core dependency for molecular graph handling and SMILES support.
+- `Polymer` preserves explicit junction bonds and validates monomer chemistry instead of deriving junction connectivity from coordinates.
+- RDKit-backed LigParGen inputs use MOL files, and installation instructions and the full environment pin the compatible fork to commit `ad78036` to preserve chemistry during atom reordering.
+- `SimulationBox`, its module `mdinterface.simulationbox`, and the `BoxBuilder` alias are removed; migrate to `SimCell` using the 2.0 migration guide.
+- Legacy examples are removed from the repository and source distribution; current examples use `SimCell` and `Polymer`.
+- `SimCell.build(center=True)` now places the first layer at the box midpoint instead of across the periodic boundary; the default remains `False`.
 - Minimum supported Python version is now 3.10
 - Supported Python versions are now tested through Python 3.14
 - PACKMOL is now installed automatically from its upstream PyPI package
 - Importing `mdinterface` no longer loads optional AIMD and plotting dependencies or reads user configuration
 - PACKMOL execution and output failures now raise `PackmolError` with retained diagnostic file locations instead of returning `None`
 - LigParGen setup, execution, and output failures now raise `LigParGenError` with actionable installation or configuration guidance and retained diagnostic file locations
-- `SimCell._layers` now stores typed `Compartment` objects internally; public layer-building signatures are unchanged
 - `build.box.populate_box()` now accepts `Specie` objects and returns `ase.Atoms`
 - PACKMOL templates now use ASE instead of MDAnalysis, eliminating PDB-completeness warnings for temporary files
 
 ### Fixed
+- Source distributions include the full parameterization environment and MkDocs configuration referenced by the bundled setup instructions.
+- SMILES parsing preserves explicit hydrogen atom maps used to select polymer attachment sites.
+- `Specie.repeat()` scales the stored molecular charge and preserves the original copy's atom maps.
+- Junction refinement retains distinct improper assignments with identical coefficients.
+- Database ions retain their formal molecular charge independently of scaled force-field partial charges.
+- LAMMPS coefficient export uses unique temporary files instead of overwriting `tmp_data.lammps` in the working directory.
+- Explicit zero-valued bonded parameters are retained instead of being discarded during type mapping.
+- Imported LAMMPS bond connectivity survives trajectory coordinate updates, atom reordering, and `Specie.repeat()` without distance-based bond inference.
+- Junction refinement leaves the original chain unchanged if any parameterization fails.
+- Charge estimation uses the stored molecular charge, rejects conflicting overrides, and passes the charge through the Open Babel and RESP backends.
+- `Specie(ligpargen=True)` now retains the partial charges returned by parameterization.
+- Polymer refinement preserves charged groups, uses neutral snippet caps, and no longer reuses parameters based only on element strings.
+- The piperion example locates its charged nitrogen correctly and validates charge neutrality after refinement.
+- Nested regions now remain inside their parent's actual shape, including randomly placed regions.
+- `Region.fill()` validates content parameters, and solvent mixtures reject ambiguous scalar counts without a mixing ratio instead of silently omitting species.
+- Bulk solutes now exclude filled regions and use the remaining volume for concentration-based counts; incompatible fixed-center and concentration-profile placement raises an error.
 - Water model documentation now describes `Water(model="ewald")` as modified TIP3P for Ewald electrostatics (its parameters were always TIP3P-Ewald, not SPC/E) and no longer swaps variable names in the database guide
 - Slab tiling producing cells smaller than the requested XY dimensions when the nearest repeat count rounded down
 - Spurious MDAnalysis topology-guessing warnings in `Specie.to_universe()` and `build.box.populate_box()`
 - Missing `elements` topology data in universes created by `Specie.to_universe()`
-- Incorrect first-layer centering in `SimCell.build(center=True)`
 - Region-constrained PACKMOL placements exceeding requested boundaries because of loose default solver precision
 - Wheels including repository documentation, examples, tests, and local planning files because package discovery was not limited to `mdinterface`
 - Missing `mdinterface/config.ini` in wheels, which broke the default configuration fallback after installation

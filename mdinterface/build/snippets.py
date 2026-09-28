@@ -12,82 +12,33 @@ topology is then remapped back onto the full polymer indices.
 import numpy as np
 import copy
 
-# other stuff
-import ase
-from ase.data import atomic_numbers, covalent_radii
-
-#%%
-
-# snip the polymer into a smaller molecule, return as ase.Atoms
 def make_snippet(polymer, center, Nmax, ending="H", preserve_rings=True):
 
-    # Get initial atom selection based on distance
-    ini_idxs = list(set(np.concatenate(polymer.find_relevant_distances(Nmax, centers=center))))
+    from rdkit import Chem
+    from mdinterface.core.chemistry import capped_molecule
 
-    # Reconstruct broken rings, if any
-    if preserve_rings:
-        # Find rings that contain any atoms in our initial selection
-        relevant_rings = polymer._get_rings_containing_atoms(ini_idxs)
-
-        # Add all atoms from relevant rings to our selection
-        ring_atoms = set()
-        for ring in relevant_rings:
-            ring_atoms.update(ring)
-
-        # Merge ring atoms with distance-based selection
-        ini_idxs = list(set(ini_idxs) | ring_atoms)
-
-    # Add all nodes that are connected by one connection to those nodes (and nothing else)
-    # Iterate over the initial nodes
-    con_idxs   = set()
-    ter_idxs   = set()
-    distances  = []
-    atom_pairs = []
-    for node in ini_idxs:
-        # Get the neighbors of the current node
-        neighbors = list(polymer.graph.neighbors(node))
-        
-        # Check each neighbor to see if it connects back to the initial nodes
-        for neighbor in neighbors:
-            
-            # ignore if already in the list
-            if neighbor in ini_idxs:
+    mol = polymer.to_rdkit()
+    selected = {center}
+    selected.update(np.concatenate(polymer.find_relevant_distances(Nmax, centers=center)).tolist())
+    changed = True
+    while changed:
+        previous = set(selected)
+        if preserve_rings:
+            for ring in mol.GetRingInfo().AtomRings():
+                if selected.intersection(ring):
+                    selected.update(ring)
+        for bond in mol.GetBonds():
+            a, b = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            if a not in selected and b not in selected:
                 continue
-            
-            # If it connects to exactly one node in the initial list, add it to connected_nodes
-            if polymer.graph.degree(neighbor) == 1:
-                con_idxs.add(neighbor)
-            else:
-                if neighbor not in ter_idxs:
-                    ter_idxs.add(neighbor)
-                    d1 = covalent_radii[atomic_numbers[polymer.graph.nodes[node]["element"]]]
-                    d2 = covalent_radii[atomic_numbers[ending]]
-                    distances.append(d1+d2)
-                    atom_pairs.append([node, neighbor])
+            charged = mol.GetAtomWithIdx(a).GetFormalCharge() or mol.GetAtomWithIdx(b).GetFormalCharge()
+            terminal = mol.GetAtomWithIdx(a).GetDegree() == 1 or mol.GetAtomWithIdx(b).GetDegree() == 1
+            if charged or terminal or bond.GetBondType() != Chem.BondType.SINGLE:
+                selected.update((a, b))
+        changed = selected != previous
+    return capped_molecule(polymer.atoms, mol, selected, ending=ending)
 
-    # Combine the initial nodes with the newly found connected nodes
-    con_idxs = list(set(ini_idxs).union(con_idxs))
-    ter_idxs = list(ter_idxs)
 
-    snippet_idxs = np.array(con_idxs + ter_idxs)
-    
-    # create chain and termination
-    chain = polymer.atoms[con_idxs].copy()
-    term  = polymer.atoms[ter_idxs].copy()
-    term.set_chemical_symbols(len(term) * [ending])
-
-    # make snippet        
-    # snippet = ase.Atoms(chain + term)
-    snippet = chain + term
-    
-    # fix distances for ligpargen
-    for cc, (a1, a2) in enumerate(atom_pairs):
-        idx1 = int(np.where(snippet_idxs == a1)[0][0])
-        idx2 = int(np.where(snippet_idxs == a2)[0][0])
-        snippet.set_distance(idx1, idx2, distances[cc], fix=0)
-
-    return snippet, snippet_idxs
- 
 def remap_snippet_topology(original_idxs, sn_atoms, sn_atypes, sn_bonds,
                            sn_angles, sn_dihedrals, sn_impropers, local_idxs):
     

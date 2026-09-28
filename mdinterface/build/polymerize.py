@@ -19,6 +19,8 @@ import ase
 import ase.build
 from ase.data import atomic_numbers, covalent_radii
 from ase.calculators import lj
+from rdkit import Chem
+from mdinterface.core.chemistry import perceive_molecule, store_molecule, stored_molecule
 
 #%%
 
@@ -155,7 +157,7 @@ def optimize_monomer_rotation_gradient(oligomer, monomer, oli_idx, mon_idx,
         rotation_angle = min(rotation_angle, 0.2)  # Max ~11 degrees per step
 
         # Rotate the current monomer
-        current_monomer.rotate(rotation_axis, rotation_angle, center=rotation_center)
+        current_monomer.rotate(np.degrees(rotation_angle), rotation_axis, center=rotation_center)
 
         # Update best monomer if the current one is better
         if score < best_score:
@@ -193,8 +195,16 @@ def attach_to_chain(oligomer, monomer, final=False):
     mon_idx = int(np.where(monomer.arrays["polymerize"] == 1)[0][0])
 
     # Find atoms connected to X (most likely C atoms)
-    ini_idx = ase.build.connected_indices(oligomer, oli_idx)[1]
-    end_idx = ase.build.connected_indices(monomer, mon_idx)[1]
+    oli_mol = stored_molecule(oligomer)
+    mon_mol = stored_molecule(monomer)
+    oli_neighbors = list(oli_mol.GetAtomWithIdx(oli_idx).GetNeighbors())
+    mon_neighbors = list(mon_mol.GetAtomWithIdx(mon_idx).GetNeighbors())
+    if len(oli_neighbors) != 1 or len(mon_neighbors) != 1:
+        raise ValueError("Polymer leaving atoms must each have exactly one bonded neighbor.")
+    if oli_mol.GetAtomWithIdx(oli_idx).GetFormalCharge() or mon_mol.GetAtomWithIdx(mon_idx).GetFormalCharge():
+        raise ValueError("Polymer leaving atoms must have zero formal charge.")
+    ini_idx = oli_neighbors[0].GetIdx()
+    end_idx = mon_neighbors[0].GetIdx()
 
     # remember connecting points
     is_connected = np.array(len(monomer)*[0])
@@ -233,7 +243,6 @@ def attach_to_chain(oligomer, monomer, final=False):
     monomer.translate(pos1-pos2 + 3*(vec1/np.linalg.norm(vec1)))
         
     # perform docking
-    frames = []
     for dist in [3, 2, 1]:
         
         # get positions of docking box
@@ -244,25 +253,67 @@ def attach_to_chain(oligomer, monomer, final=False):
         
         # optimize rotation
         monomer = optimize_monomer_rotation_gradient(oligomer, monomer, oli_idx, mon_idx)
-        frames.append(oligomer+monomer)
         
-    ase.io.write("test.traj", frames)
+    direction = monomer.positions[end_idx] - oligomer.positions[ini_idx]
+    direction /= np.linalg.norm(direction)
+    monomer.translate(oligomer.positions[ini_idx] + (d1 + d2) * direction - monomer.positions[end_idx])
+
+    map_offset = max(a.GetAtomMapNum() for a in oli_mol.GetAtoms())
+    for atom in mon_mol.GetAtoms():
+        atom.SetAtomMapNum(atom.GetAtomMapNum() + map_offset)
+    combined = Chem.RWMol(Chem.CombineMols(oli_mol, mon_mol))
+    combined.AddBond(ini_idx, len(oligomer) + end_idx, Chem.BondType.SINGLE)
+    combined.RemoveAtom(len(oligomer) + mon_idx)
+    combined.RemoveAtom(oli_idx)
+    mol = combined.GetMol()
+    Chem.SanitizeMol(mol)
 
     # remove fluff
     del oligomer[oli_idx]
     del monomer[mon_idx]
 
     # return monomer attached to bigger object
-    return oligomer + monomer
+    result = oligomer + monomer
+    store_molecule(result, mol)
+    return result
 
 
 def build_polymer(monomers, sequence=None, nrep=None):
+    """Assemble a chain with explicit RDKit junction bonds.
+
+    Parameters
+    ----------
+    monomers : ase.Atoms, Specie, or list
+        Molecular units with one head and one tail leaving atom marked in
+        the ``polymerize`` array. ASE-only units undergo bond perception.
+    sequence : list of int, optional
+        Monomer indices in assembly order.
+    nrep : int, optional
+        Repeat count for a single monomer when sequence is omitted.
+
+    Returns
+    -------
+    ase.Atoms
+        Chain carrying its chemical graph, formal charges, atom maps, and
+        monomer membership. Partial charges still require refinement.
+    """
     
     if not isinstance(monomers, list):
         monomers = [monomers]
+    monomers = [getattr(monomer, "atoms", monomer).copy() for monomer in monomers]
+    for monomer in monomers:
+        marks = monomer.arrays.get("polymerize")
+        if marks is None or np.count_nonzero(marks == 1) != 1 or np.count_nonzero(marks == 2) != 1:
+            raise ValueError("Each monomer needs exactly one head (1) and one tail (2) leaving atom.")
+        mol = perceive_molecule(monomer)
+        if len(Chem.GetMolFrags(mol)) != 1:
+            raise ValueError("A monomer must be one connected molecule.")
+        store_molecule(monomer, mol)
     
     if sequence is None:
         sequence = [0]*nrep
+    if not sequence:
+        raise ValueError("Polymer sequence must not be empty.")
     
     for cc, seq in enumerate(sequence):
         

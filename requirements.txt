@@ -5,3 +5,4 @@ networkx>=2.5
 platformdirs>=2.0.0
 configparser>=5.0.0
 packmol>=21.2.3
+rdkit>=2024.3.5

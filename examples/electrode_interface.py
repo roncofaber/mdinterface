@@ -3,7 +3,6 @@
 """
 SimCell example: Au(111) / NaCl electrolyte / Au(111) sandwich.
 
-Equivalent to make_box.py but using the fluent SimCell API.
 Layers are added in the order they appear in the cell (bottom → top).
 
 Author: roncofaber

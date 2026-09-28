@@ -430,3 +430,18 @@ class TestVerbose:
         handlers = [h for h in logging.getLogger("mdinterface").handlers
                     if isinstance(h, logging.StreamHandler)]
         assert len(handlers) == 1
+
+
+@pytest.mark.parametrize("axis, index", [("x", 0), ("y", 1), ("z", 2)])
+@pytest.mark.parametrize("center", [False, True])
+def test_center_places_first_slab_at_box_midpoint(axis, index, center):
+    from mdinterface.database import Metal111
+
+    box = SimCell(xysize=[10, 10], verbose=False)
+    box.add_slab(Metal111('Au'), nlayers=1)
+    box.add_vacuum(30)
+    box.build(center=center, stack_axis=axis)
+    positions = box.universe.atoms.positions[:, index]
+    length = box.universe.dimensions[index]
+    expected = length / 2 if center else (length - 30) / 2
+    assert (positions.min() + positions.max()) / 2 == pytest.approx(expected)

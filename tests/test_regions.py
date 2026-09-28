@@ -127,3 +127,47 @@ class TestNestedRegions:
         inner_fr = inner.fill(solvent="CO2")
         outer_fr = outer.fill(solvent="H2O", regions=[inner_fr])
         assert outer_fr.regions == [inner_fr]
+
+
+@pytest.mark.parametrize("parent", [Sphere((0, 0, 0), 5), Cylinder((0, 0, 0), 5, 10)])
+@pytest.mark.parametrize("child", [Sphere((4, 4, 0), 1), Box((4, 4, 0), (1, 1, 1)), Cylinder((4, 4, 0), 1, 2)])
+def test_child_inside_bounding_box_but_outside_parent(parent, child):
+    from mdinterface.build.solvent import _validate_regions
+
+    with pytest.raises(ValueError, match="extends outside"):
+        _validate_regions([child.fill()], parent.bounding_box(), parent=parent)
+
+
+@pytest.mark.parametrize("axis", ["x", "y", "z"])
+@pytest.mark.parametrize("child_axis", ["x", "y", "z"])
+def test_cylinder_containment_axes(axis, child_axis):
+    from mdinterface.build.regions import _contains_region
+
+    parent = Cylinder((0, 0, 0), 5, 10, axis=axis)
+    assert _contains_region(parent, Cylinder((0, 0, 0), 2, 4, axis=child_axis))
+    assert not _contains_region(parent, Cylinder((0, 0, 0), 6, 4, axis=child_axis))
+
+
+@pytest.mark.parametrize("parent", [Sphere((0, 0, 0), 5), Cylinder((0, 0, 0), 5, 10), Box((0, 0, 0), (10, 10, 10))])
+def test_tangent_sphere_is_contained(parent):
+    from mdinterface.build.regions import _contains_region
+
+    assert _contains_region(parent, Sphere((4, 0, 0), 1))
+
+
+@pytest.mark.parametrize("parent", [Sphere((0, 0, 0), 5), Cylinder((0, 0, 0), 5, 10)])
+def test_random_children_stay_in_parent_shape(parent):
+    import numpy as np
+    from mdinterface.build.solvent import _resolve_random_regions
+
+    for seed in range(30):
+        child = _resolve_random_regions(
+            [Sphere("random", 1).fill()], parent.bounding_box(),
+            np.random.default_rng(seed), parent=parent,
+        )[0].region
+        center = np.array(child.center)
+        if isinstance(parent, Sphere):
+            assert np.linalg.norm(center) + 1 <= 5
+        else:
+            assert np.linalg.norm(center[:2]) + 1 <= 5
+            assert abs(center[2]) + 1 <= 5

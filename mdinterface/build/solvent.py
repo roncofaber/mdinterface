@@ -19,7 +19,7 @@ from ase import units
 
 from mdinterface.build.box import populate_box
 from mdinterface.build.continuum2sim import discretize_concentration
-from mdinterface.build.regions import Region, Box
+from mdinterface.build.regions import Region, Box, _contains_region
 
 import logging
 
@@ -63,7 +63,7 @@ def _validate_solvent_box_parameters(
         if len(nsolvent) != len(solvents):
             raise ValueError(f"Length of 'nsolvent' ({len(nsolvent)}) must match number of solvent species ({len(solvents)}).")
 
-    if len(solvents) > 1 and ratio is None and not isinstance(nsolvent, (list, tuple)) and density is not None and nsolvent is None:
+    if len(solvents) > 1 and ratio is None and not isinstance(nsolvent, (list, tuple)):
         raise ValueError("For a solvent mixture, specify 'nsolvent' (list), 'ratio'+'density', or 'ratio'+'nsolvent'.")
 
     if density is not None and nsolvent is not None and ratio is None:
@@ -256,14 +256,11 @@ def _concentration_to_nsolute(concentration, volume_A3):
     return int(concentration * volume_A3 * units.mol / ((units.m / 10) ** 3))
 
 
-def _validate_regions(regions, bounds):
+def _validate_regions(regions, bounds, parent=None):
     """Raise if any region extends outside `bounds`; warn on bbox overlap.
 
-    `bounds` is an explicit (xmin, ymin, zmin, xmax, ymax, zmax) tuple so this
-    can validate either a layer's top-level regions (bounds = the layer
-    volume) or one region's own nested regions (bounds = that region's
-    bounding_box()) - see _region_instructions, which calls this once per
-    nesting depth as it recurses.
+    `bounds` is an explicit (xmin, ymin, zmin, xmax, ymax, zmax) tuple.
+    When `parent` is supplied, check containment in its actual shape too.
     """
     if not regions:
         return
@@ -271,7 +268,8 @@ def _validate_regions(regions, bounds):
     for fr in regions:
         rxmin, rymin, rzmin, rxmax, rymax, rzmax = fr.region.bounding_box()
         if (rxmin < xmin or rymin < ymin or rzmin < zmin
-                or rxmax > xmax or rymax > ymax or rzmax > zmax):
+                or rxmax > xmax or rymax > ymax or rzmax > zmax
+                or (parent is not None and not _contains_region(parent, fr.region))):
             raise ValueError(
                 f"Region {fr.region!r} extends outside its parent volume "
                 f"[{xmin}, {xmax}] x [{ymin}, {ymax}] x [{zmin}, {zmax}]."
@@ -293,11 +291,11 @@ def _bboxes_overlap(a, b):
     return ax0 < bx1 and ax1 > bx0 and ay0 < by1 and ay1 > by0 and az0 < bz1 and az1 > bz0
 
 
-def _resolve_random_regions(regions, bounds, rng, max_attempts=100):
+def _resolve_random_regions(regions, bounds, rng, max_attempts=100, parent=None):
     """Replace `center="random"` on each region with a concrete center via rejection sampling.
 
     Candidates are drawn uniformly within `bounds` (inset by the region's own
-    half-extents so it never crosses the boundary) and rejected if their
+    half-extents) and rejected if they extend outside `parent` or their
     bounding box overlaps a fixed sibling or an already-resolved random one.
     Returns a new list of FilledRegion; regions without a random center are
     passed through unchanged, and no input Region is mutated.
@@ -325,6 +323,8 @@ def _resolve_random_regions(regions, bounds, rng, max_attempts=100):
             candidate = tuple(rng.uniform(lo, hi))
             candidate_region = fr.region._with_center(candidate)
             bbox = candidate_region.bounding_box()
+            if parent is not None and not _contains_region(parent, candidate_region):
+                continue
             if not any(_bboxes_overlap(bbox, other) for other in placed_bboxes):
                 break
         else:
@@ -352,11 +352,23 @@ def _region_instructions(fr, parent_bounds, rng):
     if fr.conmodel is not None:
         raise ValueError(
             "conmodel is not yet supported inside a region; "
-            "use it only at the top-level add_solvent() call."
+            "use concentration or nsolute for region fills."
         )
 
-    children = _resolve_random_regions(fr.regions, fr.region.bounding_box(), rng)
-    _validate_regions(children, fr.region.bounding_box())
+    children = _resolve_random_regions(fr.regions, fr.region.bounding_box(), rng, parent=fr.region)
+    _validate_regions(children, fr.region.bounding_box(), parent=fr.region)
+
+    if fr.solvent is None:
+        r_solvents = []
+    elif isinstance(fr.solvent, (list, tuple)):
+        r_solvents = list(fr.solvent)
+    else:
+        r_solvents = [fr.solvent]
+    if r_solvents or fr.solute:
+        _validate_solvent_box_parameters(
+            fr.nsolute, fr.concentration, fr.conmodel, fr.solute,
+            r_solvents, fr.density, fr.nsolvent, fr.ratio,
+        )
 
     instructions = []
     child_outside = [child.region.packmol_line("outside") for child in children]
@@ -373,13 +385,6 @@ def _region_instructions(fr, parent_bounds, rng):
             n = r_nsolute if isinstance(r_nsolute, int) else r_nsolute[cc]
             if n > 0:
                 instructions.append((sp, n, "region", fr.region, child_outside))
-
-    if fr.solvent is None:
-        r_solvents = []
-    elif isinstance(fr.solvent, (list, tuple)):
-        r_solvents = list(fr.solvent)
-    else:
-        r_solvents = [fr.solvent]
 
     if r_solvents:
         r_volume_cm3 = 1e-24 * (fr.region.volume() - child_volume_A3)
@@ -473,6 +478,9 @@ def make_solvent_box(
         A region's `center` may be `"random"`, resolved here via rejection
         sampling against the parent volume and sibling regions.
         See SimCell.add_solvent's `regions` parameter.
+        Bulk solvent and solute exclude these regions; density and concentration
+        use the remaining volume. Cannot be combined with ``conmodel`` or
+        fixed-center solute placement.
     seed : int or None
         Seed for the RNG used to resolve `center="random"` regions.
         Pass the same seed to reproduce an identical placement.
@@ -493,17 +501,7 @@ def make_solvent_box(
     _validate_solvent_box_parameters(nsolute, concentration, conmodel, solute,
                                      solvents, density, nsolvent, ratio)
 
-    # convert concentration to number of solute molecules
-    if concentration is not None:
-        nsolute = int(concentration * np.prod(volume) * units.mol / ((units.m / 10) ** 3))
-
     instructions = []
-
-    # solute
-    if (conmodel is not None) or (nsolute is not None and solute is not None):
-        solute_instr = populate_solutes(solute, nsolute, volume, solute_pos=solute_pos,
-                                        conmodel=conmodel)
-        instructions.extend(solute_instr)
 
     # regions carve volume out of the bulk and get their own PACKMOL constraints
     rng = np.random.default_rng(seed)
@@ -511,6 +509,19 @@ def make_solvent_box(
     _validate_regions(regions, (0.0, 0.0, 0.0) + tuple(volume))
     region_volume_A3 = sum(fr.region.volume() for fr in regions)
     outside_lines = [fr.region.packmol_line("outside") for fr in regions]
+    if regions and (conmodel is not None or (solute and solute_pos == "center")):
+        raise ValueError(
+            "regions cannot be combined with conmodel or solute_pos='center'; "
+            "use Region.fill() for confined solutes."
+        )
+    if concentration is not None:
+        nsolute = _concentration_to_nsolute(concentration, np.prod(volume) - region_volume_A3)
+    if (conmodel is not None) or (nsolute is not None and solute is not None):
+        solute_instr = populate_solutes(solute, nsolute, volume, solute_pos=solute_pos,
+                                       conmodel=conmodel)
+        if outside_lines:
+            solute_instr = [(*instruction, outside_lines) for instruction in solute_instr]
+        instructions.extend(solute_instr)
 
     # solvents
     if solvents:

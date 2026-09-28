@@ -13,4 +13,4 @@ from .polymerize import (build_polymer, start_chain, attach_to_chain,
 from .box import (PackmolError, populate_box, make_interface_slab, add_component)
 from .solvent import (make_solvent_box, populate_solutes)
 from .continuum2sim import discretize_concentration
-from .builder import SimCell, BoxBuilder
+from .builder import SimCell

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 #%%
 
 def calculate_RESP_charges(specie, basis='def2-svpd', xc="b3lyp", calc_type="RKS",
-                           gpu=True, optimize=False, maxit=250):
+                           gpu=True, optimize=False, maxit=250, charge=None):
     
     try:
         from gpu4pyscf.pop import esp
@@ -31,7 +31,7 @@ def calculate_RESP_charges(specie, basis='def2-svpd', xc="b3lyp", calc_type="RKS
                 len(specie.atoms), basis, xc, optimize)
 
     # make pyscf mol
-    mol = ase_to_mole(specie.atoms, basis=basis)
+    mol = ase_to_mole(specie.atoms, basis=basis, charge=specie._resolve_charge(charge))
 
     # generate calculator
     mf = make_pyscf_calculator(mol, xc=xc, calc_type=calc_type, gpu=gpu)

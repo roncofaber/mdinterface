@@ -304,7 +304,7 @@ def write_lammps_coefficients(
     Write LAMMPS force field coefficients to a file.
 
     This function writes pair, bond, angle, dihedral, and improper coefficients
-    in LAMMPS format. It's designed to be used with SimulationBox systems that
+    in LAMMPS format. It's designed to be used with SimCell systems that
     contain force field parameters.
 
     Parameters:
@@ -312,7 +312,7 @@ def write_lammps_coefficients(
     system : MDAnalysis.Universe
         The system containing atoms and topology for which coefficients are written
     sorted_attributes : dict
-        Dictionary containing sorted attributes from SimulationBox.get_sorted_attribute():
+        Dictionary containing sorted attributes from SimCell.get_sorted_attribute():
         - "atoms": sorted atom types
         - "bonds": sorted bond types
         - "angles": sorted angle types
@@ -329,7 +329,7 @@ def write_lammps_coefficients(
 
     Examples:
     ---------
-    # Basic usage with SimulationBox
+    # Basic usage with SimCell
     sorted_attrs = {
         "atoms": simbox.get_sorted_attribute("atoms"),
         "bonds": simbox.get_sorted_attribute("bonds"),

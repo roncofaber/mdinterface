@@ -4,7 +4,7 @@
 Polymer class: a Specie built from one or more repeating monomer units.
 
 Handles chain assembly, LigParGen-based topology refinement at junction
-points, and snippet caching to avoid redundant force-field calls.
+points while preserving molecular connectivity and formal-charge sites.
 """
 
 # repo stuff
@@ -15,7 +15,9 @@ from mdinterface.build.snippets import make_snippet, remap_snippet_topology
 
 # import random
 import numpy as np
-import copy
+import logging
+
+logger = logging.getLogger(__name__)
 
 #%%
 
@@ -31,7 +33,9 @@ class Polymer(Specie):
     Parameters
     ----------
     monomers : Specie or list of Specie
-        Monomer unit(s) to polymerize.  A list defines a co-polymer sequence.
+        Monomer unit(s) to polymerize. A list defines a co-polymer sequence.
+        Parameters are inherited from Specie inputs when no explicit topology
+        overrides are supplied, with distinct labels for each repeat.
         Each monomer's ASE ``Atoms`` must carry a ``polymerize`` array marking
         the leaving atom (e.g. H or F) at each chain end: value ``1`` = head,
         ``2`` = tail.  Those atoms are deleted during assembly and the bond
@@ -44,10 +48,9 @@ class Polymer(Specie):
     refine_polymer : bool, default False
         If True, run LigParGen at every junction point to obtain accurate
         OPLS-AA parameters for the chain interior.  Requires LigParGen.
-    offset : bool, default False
-        If True, shift the total charge to match the nominal charge after
-        topology refinement.
-    ending : str, default "H"
+    charge_correction : {"none", "uniform"}, default "none"
+        Optional uniform correction to the formal charge after refinement.
+    cap_element : str, default "H"
         Element symbol used to cap dangling bonds at chain termini during
         LigParGen snippet calculations.
 
@@ -71,14 +74,21 @@ class Polymer(Specie):
                  angles=None, dihedrals=None, impropers=None, lj={}, cutoff=1.0,
                  name=None, lammps_data=None, fix_missing=False, chg_scaling=1.0,
                  pbc=False, ligpargen=False, tot_charge=None, nrep=None,
-                 sequence=None, refine_polymer=False, offset=False, ending="H"):
+                 sequence=None, refine_polymer=False, charge_correction="none", cap_element="H"):
 
         # initialize polymer stuff
-        self._snippet_cache = {}
         self._sequence = sequence
         
-        # polymerize
-        polymer = build_polymer(monomers, sequence=sequence, nrep=nrep)
+        templates = monomers if isinstance(monomers, list) else [monomers]
+        inherit = all(value is None for value in (atom_types, bonds, angles, dihedrals, impropers))
+        if inherit:
+            order = sequence if sequence is not None else [0] * nrep
+            templates = [templates[index] for index in order]
+            sequence = list(range(len(templates)))
+        prepared, inherited = self._prepare_monomers(templates, inherit)
+        if inherit:
+            bonds, angles, dihedrals, impropers = [inherited[key] for key in ("bonds", "angles", "dihedrals", "impropers")]
+        polymer = build_polymer(prepared, sequence=sequence, nrep=nrep)
         
         # Initialize the parent class with polymerized monomers
         super().__init__(atoms=polymer, charges=charges, atom_types=atom_types,
@@ -89,27 +99,42 @@ class Polymer(Specie):
                          tot_charge=tot_charge)
         
         if refine_polymer:
-            self.refine_polymer_topology(Nmax=12, offset=offset, ending=ending)
+            self.refine_junctions(charge_correction=charge_correction, cap_element=cap_element)
         
         return
     
-    # return list of elements adjacent to a connection point
-    def _get_connection_elements(self):
-
-        # Get elements where there is a connection
-        centers = np.argwhere((self.atoms.arrays["is_connected"] ==1) |
-                              (self.atoms.arrays["is_connected"] ==2)).flatten()
-
-        pairs = []
-        for center in centers:
-            if any(center in pp for pp in pairs):
+    @staticmethod
+    def _prepare_monomers(monomers, inherit):
+        prepared = []
+        inherited = {key: [] for key in ("bonds", "angles", "dihedrals", "impropers")}
+        for index, monomer in enumerate(monomers):
+            if not isinstance(monomer, Specie):
+                prepared.append(monomer)
                 continue
-            distances = self.atoms.get_distances(center, centers)
-            idx = centers[np.argsort(distances)[1]]
-            pairs.append([center, idx])
-            
-        return pairs
-    
+            atoms = monomer.atoms.copy()
+            types = []
+            for atom_index, sid in enumerate(monomer._sids):
+                atom_type = monomer._stype[monomer._smap[sid]].copy()
+                atom_type.set_label(f"{atom_type.symbol}_M{index}_{atom_index}" if inherit else str(sid))
+                types.append(atom_type)
+            atoms.set_array("stype", np.array(types, dtype=object))
+            if inherit:
+                for key, type_key in (("bonds", "_btype"), ("angles", "_atype"),
+                                      ("dihedrals", "_dtype"), ("impropers", "_itype")):
+                    interactions, type_indices = getattr(monomer, key)
+                    for indices, type_index in zip(interactions, type_indices):
+                        parameter = getattr(monomer, type_key)[type_index].copy()
+                        parameter.update(**{f"a{i + 1}": types[atom_index].label for i, atom_index in enumerate(indices)})
+                        inherited[key].append(parameter)
+            prepared.append(atoms)
+        return prepared, inherited
+
+    @property
+    def junction_bonds(self):
+        """list of tuple of int: Inter-monomer bonds in current ASE atom indices."""
+        monomers = self.atoms.arrays["mon_id"]
+        return [(a, b) for a, b in self.graph.edges if monomers[a] != monomers[b]]
+
     def _get_start_end(self):
         
         str_idx = np.argwhere(self.atoms.arrays["is_connected"] == -1).flatten()
@@ -118,10 +143,10 @@ class Polymer(Specie):
         return np.concatenate([str_idx, end_idx])
     
 
-    def _update_connection(self, center, partner, Nmax, charges, ending="H"):
+    def _update_connection(self, center, partner, Nmax, charges, ending="H", snippet_data=None):
 
         # make a lil snippet
-        snippet, snippet_idxs = make_snippet(self, center, Nmax, ending=ending)
+        snippet, snippet_idxs = snippet_data if snippet_data is not None else make_snippet(self, center, Nmax, ending=ending)
         
         # get local indexes (within dihedral from center)
         ldxs = list(set(np.concatenate(self.find_relevant_distances(4, centers=center))))
@@ -129,52 +154,16 @@ class Polymer(Specie):
         # find mapping between indexes
         mapping = [np.argwhere(snippet_idxs == ll)[0][0] for ll in ldxs]
     
-        # Check if snippet already exists in cache
-        snippet_hash = ''.join(snippet.get_chemical_symbols())
-        if snippet_hash in self._snippet_cache:
-            
-            cached_snippet = copy.deepcopy(self._snippet_cache[snippet_hash])
-            
-            sn_atoms     = cached_snippet["sn_atoms"]
-            sn_atypes    = cached_snippet["sn_atypes"]
-            sn_bonds     = cached_snippet["sn_bonds"]
-            sn_angles    = cached_snippet["sn_angles"]
-            sn_dihedrals = cached_snippet["sn_dihedrals"]
-            sn_impropers = cached_snippet["sn_impropers"]
-            new_charges  = cached_snippet["new_charges"]
-        
-        # if not, ligpargen it
-        else:
+        sn_charge = int(snippet.arrays["nominal_charge"].sum())
+        sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals, sn_impropers = run_ligpargen(
+            snippet, charge=sn_charge, is_snippet=True,
+        )
+        new_charges = sn_atoms.get_initial_charges()
+        if len(sn_atoms) != len(snippet) or not np.array_equal(sn_atoms.numbers, snippet.numbers):
+            raise ValueError("Junction parameterization changed the snippet atom ordering.")
+        if not np.isfinite(new_charges).all():
+            raise ValueError("Junction parameterization returned nonfinite partial charges.")
 
-            # snippet charge
-            if "nominal_charge" in snippet.arrays:
-                sn_charge = snippet.arrays["nominal_charge"].sum()
-            else:
-                raise ValueError("No 'nominal_charge' found in snippet!")
-                # sn_charge = None
-                
-            # run ligpargen
-            sn_atoms, sn_atypes, sn_bonds, sn_angles, sn_dihedrals, sn_impropers =\
-                run_ligpargen(snippet, charge=sn_charge, is_snippet=True)
-            
-            # get charges
-            new_charges = sn_atoms.get_initial_charges()
-            
-            # Store the new snippet and its charges in cache
-            self._snippet_cache[snippet_hash] = {
-                "new_charges"  : new_charges,
-                "sn_atoms"     : sn_atoms,
-                "sn_atypes"    : sn_atypes,
-                "sn_bonds"     : sn_bonds,
-                "sn_angles"    : sn_angles,
-                "sn_dihedrals" : sn_dihedrals,
-                "sn_impropers" : sn_impropers,
-                "snippet_idxs" : snippet_idxs,
-                "local_idxs"   : ldxs,
-                "snippet"      : snippet,
-                "sn_charge"    : sn_charge
-                }
-        
         # update topology of section
         original_idxs = self._sids[snippet_idxs]
         local_idxs = self._sids[ldxs]
@@ -195,45 +184,92 @@ class Polymer(Specie):
         
         return
     
-    # main driver that refines charges across the whole polymer
-    def refine_polymer_topology(self, Nmax=12, offset=False, ending="H"):
-        """
-        Refines the charges for the specified species.
+    def refine_junctions(self, snippet_radius=12, charge_correction="none", cap_element="H"):
+        """Refine junction parameters with LigParGen and optionally correct total charge.
 
-        Parameters:
-        specie (ase.Atoms): The species object containing the atoms.
-        Nmax (int): The maximum number of neighbors to consider.
-        offset (bool): Whether to apply an offset to the charges.
+        Parameters
+        ----------
+        snippet_radius : int, default 12
+            Graph distance in bonds used to select each junction snippet.
+        charge_correction : {"none", "uniform"}, default "none"
+            Whether to distribute the residual uniformly over all atoms.
+        cap_element : str, default "H"
+            Neutral capping element for cut single bonds.
 
-        Returns:
-        np.ndarray: The refined charges.
+        Returns
+        -------
+        dict
+            Charge audit in elementary-charge units: ``formal_charge``,
+            ``initial_charge``, ``refined_charge`` before correction,
+            ``residual`` (refined minus formal), ``correction_per_atom`` and
+            ``final_charge``. ``junctions`` is the number parameterized.
+
+        Raises
+        ------
+        ValueError
+            If the chain is disconnected or a snippet cannot preserve its
+            chemical structure, or an option is invalid.
+
+        Notes
+        -----
+        All changes are staged on an independent topology. If a junction
+        calculation or validation fails, the original chain is unchanged.
         """
+        import networkx as nx
+
+        if not nx.is_connected(self.graph):
+            raise ValueError("Polymer refinement requires a connected chemical graph.")
+        if not isinstance(snippet_radius, (int, np.integer)) or snippet_radius < 4:
+            raise ValueError("snippet_radius must be an integer of at least 4.")
+        if charge_correction not in {"none", "uniform"}:
+            raise ValueError("charge_correction must be 'none' or 'uniform'.")
+        if cap_element not in {"H", "F", "Cl", "Br", "I"}:
+            raise ValueError("cap_element must be a neutral monovalent element.")
+        self.to_rdkit()
+        staged, attributes = self._parameterization_copy()
+        report = staged._refine_junctions(snippet_radius, charge_correction, cap_element)
+        self._apply_parameterization(staged, attributes)
+        return report
+
+    def _refine_junctions(self, snippet_radius, charge_correction, cap_element):
 
         # Clean topology first to remove any invalid interactions from polymerization
         self._cleanup_topology()
 
         # get charges and connection elements
         charges = self.charges
-        pairs = self._get_connection_elements()
+        initial_charge = float(charges.sum())
+        pairs = self.junction_bonds
 
-        str_end_idxs = self._get_start_end()
 
-        # get charges at every point
-        for pair in pairs:
+        snippets = [make_snippet(self, int(pair[1]), snippet_radius, ending=cap_element) for pair in pairs]
+        for pair, (snippet, _) in zip(pairs, snippets):
+            if len(snippet) > 200:
+                raise ValueError(f"Junction {pair} has {len(snippet)} atoms after capping and chemical expansion; LigParGen accepts at most 200. Reduce snippet_radius or use another parameterization method.")
+        for pair, snippet_data in zip(pairs, snippets):
             ci, cj = int(pair[0]), int(pair[1])
-            self._update_connection(cj, ci, Nmax, charges, ending=ending)
-        # for center in str_end_idxs:
-            # self._update_connection(center, Nmax, charges, ending=ending)
+            self._update_connection(cj, ci, snippet_radius, charges, ending=cap_element, snippet_data=snippet_data)
 
-        # bring back to zero
-        if offset:
-
-            if "nominal_charge" in self.atoms.arrays:
-                target = self.atoms.arrays["nominal_charge"].sum()
-            else:
-                raise Warning("No nominal charge found, assume it is 0.")
-
-            charges -= ((charges.sum() - target) / len(charges))
+        if not np.isfinite(charges).all():
+            raise ValueError("Junction refinement returned nonfinite partial charges.")
+        target = int(self.atoms.arrays["nominal_charge"].sum())
+        refined_charge = float(charges.sum())
+        residual = refined_charge - target
+        correction = 0.0
+        logger.info("Polymer charge after junction refinement: %.8f e; formal: %d e; residual: %+.8f e",
+                    charges.sum(), target, residual)
+        if charge_correction == "uniform":
+            correction = -residual / len(charges)
+            logger.info("Applying uniform partial-charge correction: %+.8f e per atom", correction)
+            charges += correction
 
         self.atoms.set_initial_charges(charges)
-        return
+        return {
+            "formal_charge": target,
+            "initial_charge": initial_charge,
+            "refined_charge": refined_charge,
+            "residual": residual,
+            "correction_per_atom": correction,
+            "final_charge": float(charges.sum()),
+            "junctions": len(pairs),
+        }

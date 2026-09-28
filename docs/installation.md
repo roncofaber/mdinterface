@@ -4,7 +4,7 @@
 
 - **Python** 3.10-3.14
 
-Core dependencies are handled automatically by `pip`, including the upstream PACKMOL package and executable. See [requirements.txt](https://github.com/roncofaber/mdinterface/blob/main/requirements.txt).
+Core dependencies are handled automatically by `pip`, including RDKit and the upstream PACKMOL package and executable. See [requirements.txt](https://github.com/roncofaber/mdinterface/blob/main/requirements.txt).
 
 ## Installing mdinterface
 
@@ -35,13 +35,13 @@ pip install mdinterface[all]    # everything
 Install the [mdinterface-compatible LigParGen fork](https://github.com/roncofaber/ligpargen) in the same environment, then verify that its command is available:
 
 ```bash
-python -m pip install "git+https://github.com/roncofaber/ligpargen.git"
+python -m pip install "git+https://github.com/roncofaber/ligpargen.git@ad78036842318f166531be41cfcbc3563d7c5476"
 conda install -c conda-forge openbabel
 ligpargen -h
 obabel -V
 ```
 
-Open Babel is required because `mdinterface` passes molecules to LigParGen as XYZ files.
+The pinned revision includes chemistry-preserving atom reordering required for RDKit-backed inputs. Those inputs use MOL files to preserve explicit bonds and formal charges. Open Babel is required for coordinate-only ASE inputs, which use XYZ files.
 
 LigParGen requires [BOSS](http://zarbi.chem.yale.edu/software.html), a 32-bit binary. Point `mdinterface` to it via `BOSSdir` in the config file. Three modes are supported depending on how BOSS is available:
 

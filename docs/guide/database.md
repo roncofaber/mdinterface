@@ -84,3 +84,5 @@ grap = Graphene()
 ```python
 from mdinterface.database import Oxygen, Hydrogen, Nitrogen
 ```
+
+Built-in `Ion`, `Hydronium`, `Hydroxide`, and `Perchlorate` species store their formal molecular charge for charge-estimation workflows. `chg_scaling` affects force-field partial charges, not this formal charge.

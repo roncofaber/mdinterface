@@ -28,7 +28,7 @@ mamba env create -f environment-full.yml
 mamba activate mdinterface-full
 ```
 
-The environment uses Python 3.12 and NumPy 1.x for compatibility with the current AmberTools dependency stack. It includes CPU-only NAGL and PyTorch, AmberTools, Open Babel, OpenFF Toolkit and Interchange, PACKMOL, tests, and documentation tooling. It installs the mdinterface-compatible LigParGen fork from GitHub. Developers with a sibling LigParGen checkout can use it instead:
+The environment uses Python 3.12 and NumPy 1.x for compatibility with the current AmberTools dependency stack. It includes CPU-only NAGL and PyTorch, AmberTools, Open Babel, OpenFF Toolkit and Interchange, PACKMOL, tests, and documentation tooling. It installs the mdinterface-compatible LigParGen fork from GitHub at the verified commit pinned in `environment-full.yml`. Developers with a sibling LigParGen checkout containing commit `ad78036` (chemistry-preserving atom reordering) can use it instead:
 
 ```bash
 python -m pip install -e ../ligpargen

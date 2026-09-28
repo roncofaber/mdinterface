@@ -1,8 +1,26 @@
 import os
 import subprocess
 import sys
+import importlib
+
+import pytest
 
 from mdinterface.config import load_config
+
+
+@pytest.mark.parametrize("module, name", [
+    ("mdinterface", "SimulationBox"),
+    ("mdinterface", "BoxBuilder"),
+    ("mdinterface.build", "BoxBuilder"),
+    ("mdinterface.build.builder", "BoxBuilder"),
+])
+def test_removed_builders_are_not_exported(module, name):
+    assert not hasattr(importlib.import_module(module), name)
+
+
+def test_legacy_builder_module_removed():
+    with pytest.raises(ModuleNotFoundError, match="mdinterface.simulationbox"):
+        importlib.import_module("mdinterface.simulationbox")
 
 
 def test_package_import_is_silent_and_does_not_load_optional_modules(tmp_path):

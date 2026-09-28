@@ -14,6 +14,40 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple, Union
 
+import numpy as np
+
+
+def _contains_region(parent, child):
+    lower, upper = np.reshape(parent.bounding_box(), (2, 3))
+    child_lower, child_upper = np.reshape(child.bounding_box(), (2, 3))
+    if np.any(child_lower < lower) or np.any(child_upper > upper):
+        return False
+    if isinstance(parent, Box):
+        return True
+    delta = np.abs(np.asarray(child.center) - parent.center)
+    extent = (child_upper - child_lower) / 2
+    if isinstance(parent, Sphere):
+        if isinstance(child, Sphere):
+            distance = np.linalg.norm(delta) + child.radius
+        elif isinstance(child, Cylinder):
+            axis = child._AXES[child.axis]
+            radial = np.linalg.norm(np.delete(delta, axis)) + child.radius
+            distance = np.hypot(delta[axis] + child.height / 2, radial)
+        else:
+            distance = np.linalg.norm(delta + extent)
+        return bool(distance <= parent.radius)
+    if isinstance(parent, Cylinder):
+        axis = parent._AXES[parent.axis]
+        radial_delta = np.delete(delta, axis)
+        if isinstance(child, Sphere) or (
+            isinstance(child, Cylinder) and child.axis == parent.axis
+        ):
+            distance = np.linalg.norm(radial_delta) + child.radius
+        else:
+            distance = np.linalg.norm(radial_delta + np.delete(extent, axis))
+        return bool(distance <= parent.radius)
+    raise TypeError("Nested regions require a Box, Sphere, or Cylinder parent.")
+
 
 class Region:
     """

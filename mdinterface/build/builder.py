@@ -10,6 +10,7 @@ Add slabs, solvent regions, and vacuum gaps one step at a time, then call
 import logging
 import json
 from pathlib import Path
+import tempfile
 from collections import Counter
 from typing import List, Optional, Union, Tuple, Any
 
@@ -25,7 +26,6 @@ from mdinterface.build.compartment import (
 import ase
 import MDAnalysis as mda
 import numpy as np
-import shutil
 
 from mdinterface.utils.logger import set_verbosity, log_banner, log_header, log_subheader
 
@@ -257,6 +257,9 @@ class SimCell:
             :mod:`mdinterface.build.regions`. A region's ``center`` may be
             ``"random"`` to have a non-overlapping placement chosen
             automatically within its parent volume.
+            Bulk solvent and solute exclude these regions; density and
+            concentration use the remaining volume. Cannot be combined with
+            ``conmodel`` or ``solute_pos="center"``.
         seed : int, optional
             Seed for the RNG used to resolve ``center="random"`` regions.
             Pass the same seed to reproduce an identical placement.
@@ -346,10 +349,11 @@ class SimCell:
             Spacing (Å) inserted between adjacent layers.
         center : bool
             If True, shift the system so the center of the first layer falls
-            in the middle of the box (z=zdim/2), keeping it intact instead of
-            straddling the periodic boundary. Whatever ends up opposite it
-            (typically a vacuum gap, if present) absorbs the periodic seam
-            instead.
+            in the middle of the box (z=zdim/2), using its allocated thickness,
+            then wrap individual atoms. The periodic seam falls in the
+            opposite part of the system, which need not be vacuum.
+            Before version 2.0.0, True centered the first layer on the
+            periodic boundary instead. Default is False.
         layered : bool
             Assign distinct molecule indices to each slab layer for LAMMPS.
         match_cell : bool or Specie
@@ -433,6 +437,7 @@ class SimCell:
         atom_style: str = "full",
         write_coeff: bool = True,
         metadata: Optional[str] = None,
+        expected_charge: Optional[float] = None,
     ) -> None:
         """
         Write a LAMMPS data file (and optional force-field coefficients).
@@ -455,6 +460,11 @@ class SimCell:
             Path for a schema-versioned JSON description of the final export.
             Includes exported IDs, species, topology, coefficients and checksum.
             Requires elements and, for full style, charges. Does not select MD settings.
+        expected_charge : float, optional
+            Required total charge in elementary-charge units, checked with an
+            absolute tolerance of 1e-5. Omit for systems with no specified target.
+            Nonfinite charges and incomplete coefficients are always rejected
+            when writing force-field coefficients.
 
         """
         if self._universe is None:
@@ -471,6 +481,21 @@ class SimCell:
             if atom_style == "full" and not hasattr(self._universe.atoms, "charges"):
                 raise ValueError("Full-style metadata requires atom charges.")
 
+        if hasattr(self._universe.atoms, "charges"):
+            charges = self._universe.atoms.charges
+            if not np.isfinite(charges).all():
+                raise ValueError("Cannot export nonfinite partial charges.")
+            if expected_charge is not None:
+                if not np.isfinite(expected_charge) or not np.isclose(charges.sum(), expected_charge, atol=1e-5, rtol=0):
+                    raise ValueError(f"Total charge {charges.sum():.8f} does not match expected_charge={expected_charge}.")
+        elif expected_charge is not None:
+            raise ValueError("expected_charge requires atomic charge data.")
+        if write_coeff:
+            active_types = set(self._universe.atoms.types)
+            for specie in self._all_species:
+                if active_types.intersection(specie.get_atom_types()):
+                    specie.validate_force_field()
+
         log_header(logger, "Output")
         logger.info("  >> LAMMPS data file: %s  (style=%s,  coeff=%s)", filename, atom_style, write_coeff)
         system = self._universe.copy()
@@ -486,7 +511,6 @@ class SimCell:
             dt.write(system.atoms, atom_style=atom_style)
 
         if write_coeff:
-            temp_file = "tmp_data.lammps"
             sorted_attrs = {
                 "atoms":     self.get_sorted_attribute("atoms"),
                 "bonds":     self.get_sorted_attribute("bonds"),
@@ -494,12 +518,20 @@ class SimCell:
                 "dihedrals": self.get_sorted_attribute("dihedrals"),
                 "impropers": self.get_sorted_attribute("impropers"),
             }
-            with open(filename, "r") as ffile, open(temp_file, "w") as tfile:
-                for fl in ffile:
-                    if fl.startswith("Atoms"):
-                        write_lammps_coefficients(system, sorted_attrs, fout=tfile)
-                    tfile.write(fl)
-            shutil.move(temp_file, filename)
+            temp_file = None
+            try:
+                with tempfile.NamedTemporaryFile(mode="w", prefix=".mdinterface-", suffix=".lammps",
+                                                 dir=Path(filename).resolve().parent, delete=False) as tfile:
+                    temp_file = Path(tfile.name)
+                    with open(filename, "r") as ffile:
+                        for fl in ffile:
+                            if fl.startswith("Atoms"):
+                                write_lammps_coefficients(system, sorted_attrs, fout=tfile)
+                            tfile.write(fl)
+                temp_file.replace(filename)
+            finally:
+                if temp_file is not None:
+                    temp_file.unlink(missing_ok=True)
 
         if metadata is not None:
             from mdinterface.io.structure_metadata import lammps_metadata
@@ -997,21 +1029,3 @@ class SimCell:
                 attributes.append(attr)
 
         return [attributes[ii] for ii in np.argsort(indexes)]
-
-
-# ---------------------------------------------------------------------------
-# Backwards-compatibility alias
-# ---------------------------------------------------------------------------
-
-class BoxBuilder(SimCell):
-    """Deprecated alias for :class:`SimCell`.  Will be removed in a future version."""
-
-    def __init__(self, *args, **kwargs):
-        import warnings
-        warnings.warn(
-            "BoxBuilder is deprecated and will be removed in a future version. "
-            "Use SimCell instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        super().__init__(*args, **kwargs)

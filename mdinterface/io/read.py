@@ -153,6 +153,9 @@ def read_lammps_data_file(filename, pbc=False, ato_start_idx=0, is_snippet=False
                 impropers.append(improper)
 
     system.new_array("stype", np.array(atoms))
+    label_index = {atom.label: index for index, atom in enumerate(atoms)}
+    system.set_array("topology_atom_id", np.arange(len(atoms), dtype=int))
+    system.info["mdinterface_bonds"] = [(label_index[bond.symbols[0]], label_index[bond.symbols[1]]) for bond in bonds]
     logger.debug("  >> %d atoms, %d bonds, %d angles, %d dihedrals, %d impropers",
                  len(atoms), len(bonds), len(angles), len(dihedrals), len(impropers))
     return system, atoms, bonds, angles, dihedrals, impropers

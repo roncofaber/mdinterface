@@ -181,6 +181,7 @@ class Ion(Specie):
         
         charge, lj = lookup_parameters(element, ffield)
         lj = {element: lj}
+        kwargs.setdefault("tot_charge", int(charge))
         super().__init__(element, charges=chg_scaling*charge, lj=lj, **kwargs)
         
         return
@@ -224,6 +225,7 @@ class Perchlorate(Specie):
             "O"  : [0.2099, 2.9000]
             }
 
+        kwargs.setdefault("tot_charge", -1)
         super().__init__(atoms=pclo, lj=lj, bonds=[b1, b2], angles=a1, cutoff=1.5, **kwargs)
         return
 
@@ -259,6 +261,7 @@ class Hydronium(Specie):
         # divide by (2**(1/6)) to go from R0 to sig
         lj = {"O": [0.1848, 3.1655], "H": [0.010, 0.8018]}
 
+        kwargs.setdefault("tot_charge", 1)
         super().__init__(hyd, charges=charges, bonds=b1, angles=a1, lj=lj, **kwargs)
         return
 
@@ -288,5 +291,6 @@ class Hydroxide(Specie):
         # converted J to cal
         lj = {"O": [0.01195, 3.8100], "H": [0.000, 0.000]}
 
+        kwargs.setdefault("tot_charge", -1)
         super().__init__(hoh, charges=charges, bonds=b1, lj=lj, **kwargs)
         return

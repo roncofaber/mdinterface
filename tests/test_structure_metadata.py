@@ -78,3 +78,78 @@ def test_simcell_optional_metadata(tmp_path, monkeypatch, atomic):
     assert not (tmp_path / "legacy.json").exists()
     if not atomic:
         assert (tmp_path / "legacy.lammps").read_bytes() == before
+
+
+@pytest.mark.integration
+def test_mixed_electrode_electrolyte_export(tmp_path, monkeypatch):
+    from mdinterface.database import Ion, Metal111
+
+    monkeypatch.chdir(tmp_path)
+    box = SimCell(xysize=[15, 15], verbose=False)
+    box.add_slab(Metal111('Au'), nlayers=1)
+    for _ in range(2):
+        box.add_solvent(Water(), nsolvent=4, solute=[Ion('Na'), Ion('Cl')],
+                        nsolute=[1, 1], zdim=15)
+    box.build(center=True)
+    box.write_lammps('mixed.lammps', metadata='mixed.json')
+    result = json.loads((tmp_path / 'mixed.json').read_text())
+    exported = mda.Universe('mixed.lammps', format='DATA')
+    assert len(exported.atoms) == len(box.universe.atoms)
+    assert {atom['element'] for atom in result['atoms']} == {'Au', 'O', 'H', 'Na', 'Cl'}
+    np.testing.assert_allclose(exported.atoms.charges.sum(), 0, atol=1e-6)
+    for name, expected in [('bonds', 16), ('angles', 8)]:
+        assert len(result['topology'][name]) == len(getattr(exported, name)) == expected
+        section = name[:-1].title() + ' Coeffs'
+        assert {item['type_id'] for item in result['topology'][name]} == {
+            item['type_id'] for item in result['coefficients'][section]
+        }
+    assert {atom['type_id'] for atom in result['atoms']} == {
+        item['type_id'] for item in result['coefficients']['Pair Coeffs']
+    }
+    header = (tmp_path / 'mixed.lammps').read_text().split('Masses')[0]
+    assert f'{len(exported.atoms):12d}  atoms' in header
+    assert f'{16:12d}  bonds' in header
+    assert f'{8:12d}  angles' in header
+
+
+def test_torsion_export_matches_coefficients_and_metadata(tmp_path):
+    from mdinterface.core.topology import Atom, Dihedral, Improper
+    from mdinterface.io.lammpswriter import write_lammps_coefficients
+
+    universe = mda.Universe.empty(4, n_residues=1, atom_resindex=[0]*4, trajectory=True)
+    for name, values in {'types': ['C_TEST']*4, 'elements': ['C']*4, 'masses': [12.011]*4,
+                         'charges': [0.0]*4, 'resnames': ['TEST'], 'resids': [1]}.items():
+        universe.add_TopologyAttr(name, values)
+    universe.atoms.positions = [[1, 1, 1], [2, 1, 1], [2, 2, 1], [3, 2, 2]]
+    universe.dimensions = [10, 10, 10, 90, 90, 90]
+    universe.add_bonds([])
+    universe.add_angles([])
+    universe.add_dihedrals([(0, 1, 2, 3)], types=[17])
+    universe.add_impropers([(1, 0, 2, 3)], types=[29])
+    dihedral = Dihedral('C', 'C', 'C', 'C', A1=1, A2=2, A3=3, A4=4)
+    improper = Improper('C', 'C', 'C', 'C', K=2, d=-1, n=2)
+    atom = Atom('C', eps=0.1, sig=3)
+    atom.set_resname('TEST')
+    dihedral.set_id(17)
+    improper.set_id(29)
+    path = tmp_path / 'torsions.lammps'
+    with DATAWriter(str(path)) as writer:
+        writer.write(universe.atoms)
+    with path.open('a') as output:
+        output.write('\n')
+        write_lammps_coefficients(universe, {'atoms': [atom],
+                                           'dihedrals': [dihedral], 'impropers': [improper]}, fout=output)
+    result = lammps_metadata(path, universe, 'full', 'test')
+    exported = mda.Universe(str(path), format='DATA')
+    for name, section, expected in [('dihedrals', 'Dihedral Coeffs', [1, 2, 3, 4]),
+                                     ('impropers', 'Improper Coeffs', [2, -1, 2])]:
+        assert len(getattr(exported, name)) == 1
+        assert result['topology'][name][0]['type_id'] == 1
+        assert result['coefficients'][section][0]['type_id'] == 1
+        np.testing.assert_allclose([float(x) for x in result['coefficients'][section][0]['tokens']], expected)
+        np.testing.assert_array_equal(getattr(exported, name).indices[0] + 1,
+                                      result['topology'][name][0]['atom_ids'])
+    header = path.read_text().split('Masses')[0]
+    for kind in ('dihedral', 'improper'):
+        assert f'{1:12d}  {kind}s' in header
+        assert f'{1:12d}  {kind} types' in header

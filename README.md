@@ -24,7 +24,7 @@
 
 ## Requirements
 
-Mandatory dependencies are declared in [pyproject.toml](pyproject.toml). `pip install mdinterface` installs them automatically, including the upstream PACKMOL package and executable; [requirements.txt](requirements.txt) is a convenience list of the same core dependencies.
+Mandatory dependencies are declared in [pyproject.toml](pyproject.toml). `pip install mdinterface` installs them automatically, including RDKit and the upstream PACKMOL package and executable; [requirements.txt](requirements.txt) is a convenience list of the same core dependencies.
 
 ### Optional packages
 
@@ -41,11 +41,13 @@ pip install libarvo
 Install the [mdinterface-compatible LigParGen fork](https://github.com/roncofaber/ligpargen) in the same environment and verify that `ligpargen -h` works:
 
 ```bash
-python -m pip install "git+https://github.com/roncofaber/ligpargen.git"
+python -m pip install "git+https://github.com/roncofaber/ligpargen.git@ad78036842318f166531be41cfcbc3563d7c5476"
 conda install -c conda-forge openbabel
 ligpargen -h
 obabel -V
 ```
+
+The pinned LigParGen revision preserves molecular chemistry during atom reordering. Open Babel is needed for coordinate-only ASE inputs; RDKit-backed inputs use MOL files.
 
 Point `mdinterface` to your BOSS backend via `config.ini`:
 
@@ -148,17 +150,34 @@ More complete scripts are in the [examples/](examples/) directory:
 | Script | What it shows |
 |--------|--------------|
 | `electrode_interface.py` | Au / NaCl electrolyte / Au sandwich |
+| `smiles_box.py` | Unparameterized ethanol packing from SMILES |
 | `solvent_box.py` | Pure solvent + dissolved species |
 | `multisolvent_box.py` | Mixed-solvent box with ratio/density/count modes |
 | `multilayer.py` | Five-layer multi-slab system |
 | `sandwich_from_traj.py` | Electrode / membrane / electrode sandwich from an equilibrated MD trajectory |
-| `polymer/polymer_piperion.py` | Co-polymer membrane box with explicit hydration number |
+| `polymer/polymer_from_smiles.py` | Mapped-SMILES attachment sites, charged polymer preparation, and neutralized LAMMPS export |
+| `polymer/polymer_piperion.py` | RDKit chain geometry, LigParGen junction refinement with charge audit, and hydrated membrane packing |
 
 Full API reference and user guide: [roncofaber.github.io/mdinterface](https://roncofaber.github.io/mdinterface)
 
 Development setup and contribution guidance are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-The legacy `SimulationBox` API is still available and unchanged; see [examples/legacy/](examples/legacy/).
+Version 2.0.0 removes `SimulationBox` and `BoxBuilder`; use `SimCell`. See the [2.0 migration guide](docs/guide/migration-2.md) for API replacements and coordinate changes.
+
+For molecular and polymer preparation, parameterized monomers carry their force-field data into the chain:
+
+```python
+from mdinterface import Specie, Polymer
+
+monomer = Specie(smiles="[CH3:1][CH3:2]")
+monomer.parameterize()
+monomer.mark_attachment_sites(head_map=1, tail_map=2)
+chain = Polymer(monomer, nrep=3)
+chain.generate_conformer(seed=42, minimize=True)
+report = chain.refine_junctions(charge_correction="uniform")
+```
+
+See the [polymer guide](https://roncofaber.github.io/mdinterface/guide/polymer/) for preparation, charge auditing, and export validation. Parameterization requires LigParGen and BOSS.
 
 ## Roadmap
 

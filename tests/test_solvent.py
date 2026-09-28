@@ -397,3 +397,71 @@ class TestMakeSolventBoxRandomRegion:
             assert 0.0 <= pos[0] <= 20.0
             assert 0.0 <= pos[1] <= 20.0
             assert 0.0 <= pos[2] <= 30.0
+
+
+@pytest.mark.parametrize("content, match", [
+    ({"nsolvent": [2]}, "Length of 'nsolvent'"),
+    ({"density": 1.0}, "For a solvent mixture"),
+    ({"nsolvent": 4}, "For a solvent mixture"),
+    ({"nsolvent": 4, "ratio": [1]}, "Length of 'ratio'"),
+    ({"nsolvent": [2, 2], "ratio": [1, 1]}, "Cannot use 'ratio'"),
+])
+def test_region_mixture_validation(water, na, content, match):
+    from mdinterface.build.solvent import _region_instructions
+
+    region = Sphere((10, 10, 10), 5).fill(solvent=[water, na], **content)
+    with pytest.raises(ValueError, match=match):
+        _region_instructions(region, (0, 0, 0, 20, 20, 20), np.random.default_rng(0))
+
+
+@pytest.mark.parametrize("content, match", [
+    ({"nsolute": [1]}, "Length of 'nsolute'"),
+    ({"nsolute": 1, "concentration": 1}, "Cannot specify both"),
+])
+def test_region_solute_validation(na, cl, content, match):
+    from mdinterface.build.solvent import _region_instructions
+
+    region = Sphere((10, 10, 10), 5).fill(solute=[na, cl], **content)
+    with pytest.raises(ValueError, match=match):
+        _region_instructions(region, (0, 0, 0, 20, 20, 20), np.random.default_rng(0))
+
+
+@pytest.mark.integration
+def test_bulk_solutes_exclude_pockets_and_use_accessible_volume():
+    from mdinterface import SimCell
+    from ase import units
+
+    pocket = Box((10, 10, 10), (14, 14, 14))
+    box = SimCell(xysize=[20, 20], verbose=False)
+    box.add_solvent(Water(), nsolvent=10, solute=[Ion('Na')], concentration=10,
+                    zdim=20, regions=[pocket.fill()])
+    box.build(padding=0)
+    positions = box.universe.select_atoms('element Na').positions
+    expected = int(10 * (20**3 - 14**3) * units.mol / ((units.m / 10)**3))
+    assert len(positions) == expected
+    assert np.all(np.any((positions <= 3.01) | (positions >= 16.99), axis=1))
+
+
+@pytest.mark.parametrize("options", [
+    {"solute_pos": "center", "nsolute": 1},
+    {"conmodel": {0: ([0, 20], [1, 1])}},
+])
+def test_fixed_solutes_with_regions_rejected(options):
+    from mdinterface import SimCell
+
+    box = SimCell(xysize=[20, 20], verbose=False)
+    box.add_solvent(Water(), nsolvent=1, solute=[Ion('Na')], zdim=20,
+                    regions=[Sphere((10, 10, 10), 5).fill()], **options)
+    with pytest.raises(ValueError, match="regions cannot be combined"):
+        box.build()
+
+
+def test_public_nested_region_rejects_escape():
+    from mdinterface import SimCell
+
+    box = SimCell(xysize=[20, 20], verbose=False)
+    child = Sphere((14, 14, 14), 1).fill(solute=[Ion('Na')], nsolute=1)
+    box.add_solvent(Water(), nsolvent=1, zdim=20,
+                    regions=[Sphere((10, 10, 10), 5).fill(regions=[child])])
+    with pytest.raises(ValueError, match="extends outside"):
+        box.build()

@@ -5,6 +5,8 @@ include CHANGELOG.md
 include CONTRIBUTING.md
 include requirements.txt
 include pyproject.toml
+include environment-full.yml
+include mkdocs.yml
 
 # Include package data
 recursive-include mdinterface *.py

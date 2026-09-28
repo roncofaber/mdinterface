@@ -9,6 +9,7 @@ dependencies:
   - pdb2pqr
   - netcdf4
   - ambertools=26
+  - rdkit>=2024.3.5
   - openbabel=3.2
   - openff-interchange-base=0.5.5
   - openff-nagl=0.6.1
@@ -19,4 +20,4 @@ dependencies:
   - pip:
       - -e .[test]
       - -r docs/requirements.txt
-      - git+https://github.com/roncofaber/ligpargen.git
+      - git+https://github.com/roncofaber/ligpargen.git@ad78036842318f166531be41cfcbc3563d7c5476

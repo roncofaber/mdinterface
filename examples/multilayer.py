@@ -3,9 +3,7 @@
 """
 SimCell example: multi-layer cell with heterogeneous electrolyte regions.
 
-This setup is impractical to express with the old SimulationBox API (which
-only supports one interface, one enderface, and one miderface slot). With
-SimCell you can stack as many slabs and solvent regions as needed.
+SimCell stacks multiple slabs and solvent regions in the specified order.
 
 Layout (bottom to top):
     Au(111) slab        — bottom electrode

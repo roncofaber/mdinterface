@@ -8,8 +8,8 @@ connection points, and assembled into a co-polymer chain.  The chain is then
 packed with water and chloride ions into a membrane box, using an explicit
 water count (hydration number lambda) rather than a density target.
 
-For a production run the geometry should be relaxed and the chain equilibrated
-with MD before packing -- see the inline comments.
+RDKit generates and minimizes the whole-chain starting geometry. Production
+work still requires MD equilibration appropriate to the target system.
 
 Author: roncofaber
 """
@@ -51,9 +51,12 @@ mon2.arrays["polymerize"][32] = 1   # head H atom
 mon2.arrays["polymerize"][39] = 2   # tail H atom
 
 # nominal_charge: formal integer charge per atom.
-# mon1 carries one piperidinium cation (+1 on atom 18); mon2 is neutral.
+# mon1 carries one piperidinium cation; mon2 is neutral.
 mon1.set_array("nominal_charge", np.zeros(len(mon1), dtype=int))
-mon1.arrays["nominal_charge"][18] = 1
+nitrogens = [atom.index for atom in mon1 if atom.symbol == "N"]
+if len(nitrogens) != 1:
+    raise ValueError("Expected one piperidinium nitrogen in monomer 1.")
+mon1.arrays["nominal_charge"][nitrogens[0]] = 1
 
 mon2.set_array("nominal_charge", np.zeros(len(mon2), dtype=int))
 
@@ -74,48 +77,26 @@ chain = Polymer(
     name      = "PI00",
 )
 
-chain.round_charges(7)
+#%% Whole-chain geometry from the molecular graph
 
-#%% Geometry relaxation (requires fairchem-core)
-#
-# The junction geometry is approximate after assembly.  Relax with a
-# machine-learning potential before packing into the membrane box.
-# Hookean constraints at the new bonds prevent the chain from collapsing.
-#
-# import ase.constraints
-# from ase.data import atomic_numbers, covalent_radii
-# from fairchem.core import FAIRChemCalculator
-#
-# constraints = []
-# for pair in chain._get_connection_elements():
-#     d1 = covalent_radii[atomic_numbers[chain.atoms[pair[0]].symbol]]
-#     d2 = covalent_radii[atomic_numbers[chain.atoms[pair[1]].symbol]]
-#     constraints.append(
-#         ase.constraints.Hookean(int(pair[0]), int(pair[1]), 8, rt=d1 + d2)
-#     )
-# chain.atoms.set_constraint(constraints)
-#
-# calc = FAIRChemCalculator.from_model_checkpoint(
-#     "uma-s-1.pt", device="cuda", task_name="omol"
-# )
-# chain.atoms.calc = calc
-# chain.atoms.info["charge"] = 0
-# chain.atoms.info["spin"]   = 0
-# chain.relax_structure(trajectory="relax.traj", optimizer="FIRE", steps=1000)
-# chain.atoms.set_constraint()
+energy = chain.generate_conformer(minimize=True, seed=42, max_iterations=5000)
+print(f"Initial geometry: MMFF94 energy {energy:.6f} kcal/mol")
 
 #%% Topology refinement at junctions (requires LigParGen)
 #
 # Refines OPLS-AA atom types and partial charges at each inter-monomer
 # junction using LigParGen on small local snippets.
 #
-# chain.refine_polymer_topology(Nmax=12, offset=True, ending="H")
+charge_report = chain.refine_junctions(snippet_radius=12, charge_correction="uniform", cap_element="H")
+print("Junction charge audit:", charge_report)
+chain.round_charges(7)
+if not np.isclose(chain.charges.sum(), sequence.count(0), atol=1e-6):
+    raise ValueError("Refined polymer charge does not match its ionic sites.")
 
 #%% MD equilibration
 #
-# After the geometry relaxation the chain is still in an extended conformation.
-# Run a short NVT/NPT simulation in LAMMPS (or another MD engine) to reach a
-# realistic coiled structure before packing multiple chains into a box.
+# A minimized isolated-chain conformer is not an equilibrated membrane.
+# Equilibrate with the chosen simulation force field and thermodynamic conditions.
 # Once equilibrated, save the chain with dill for easy reuse:
 #
 # import dill
@@ -147,10 +128,12 @@ simbox.add_solvent(
 )
 
 simbox.build(padding=0.5)
+if not np.isclose(simbox.universe.atoms.charges.sum(), 0.0, atol=1e-6):
+    raise ValueError("Polymer membrane is not charge neutral.")
 
 #%% Output
 
-simbox.write_lammps("data.lammps", atom_style="full", write_coeff=True)
+simbox.write_lammps("data.lammps", atom_style="full", write_coeff=True, expected_charge=0.0)
 
 atoms    = simbox.to_ase()
 universe = simbox.universe

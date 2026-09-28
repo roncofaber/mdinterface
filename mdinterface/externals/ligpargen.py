@@ -69,6 +69,8 @@ def _candidate_cut_bonds(specie, n_needed=1):
     Tier 3 -- fallback
         Same as Tier 2 but drops the adjacency restriction entirely.
     """
+    import networkx as nx
+    bridges = {frozenset(edge) for edge in nx.bridges(specie.graph)}
     rings = specie._find_rings()
     ring_atoms = set()
     for ring in rings:
@@ -84,7 +86,11 @@ def _candidate_cut_bonds(specie, n_needed=1):
     def _base_ok(i, j):
         """Conditions common to all tiers."""
         return (
-            g.degree(i) > 1 and g.degree(j) > 1
+            frozenset((i, j)) in bridges
+            and g.edges[i, j].get("bond_order", 1) == 1
+            and not g.nodes[i].get("formal_charge", 0)
+            and not g.nodes[j].get("formal_charge", 0)
+            and g.degree(i) > 1 and g.degree(j) > 1
             and elements[i] != "H" and elements[j] != "H"
             and i not in ring_atoms and j not in ring_atoms
         )
@@ -188,7 +194,7 @@ def _balanced_cuts(specie, n_cuts, candidates):
         subg = specie.graph.subgraph(node_set).copy()
         subg.remove_edge(i, j)
         comp_a, comp_b = sorted(nx.connected_components(subg), key=len)
-        cuts_a = round(remaining * len(comp_a) / len(node_set))
+        cuts_a = min(remaining - 1, round((remaining - 1) * len(comp_a) / len(node_set)))
         cuts_b = remaining - 1 - cuts_a
         edges_a, segs_a = _recurse(comp_a, cuts_a)
         edges_b, segs_b = _recurse(comp_b, cuts_b)
@@ -206,44 +212,11 @@ def _make_capped_segment(specie, seg_indices, cut_edges, ending="H"):
     capped : ase.Atoms  (real atoms first, then caps)
     n_real : int        (number of non-cap atoms)
     """
-    seg_set = set(seg_indices)
-    atoms   = specie.atoms
+    from mdinterface.core.chemistry import capped_molecule
 
-    cap_positions, cap_nominal = [], []
-    for ci, cj in cut_edges:
-        if ci in seg_set and cj not in seg_set:
-            inner, outer = ci, cj
-        elif cj in seg_set and ci not in seg_set:
-            inner, outer = cj, ci
-        else:
-            continue
+    capped, _ = capped_molecule(specie.atoms, specie.to_rdkit(), seg_indices, ending=ending)
+    return capped, len(seg_indices)
 
-        pos_i = atoms.positions[inner]
-        pos_o = atoms.positions[outer]
-        d = pos_o - pos_i
-        d /= np.linalg.norm(d)
-        r_inner = covalent_radii[atomic_numbers[atoms[inner].symbol]]
-        r_cap   = covalent_radii[atomic_numbers[ending]]
-        cap_positions.append(pos_i + d * (r_inner + r_cap))
-        cap_nominal.append(0)
-
-    seg_atoms = atoms[list(seg_indices)].copy()
-    n_real = len(seg_atoms)
-
-    if cap_positions:
-        caps   = ase.Atoms(symbols=[ending] * len(cap_positions),
-                           positions=cap_positions)
-        capped = seg_atoms + caps
-    else:
-        capped = seg_atoms
-
-    if "nominal_charge" in atoms.arrays:
-        nc = atoms.arrays["nominal_charge"][list(seg_indices)].tolist() + cap_nominal
-    else:
-        nc = [0] * len(capped)
-    capped.set_array("nominal_charge", np.array(nc, dtype=int))
-
-    return capped, n_real
 
 def run_ligpargen(system, charge=None, is_snippet=False):
     """Generate OPLS-AA parameters by running LigParGen.
@@ -251,7 +224,8 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     Parameters
     ----------
     system : ase.Atoms
-        Atomic system to parameterize.
+        Atomic system to parameterize. Stored RDKit chemistry is transferred
+        through MOL files; coordinate-only inputs use XYZ and Open Babel.
     charge : int or None, default None
         Total molecular charge. LigParGen detects it when omitted.
     is_snippet : bool, default False
@@ -269,16 +243,28 @@ def run_ligpargen(system, charge=None, is_snippet=False):
         is missing or unreadable.
     """
 
+    if len(system) > 200:
+        raise ValueError(f"LigParGen accepts at most 200 atoms including caps; received {len(system)}.")
+
     ligpargen_executable = shutil.which("ligpargen")
     if ligpargen_executable is None:
         raise LigParGenError(
             "LigParGen executable was not found on PATH. Install it in the active "
             "environment with `python -m pip install "
-            "\"git+https://github.com/roncofaber/ligpargen.git\"` and verify "
+            "\"git+https://github.com/roncofaber/ligpargen.git@ad78036842318f166531be41cfcbc3563d7c5476\"` and verify "
             "the installation with `ligpargen -h`"
         )
 
-    if shutil.which("obabel") is None:
+    from rdkit import Chem
+    from mdinterface.core.chemistry import stored_molecule
+
+    mol = stored_molecule(system)
+    if mol is not None:
+        formal_charge = Chem.GetFormalCharge(mol)
+        if charge is not None and charge != formal_charge:
+            raise ValueError("LigParGen charge conflicts with the molecular formal charge.")
+        charge = formal_charge
+    if mol is None and shutil.which("obabel") is None:
         raise LigParGenError(
             "Open Babel executable `obabel` was not found on PATH. LigParGen "
             "requires it to read mdinterface's XYZ input. Install it with "
@@ -302,14 +288,18 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     # all ligpargen files go in a temp dir; kept on failure for inspection
     tmpdir   = tempfile.mkdtemp(prefix="ligpargen_")
     mol_name = os.path.basename(tmpdir)
-    xyz_file = os.path.join(tmpdir, f"{mol_name}.xyz")
+    extension = "mol" if mol is not None else "xyz"
+    input_file = os.path.join(tmpdir, f"{mol_name}.{extension}")
     log_file = os.path.join(tmpdir, "ligpargen.log")
 
-    ase.io.write(xyz_file, system)
+    if mol is None:
+        ase.io.write(input_file, system)
+    else:
+        Chem.MolToMolFile(mol, input_file)
 
     # use relative filenames and cwd=tmpdir -- ligpargen does not accept
     # absolute paths for -i
-    ligpargen_command = [ligpargen_executable, "-i", f"{mol_name}.xyz", "-p", tmpdir,
+    ligpargen_command = [ligpargen_executable, "-i", f"{mol_name}.{extension}", "-p", tmpdir,
                          "-debug", "-o", "0", "-cgen", "CM1A"]
     if charge is not None:
         ligpargen_command.extend(["-c", str(charge)])
@@ -358,8 +348,11 @@ def run_ligpargen(system, charge=None, is_snippet=False):
         )
 
     try:
+        original_numbers = system.numbers.copy()
         system, atoms, bonds, angles, dihedrals, impropers = read_lammps_data_file(
             output_file, is_snippet=is_snippet)
+        if not np.array_equal(original_numbers, system.numbers):
+            raise ValueError("LigParGen output atom ordering differs from the input.")
     except Exception as e:
         raise LigParGenError(
             f"LigParGen output could not be read from {output_file}",
@@ -374,75 +367,85 @@ def run_ligpargen(system, charge=None, is_snippet=False):
     return system, atoms, bonds, angles, dihedrals, impropers
 
 
-def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=True,
-                                 segment_size=200):
-    """
-    Assign OPLS-AA force-field parameters to a ``Specie`` via LigParGen using
-    a segment-and-junction strategy.
-
-    The molecule is split into segments of at most *segment_size* atoms along
-    clean backbone bonds (avoiding rings, heteroatoms, and their immediate
-    neighbours).  Each segment is capped with *ending* atoms and passed to
-    LigParGen independently.  A local snippet centred on each cut bond is then
-    refined to correct parameters for atoms adjacent to a cap.
+def refine_large_specie_topology(specie, snippet_radius=12, cap_element="H",
+                                 charge_correction="none", segment_size=200):
+    """Assign LigParGen parameters atomically; see ``Specie.parameterize``.
 
     Parameters
     ----------
     specie : Specie
-        The molecule to parametrise.  Modified **in place**.
-    Nmax : int
-        Neighbourhood radius (in bonds) used for junction snippet creation.
-        Default 12.
-    ending : str
-        Element used to cap dangling bonds at segment boundaries.  Default
-        ``"H"``.
-    offset : bool
-        If ``True``, redistribute any charge rounding error uniformly so the
-        total partial charge matches ``nominal_charge.sum()``.
-    segment_size : int
-        Maximum number of atoms per segment.  Default 200.  Lower values
-        force more splits and are useful for testing.
+        Species to parameterize without changing its coordinates.
+    snippet_radius : int, default 12
+        Graph radius for junction snippets.
+    cap_element : str, default "H"
+        Neutral monovalent capping element.
+    charge_correction : {"none", "uniform"}, default "none"
+        Optional uniform correction to the molecular charge.
+    segment_size : int, default 200
+        Maximum segment size including caps, at most 200.
 
-    Raises
-    ------
-    ValueError
-        If ``nominal_charge`` is not set on ``specie.atoms``.
-    RuntimeError
-        If not enough valid cut bonds can be found.
+    Returns
+    -------
+    dict
+        Charge audit. No changes are applied if any calculation fails.
     """
+    if not isinstance(segment_size, (int, np.integer)) or not 4 <= segment_size <= 200:
+        raise ValueError("segment_size must be an integer between 4 and 200, including caps.")
+    if not isinstance(snippet_radius, (int, np.integer)) or snippet_radius < 4:
+        raise ValueError("snippet_radius must be an integer of at least 4.")
+    if charge_correction not in {"none", "uniform"}:
+        raise ValueError("charge_correction must be 'none' or 'uniform'.")
+    if cap_element not in {"H", "F", "Cl", "Br", "I"}:
+        raise ValueError("cap_element must be a neutral monovalent element.")
+    staged, attributes = specie._parameterization_copy()
+    initial = float(staged.charges.sum())
+    target = staged._resolve_charge(None)
+    if len(staged.atoms) <= segment_size:
+        result, atom_types, bonds, angles, dihedrals, impropers = run_ligpargen(staged.atoms, charge=target)
+        if not np.array_equal(result.numbers, staged.atoms.numbers) or len(atom_types) != len(result):
+            raise ValueError("Parameterization changed atom ordering or omitted atom types.")
+        staged._setup_topology(atom_types, bonds, angles, dihedrals, impropers)
+        staged.atoms.set_initial_charges(result.get_initial_charges())
+        junctions = 0
+    else:
+        junctions = _refine_large_specie_topology(staged, snippet_radius, cap_element, segment_size)
+    charges = staged.charges
+    if not np.isfinite(charges).all():
+        raise ValueError("Parameterization returned nonfinite partial charges.")
+    refined = float(charges.sum())
+    residual = refined - target
+    correction = -residual / len(charges) if charge_correction == "uniform" else 0.0
+    staged.atoms.set_initial_charges(charges + correction)
+    report = dict(formal_charge=target, initial_charge=initial, refined_charge=refined,
+                  residual=residual, correction_per_atom=correction,
+                  final_charge=float(staged.charges.sum()), junctions=junctions)
+    staged.validate_force_field()
+    specie._apply_parameterization(staged, attributes)
+    logger.info("Parameterization charge audit: %s", report)
+    return report
+
+
+def _refine_large_specie_topology(specie, snippet_radius, cap_element, segment_size):
     from mdinterface.build.snippets import make_snippet, remap_snippet_topology
 
     natoms = len(specie.atoms)
-
-    if "nominal_charge" not in specie.atoms.arrays:
-        raise ValueError(
-            "nominal_charge array not found on specie.atoms.  "
-            "Set it before calling refine_large_specie_topology() -- "
-            "use 0 for uncharged atoms and the formal integer charge for "
-            "charged ones (same convention as the Polymer class)."
-        )
-
-    n_segments = math.ceil(natoms / segment_size)
-    n_cuts     = n_segments - 1
-    logger.info("Refining topology for %d-atom molecule -- %d segment(s) via LigParGen",
-                natoms, n_segments)
-
-    # ------------------------------------------------------------------
-    # 1. Find cut bonds
-    # ------------------------------------------------------------------
-    candidates = _candidate_cut_bonds(specie, n_needed=n_cuts)
-    if len(candidates) < n_cuts:
-        raise RuntimeError(
-            f"Only {len(candidates)} valid cut bond(s) found but "
-            f"{n_cuts} cut(s) are needed.  Consider relaxing the molecule "
-            f"structure or cutting manually."
-        )
-
-    cut_edges, segments = _balanced_cuts(specie, n_cuts, candidates)
-    for ii, seg in enumerate(segments):
-        logger.info("  >> segment %d: %d atoms", ii, len(seg))
-    logger.info("  >> cut bond(s): %s",
-                ", ".join(f"{int(a)} -- {int(b)}" for a, b in cut_edges) or "none")
+    mol = specie.to_rdkit()
+    from mdinterface.core.chemistry import graph_from_molecule, store_molecule
+    store_molecule(specie.atoms, mol)
+    specie._graph = graph_from_molecule(mol)
+    capped_segments = []
+    for n_cuts in range(max(1, math.ceil(natoms / segment_size) - 1), natoms):
+        candidates = _candidate_cut_bonds(specie, n_needed=n_cuts)
+        if len(candidates) < n_cuts:
+            raise ValueError("Cannot split this molecule into chemically valid capped segments within segment_size; use a larger limit (at most 200) or another parameterization method.")
+        cut_edges, segments = _balanced_cuts(specie, n_cuts, candidates)
+        capped_segments = [_make_capped_segment(specie, sorted(seg), cut_edges, cap_element) for seg in segments]
+        if all(len(capped) <= segment_size for capped, _ in capped_segments):
+            break
+    snippets = [make_snippet(specie, int(ci), snippet_radius, ending=cap_element) for ci, _ in cut_edges]
+    for pair, (snippet, _) in zip(cut_edges, snippets):
+        if len(snippet) > 200:
+            raise ValueError(f"Junction {pair} expands to {len(snippet)} atoms including caps; LigParGen accepts at most 200. Reduce snippet_radius or use another parameterization method.")
 
     # ------------------------------------------------------------------
     # 2. Run LigParGen on each segment, accumulate topology
@@ -456,8 +459,7 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=True,
         logger.info("  >> ligpargen on segment %d (%d atoms)...",
                     seg_idx, len(seg_indices))
 
-        capped, n_real = _make_capped_segment(
-            specie, seg_indices, cut_edges, ending)
+        capped, n_real = capped_segments[seg_idx]
         sn_charge = int(capped.arrays["nominal_charge"].sum())
 
         sn_sys, sn_atypes, sn_bonds, sn_angles, sn_dihs, sn_imps = \
@@ -497,14 +499,13 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=True,
     # ------------------------------------------------------------------
     # 4. Refine each junction with a local snippet run
     # ------------------------------------------------------------------
-    for (ci, cj) in cut_edges:
+    for (ci, cj), snippet_data in zip(cut_edges, snippets):
         # One snippet per cut, centred on ci (it is bonded to cj so the
         # snippet naturally spans both sides of the cut)
         center = ci
         logger.info("  >> refining junction at atoms %d -- %d...", ci, cj)
 
-        snippet, snippet_idxs = make_snippet(specie, center, Nmax,
-                                             ending=ending)
+        snippet, snippet_idxs = snippet_data
 
         ldxs    = list(set(np.concatenate(
             specie.find_relevant_distances(4, centers=center))))
@@ -536,14 +537,5 @@ def refine_large_specie_topology(specie, Nmax=12, ending="H", offset=True,
         specie._add_to_topology(bonds=new_bonds, angles=new_angles,
                                 dihedrals=new_dihs, impropers=new_imps)
 
-    # ------------------------------------------------------------------
-    # 5. Final charge assignment (+ optional offset correction)
-    # ------------------------------------------------------------------
-    if offset:
-        target   = int(specie.atoms.arrays["nominal_charge"].sum())
-        charges -= (charges.sum() - target) / natoms
-
     specie.atoms.set_initial_charges(charges)
-    logger.info("  >> done.  Total charge: %.4f  (target %d)",
-                charges.sum(),
-                int(specie.atoms.arrays["nominal_charge"].sum()))
+    return len(cut_edges)

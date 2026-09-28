@@ -17,6 +17,8 @@ def verify_wheel(path: Path) -> None:
         raise ValueError(f"Unexpected wheel contents: {unexpected}")
     if "mdinterface/config.ini" not in names:
         raise ValueError("Wheel is missing mdinterface/config.ini")
+    if "mdinterface/simulationbox.py" in names:
+        raise ValueError("Wheel contains removed SimulationBox module")
 
 
 def verify_sdist(path: Path) -> None:
@@ -26,6 +28,13 @@ def verify_sdist(path: Path) -> None:
     leaked = [name for name in names if "/docs/superpowers/" in name]
     if leaked:
         raise ValueError(f"Source distribution contains local planning files: {leaked}")
+    removed = [name for name in names if "/examples/legacy/" in name
+               or name.endswith("/mdinterface/simulationbox.py")]
+    if removed:
+        raise ValueError(f"Source distribution contains removed legacy files: {removed}")
+    for required in ("environment-full.yml", "mkdocs.yml"):
+        if not any(name.endswith("/" + required) for name in names):
+            raise ValueError(f"Source distribution is missing {required}")
 
 
 def main(argv) -> int:

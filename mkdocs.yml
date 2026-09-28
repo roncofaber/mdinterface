@@ -55,6 +55,7 @@ nav:
   - Installation: installation.md
   - Quick Start: quickstart.md
   - User Guide:
+      - Migrating to 2.0: guide/migration-2.md
       - SimCell: guide/simcell.md
       - Species: guide/specie.md
       - Polymer: guide/polymer.md

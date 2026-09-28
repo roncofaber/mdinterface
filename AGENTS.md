@@ -6,7 +6,7 @@
 - Main branch: `main`
 - Supported Python: 3.10-3.14
 - License: Apache-2.0
-- Core stack: ASE, MDAnalysis, NetworkX, NumPy, and PACKMOL
+- Core stack: ASE, MDAnalysis, NetworkX, NumPy, RDKit, and PACKMOL
 - Main pipeline: `SimCell` to PACKMOL to `ase.Atoms` or `MDAnalysis.Universe` to `write_lammps()` or `write_gromacs()`
 
 ## Working agreements
@@ -76,8 +76,7 @@ The editable install provides the upstream PACKMOL package and executable used b
 
 ## Architecture constraints
 
-- `SimCell` in `mdinterface/build/builder.py` is the current fluent builder. `BoxBuilder` is a deprecated alias.
-- `SimulationBox` in `mdinterface/simulationbox.py` is a separate deprecated implementation retained for compatibility. It duplicates some topology-indexing behavior, so fixes to `SimCell` do not automatically apply to it.
+- `SimCell` in `mdinterface/build/builder.py` is the fluent builder. `SimulationBox` and `BoxBuilder` were removed in 2.0.0; do not reintroduce compatibility aliases.
 - `Specie` combines `ase.Atoms` with optional LAMMPS topology and force-field data. A bare `Specie(atoms)` is valid for workflows that do not write LAMMPS data.
 - Database entries such as `Water`, `Ion`, and `Metal111` are pre-built `Specie` objects or factories, not a separate domain type.
 - PACKMOL is the only packing backend. `mdinterface/build/box.py::populate_box` runs it in a temporary directory.
@@ -88,7 +87,7 @@ The editable install provides the upstream PACKMOL package and executable used b
 
 ## Testing risks
 
-Tests roughly mirror module names rather than package paths. Coverage of `mdinterface/io/lammpswriter.py`, `mdinterface/build/box.py`, and `mdinterface/simulationbox.py` is comparatively thin. For LAMMPS output changes, assert file structure and consistency between header counts and section rows. When available, loading the result with LAMMPS is stronger verification than checking only that `write_lammps()` did not raise.
+Tests roughly mirror module names rather than package paths. LAMMPS output and PACKMOL assembly need end-to-end coverage beyond isolated unit tests. For LAMMPS output changes, assert file structure and consistency between header counts and section rows. When available, loading the result with LAMMPS is stronger verification than checking only that `write_lammps()` did not raise.
 
 ## Changelog and releases
 
